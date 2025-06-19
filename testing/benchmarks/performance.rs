@@ -42,10 +42,10 @@ fn benchmark_move_detection(c: &mut Criterion) {
 #[allow(dead_code)]
 fn benchmark_watcher_init(c: &mut Criterion) {
 	let rt = tokio::runtime::Runtime::new().unwrap();
-	
+
 	let mut group = c.benchmark_group("watcher_initialization");
 	group.sample_size(10); // Reduce sample size to avoid resource exhaustion
-	
+
 	group.bench_function("watcher_start_stop", |b| {
 		b.iter(|| {
 			rt.block_on(async {
@@ -55,7 +55,7 @@ fn benchmark_watcher_init(c: &mut Criterion) {
 					recursive: true,
 					move_detector_config: Some(MoveDetectorConfig::default()),
 				};
-				
+
 				let result = start(config);
 				match result {
 					Ok((handle, _receiver)) => {
@@ -69,13 +69,13 @@ fn benchmark_watcher_init(c: &mut Criterion) {
 						panic!("Watcher initialization failed: {}", e);
 					}
 				}
-				
+
 				// Add a small delay to allow cleanup
 				tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 			});
 		});
 	});
-	
+
 	group.finish();
 }
 
