@@ -15,7 +15,7 @@ mod tests {
 		// Remove event: file disappears from original location, no size available
 		let remove_event = FileSystemEvent::new(
 			EventType::Remove,
-			PathBuf::from("C:\\Users\\Albert\\Downloads\\CH-mav-hiviz_workers_preview.png"),
+			PathBuf::from("C:\\Users\\TestUser\\Documents\\test_image_preview.png"),
 			false,
 			None, // This was the key issue - remove events have no size on Windows
 		);
@@ -23,9 +23,7 @@ mod tests {
 		// Create event: file appears in new location with size
 		let create_event = FileSystemEvent::new(
 			EventType::Create,
-			PathBuf::from(
-				"C:\\Users\\Albert\\Downloads\\BlenderPreviews\\CH-mav-hiviz_workers_preview.png",
-			),
+			PathBuf::from("C:\\Users\\TestUser\\Documents\\Previews\\test_image_preview.png"),
 			false,
 			Some(9723), // Exact size from bug report
 		);
@@ -44,11 +42,11 @@ mod tests {
 			);
 			assert_eq!(
 				move_data.source_path,
-				PathBuf::from("C:\\Users\\Albert\\Downloads\\CH-mav-hiviz_workers_preview.png")
+				PathBuf::from("C:\\Users\\TestUser\\Documents\\test_image_preview.png")
 			);
 			assert_eq!(
 				move_data.destination_path,
-				PathBuf::from("C:\\Users\\Albert\\Downloads\\BlenderPreviews\\CH-mav-hiviz_workers_preview.png")
+				PathBuf::from("C:\\Users\\TestUser\\Documents\\Previews\\test_image_preview.png")
 			);
 		} else {
 			panic!("Bug report scenario should be detected as a move!");
@@ -63,9 +61,7 @@ mod tests {
 		// Windows File Explorer rename generates these exact events
 		let name_from = FileSystemEvent::new(
 			EventType::RenameFrom,
-			PathBuf::from(
-				"C:\\Users\\Albert\\Downloads\\BlenderPreviews\\CH-mav-hiviz_workers_preview.png",
-			),
+			PathBuf::from("C:\\Users\\TestUser\\Documents\\Previews\\test_image_preview.png"),
 			false,
 			Some(9723),
 		);
@@ -73,7 +69,7 @@ mod tests {
 		let name_to = FileSystemEvent::new(
 			EventType::RenameTo,
 			PathBuf::from(
-				"C:\\Users\\Albert\\Downloads\\BlenderPreviews\\CH-mav-hiviz_workers_preview2.png",
+				"C:\\Users\\TestUser\\Documents\\Previews\\test_image_preview_renamed.png",
 			),
 			false,
 			Some(9723),
@@ -96,18 +92,18 @@ mod tests {
 		// Case 1: Same name, different paths, no size in remove event
 		// This was scoring only 0.35 confidence originally
 		let scenarios = vec![
-			// Downloads -> Downloads/Subfolder
+			// Documents -> Documents/Subfolder
 			(
-				"C:\\Downloads\\file.png",
+				"C:\\Users\\TestUser\\Documents\\file.png",
 				None,
-				"C:\\Downloads\\Subfolder\\file.png",
+				"C:\\Users\\TestUser\\Documents\\Subfolder\\file.png",
 				Some(1024),
 			),
 			// Desktop -> Documents
 			(
-				"C:\\Desktop\\document.pdf",
+				"C:\\Users\\TestUser\\Desktop\\document.pdf",
 				None,
-				"C:\\Documents\\document.pdf",
+				"C:\\Users\\TestUser\\Documents\\document.pdf",
 				Some(2048),
 			),
 			// Temp folder moves
@@ -250,14 +246,14 @@ mod tests {
 		// Simulate the exact Windows File Explorer events that were generating no logs
 		let modify_name_from = FileSystemEvent::new(
 			EventType::RenameFrom, // This maps from Modify(Name(From))
-			PathBuf::from("C:\\Users\\Albert\\Downloads\\CH-mav-hiviz_workers_preview.png"),
+			PathBuf::from("C:\\Users\\TestUser\\Documents\\test_image_preview.png"),
 			false,
 			Some(9723),
 		);
 
 		let modify_name_to = FileSystemEvent::new(
 			EventType::RenameTo, // This maps from Modify(Name(To))
-			PathBuf::from("C:\\Users\\Albert\\Downloads\\CH-mav-hiviz_workers_preview2.png"),
+			PathBuf::from("C:\\Users\\TestUser\\Documents\\test_image_preview_renamed.png"),
 			false,
 			Some(9723),
 		);

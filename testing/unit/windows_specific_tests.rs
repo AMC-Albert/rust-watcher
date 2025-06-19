@@ -105,14 +105,14 @@ mod tests {
 		// Test same filename in different directories (typical cut/paste)
 		let remove_event = FileSystemEvent::new(
 			EventType::Remove,
-			PathBuf::from("C:\\Users\\Albert\\Downloads\\file.png"),
+			PathBuf::from("C:\\Users\\TestUser\\Documents\\file.png"),
 			false,
 			Some(9723), // Use the actual size from the bug report
 		);
 
 		let create_event = FileSystemEvent::new(
 			EventType::Create,
-			PathBuf::from("C:\\Users\\Albert\\Downloads\\BlenderPreviews\\file.png"),
+			PathBuf::from("C:\\Users\\TestUser\\Documents\\Previews\\file.png"),
 			false,
 			Some(9723),
 		);
@@ -232,14 +232,14 @@ mod tests {
 		// Test scenario that previously failed: same filename, different directories, no inodes
 		let remove_event = FileSystemEvent::new(
 			EventType::Remove,
-			PathBuf::from("C:\\Downloads\\file.png"),
+			PathBuf::from("C:\\Users\\TestUser\\Documents\\file.png"),
 			false,
 			None, // No size (typical remove event issue)
 		);
 
 		let create_event = FileSystemEvent::new(
 			EventType::Create,
-			PathBuf::from("C:\\Downloads\\Subfolder\\file.png"),
+			PathBuf::from("C:\\Users\\TestUser\\Documents\\Subfolder\\file.png"),
 			false,
 			Some(9723),
 		);
