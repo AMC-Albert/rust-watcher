@@ -15,14 +15,16 @@ git config core.hooksPath scripts/hooks
 Setting the hooks directory enables the following git hooks:
 
 #### Pre-commit Hook
-- **Formatting Check**: Ensures all Rust code is properly formatted using `rustfmt`
+- **Auto-fix Formatting**: Automatically formats all Rust code using `rustfmt`
 - **Clippy Linting**: Runs Clippy to catch potential issues and enforce best practices  
 - **JSON Validation**: Validates JSON/JSONC files for syntax errors
 
 The hook will **prevent commits** if:
-- Code is not properly formatted (run `cargo fmt` to fix)
+- Formatting cannot be applied (rare - usually due to syntax errors)
 - Clippy finds warnings or errors (fix the issues and try again)
 - JSON files have syntax errors
+
+**Note**: Formatting issues are automatically fixed during the pre-commit process.
 
 ### Bypassing Hooks
 

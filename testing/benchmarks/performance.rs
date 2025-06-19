@@ -41,27 +41,42 @@ fn benchmark_move_detection(c: &mut Criterion) {
 // Benchmark watcher initialization
 #[allow(dead_code)]
 fn benchmark_watcher_init(c: &mut Criterion) {
-	c.bench_function("watcher_initialization", |b| {
+	let rt = tokio::runtime::Runtime::new().unwrap();
+	
+	let mut group = c.benchmark_group("watcher_initialization");
+	group.sample_size(10); // Reduce sample size to avoid resource exhaustion
+	
+	group.bench_function("watcher_start_stop", |b| {
 		b.iter(|| {
-			let temp_dir = TempDir::new().unwrap();
-			let config = WatcherConfig {
-				path: temp_dir.path().to_path_buf(),
-				recursive: true,
-				move_detector_config: Some(MoveDetectorConfig::default()),
-			};
-			let result = start(config);
-			match result {
-				Ok((handle, _receiver)) => {
-					// Immediately stop the watcher to clean up
-					std::mem::drop(handle.stop());
-					black_box(());
+			rt.block_on(async {
+				let temp_dir = TempDir::new().unwrap();
+				let config = WatcherConfig {
+					path: temp_dir.path().to_path_buf(),
+					recursive: true,
+					move_detector_config: Some(MoveDetectorConfig::default()),
+				};
+				
+				let result = start(config);
+				match result {
+					Ok((handle, _receiver)) => {
+						// Properly stop the watcher to avoid resource leaks
+						if let Err(e) = handle.stop().await {
+							eprintln!("Failed to stop watcher: {}", e);
+						}
+						black_box(());
+					}
+					Err(e) => {
+						panic!("Watcher initialization failed: {}", e);
+					}
 				}
-				Err(e) => {
-					panic!("Watcher initialization failed: {}", e);
-				}
-			}
+				
+				// Add a small delay to allow cleanup
+				tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+			});
 		});
 	});
+	
+	group.finish();
 }
 
 // Benchmark confidence calculation

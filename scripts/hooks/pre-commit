@@ -21,14 +21,13 @@ if ! command -v cargo &> /dev/null; then
     exit 1
 fi
 
-# 1. Check formatting
-echo "📝 Checking code formatting..."
-if ! cargo fmt --check; then
-    echo "❌ Code formatting issues found!"
-    echo "💡 Run 'cargo fmt' to fix formatting, then commit again."
+# 1. Auto-fix formatting
+echo "📝 Auto-fixing code formatting..."
+if ! cargo fmt; then
+    echo "❌ Formatting failed!"
     exit 1
 fi
-echo "✅ Code formatting is correct"
+echo "✅ Code formatting applied"
 
 # 2. Run clippy
 echo "🔧 Running clippy..."

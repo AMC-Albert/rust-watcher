@@ -13,20 +13,19 @@ try {
     exit 1
 }
 
-# 1. Check formatting
-Write-Host "Checking code formatting..." -ForegroundColor Yellow
+# 1. Auto-fix formatting
+Write-Host "Auto-fixing code formatting..." -ForegroundColor Yellow
 try {
-    cargo fmt --check
+    cargo fmt
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Code formatting issues found!" -ForegroundColor Red
-        Write-Host "Run 'cargo fmt' to fix formatting, then commit again." -ForegroundColor Blue
+        Write-Host "Formatting failed: $_" -ForegroundColor Red
         exit 1
     }
 } catch {
-    Write-Host "Formatting check failed: $_" -ForegroundColor Red
+    Write-Host "Formatting failed: $_" -ForegroundColor Red
     exit 1
 }
-Write-Host "Code formatting is correct" -ForegroundColor Green
+Write-Host "Code formatting applied" -ForegroundColor Green
 
 # 2. Run clippy
 Write-Host "Running clippy..." -ForegroundColor Yellow
