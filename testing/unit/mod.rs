@@ -7,3 +7,5 @@ mod debug_tests;
 mod error_handling_tests;
 mod move_detector_tests;
 mod stress_tests;
+mod windows_integration_tests;
+mod windows_specific_tests;
