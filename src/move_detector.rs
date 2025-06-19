@@ -181,56 +181,100 @@ impl MoveDetector {
 		}
 
 		vec![event]
-	}
-	async fn find_matching_remove(&self, create_event: &PendingEvent) -> Option<PendingEvent> {
+	}	async fn find_matching_remove(&self, create_event: &PendingEvent) -> Option<PendingEvent> {
 		let mut best_match: Option<(PendingEvent, f32)> = None;
+
+		debug!(
+			"Finding matching remove for create event: path={:?}, size={:?}, inode={:?}",
+			create_event.event.path, create_event.event.size, create_event.inode
+		);
 
 		// Fast path: inode matching (Unix only) - highest confidence
 		if let Some(inode) = create_event.inode {
+			debug!("Checking inode {} for matching remove", inode);
 			if let Some(pending_remove) = self.pending_removes_by_inode.get(&inode) {
 				if self.is_within_timeout(&pending_remove.timestamp) {
+					debug!("Found inode match for inode {}", inode);
 					return Some(pending_remove.clone());
+				} else {
+					debug!("Inode match {} found but expired", inode);
 				}
+			} else {
+				debug!("No pending remove found for inode {}", inode);
 			}
 		}
-
 		// Fast path: size-based matching
 		if let Some(size) = create_event.event.size {
+			debug!("Checking size {} for matching removes", size);
 			if let Some(removes_with_size) = self.pending_removes_by_size.get(&size) {
-				for pending_remove in removes_with_size {
+				debug!("Found {} pending removes with size {}", removes_with_size.len(), size);				for pending_remove in removes_with_size {
 					if self.is_within_timeout(&pending_remove.timestamp) {
 						let confidence = self.calculate_confidence(pending_remove, create_event);
-						if confidence > 0.3 {
+						debug!(
+							"Confidence for remove {:?} -> create {:?}: {}",
+							pending_remove.event.path, create_event.event.path, confidence
+						);
+						if confidence > self.config.confidence_threshold {
 							match best_match {
 								Some((_, best_confidence)) if confidence > best_confidence => {
+									debug!("New best match with confidence {}", confidence);
 									best_match = Some((pending_remove.clone(), confidence));
 								}
 								None => {
+									debug!("First match with confidence {}", confidence);
 									best_match = Some((pending_remove.clone(), confidence));
 								}
-								_ => {}
+								_ => {
+									debug!("Match found but not better than current best");
+								}
 							}
+						} else {
+							debug!("Confidence {} too low (< {})", confidence, self.config.confidence_threshold);
 						}
+					} else {
+						debug!("Remove event for {:?} expired", pending_remove.event.path);
 					}
 				}
+			} else {
+				debug!("No pending removes found for size {}", size);
 			}
-		}
-
-		// Fallback: check events without size
+		}		// Fallback: check events without size
+		debug!("Checking {} events without size", self.pending_removes_no_size.len());
 		for pending_remove in &self.pending_removes_no_size {
 			if self.is_within_timeout(&pending_remove.timestamp) {
 				let confidence = self.calculate_confidence(pending_remove, create_event);
-				if confidence > 0.3 {
+				debug!(
+					"Confidence for remove {:?} -> create {:?}: {}",
+					pending_remove.event.path, create_event.event.path, confidence
+				);
+				if confidence > self.config.confidence_threshold {
 					match best_match {
 						Some((_, best_confidence)) if confidence > best_confidence => {
+							debug!("New best match with confidence {}", confidence);
 							best_match = Some((pending_remove.clone(), confidence));
 						}
 						None => {
+							debug!("First match with confidence {}", confidence);
 							best_match = Some((pending_remove.clone(), confidence));
 						}
-						_ => {}
+						_ => {
+							debug!("Match found but not better than current best");
+						}
 					}
+				} else {
+					debug!("Confidence {} too low (< {})", confidence, self.config.confidence_threshold);
 				}
+			} else {
+				debug!("Remove event for {:?} expired", pending_remove.event.path);
+			}
+		}
+
+		match &best_match {
+			Some((event, confidence)) => {
+				debug!("Best match found: {:?} with confidence {}", event.event.path, confidence);
+			}
+			None => {
+				debug!("No matching remove found for create {:?}", create_event.event.path);
 			}
 		}
 
@@ -247,14 +291,13 @@ impl MoveDetector {
 				}
 			}
 		}
-
 		// Fast path: size-based matching
 		if let Some(size) = remove_event.event.size {
 			if let Some(creates_with_size) = self.pending_creates_by_size.get(&size) {
 				for pending_create in creates_with_size {
 					if self.is_within_timeout(&pending_create.timestamp) {
 						let confidence = self.calculate_confidence(remove_event, pending_create);
-						if confidence > 0.3 {
+						if confidence > self.config.confidence_threshold {
 							match best_match {
 								Some((_, best_confidence)) if confidence > best_confidence => {
 									best_match = Some((pending_create.clone(), confidence));
@@ -274,7 +317,7 @@ impl MoveDetector {
 		for pending_create in &self.pending_creates_no_size {
 			if self.is_within_timeout(&pending_create.timestamp) {
 				let confidence = self.calculate_confidence(remove_event, pending_create);
-				if confidence > 0.3 {
+				if confidence > self.config.confidence_threshold {
 					match best_match {
 						Some((_, best_confidence)) if confidence > best_confidence => {
 							best_match = Some((pending_create.clone(), confidence));
@@ -290,25 +333,36 @@ impl MoveDetector {
 
 		best_match.map(|(event, _)| event)
 	}
-
 	fn calculate_confidence(&self, event1: &PendingEvent, event2: &PendingEvent) -> f32 {
 		let mut confidence = 0.0;
 		let mut factors = 0;
+
+		debug!(
+			"Calculating confidence between {:?} and {:?}",
+			event1.event.path, event2.event.path
+		);
 
 		// Same file type (directory vs file)
 		if event1.event.is_directory == event2.event.is_directory {
 			confidence += 0.2;
 			factors += 1;
+			debug!("Same file type (+0.2): directories={}", event1.event.is_directory);
+		} else {
+			debug!("Different file types: {} vs {}", event1.event.is_directory, event2.event.is_directory);
 		}
 
 		// Same size (if available)
 		if let (Some(size1), Some(size2)) = (event1.event.size, event2.event.size) {
 			if size1 == size2 {
 				confidence += 0.3;
+				debug!("Same size (+0.3): {}", size1);
 			} else {
 				confidence -= 0.1; // Penalize different sizes
+				debug!("Different sizes (-0.1): {} vs {}", size1, size2);
 			}
 			factors += 1;
+		} else {
+			debug!("Size not available for one or both events: {:?} vs {:?}", event1.event.size, event2.event.size);
 		}
 
 		// Timing factor (closer in time = higher confidence)
@@ -321,21 +375,34 @@ impl MoveDetector {
 			/ self.config.timeout.as_millis() as f32;
 		confidence += time_factor * 0.3;
 		factors += 1;
+		debug!("Time factor (+{}): time_diff={}ms, timeout={}ms", 
+			time_factor * 0.3, time_diff, self.config.timeout.as_millis());
 
 		// Inode matching (Unix-like systems)
 		if let (Some(inode1), Some(inode2)) = (event1.inode, event2.inode) {
 			if inode1 == inode2 {
 				confidence += 0.4; // High confidence for inode match
+				debug!("Same inode (+0.4): {}", inode1);
+			} else {
+				debug!("Different inodes: {} vs {}", inode1, inode2);
 			}
 			factors += 1;
+		} else {
+			debug!("Inodes not available: {:?} vs {:?}", event1.inode, event2.inode);
 		}
 
 		// Content hash matching
 		if let (Some(hash1), Some(hash2)) = (&event1.content_hash, &event2.content_hash) {
 			if hash1 == hash2 {
 				confidence += 0.5; // Very high confidence for content match
+				debug!("Same content hash (+0.5)");
+			} else {
+				debug!("Different content hashes");
 			}
 			factors += 1;
+		} else {
+			debug!("Content hashes not available: {:?} vs {:?}", 
+				event1.content_hash.is_some(), event2.content_hash.is_some());
 		}
 
 		// Name similarity
@@ -343,13 +410,16 @@ impl MoveDetector {
 			self.calculate_name_similarity(&event1.event.path, &event2.event.path);
 		confidence += name_similarity * 0.2;
 		factors += 1;
+		debug!("Name similarity (+{}): similarity={}", name_similarity * 0.2, name_similarity);
 
 		// Normalize by number of factors considered
-		if factors > 0 {
+		let final_confidence = if factors > 0 {
 			confidence / factors as f32
 		} else {
 			0.0
-		}
+		};
+		debug!("Final confidence: {} / {} factors = {}", confidence, factors, final_confidence);
+		final_confidence
 	}
 
 	fn calculate_name_similarity(&self, path1: &Path, path2: &Path) -> f32 {
@@ -476,23 +546,30 @@ impl MoveDetector {
 			}
 		}
 
-		Some(format!("{:x}", hasher.finish()))
-	}
+		Some(format!("{:x}", hasher.finish()))	}
 
 	// Helper methods for managing bucketed pending events
 	fn add_pending_remove(&mut self, pending: PendingEvent) {
+		debug!(
+			"Adding pending remove: path={:?}, size={:?}, inode={:?}",
+			pending.event.path, pending.event.size, pending.inode
+		);
+
 		// Fast path: inode-based indexing (Unix only)
 		if let Some(inode) = pending.inode {
+			debug!("Storing remove by inode: {}", inode);
 			self.pending_removes_by_inode.insert(inode, pending);
 			return;
 		}
 		// Fast path: size-based indexing
 		if let Some(size) = pending.event.size {
+			debug!("Storing remove by size: {}", size);
 			self.pending_removes_by_size
 				.entry(size)
 				.or_default()
 				.push(pending);
 		} else {
+			debug!("Storing remove without size");
 			self.pending_removes_no_size.push(pending);
 		}
 	}
