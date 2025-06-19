@@ -6,16 +6,13 @@ This directory contains utility scripts for the Rust filesystem watcher project.
 
 ### Quick Setup
 ```bash
-# On Unix/Linux/macOS
-./scripts/install-hooks.sh
-
-# On Windows (PowerShell)
-.\scripts\install-hooks.ps1
+# Set the hooks directory to use versioned hooks
+git config core.hooksPath scripts/hooks
 ```
 
 ### What Gets Installed
 
-The installation script sets up the following git hooks:
+Setting the hooks directory enables the following git hooks:
 
 #### Pre-commit Hook
 - **Formatting Check**: Ensures all Rust code is properly formatted using `rustfmt`
@@ -41,12 +38,12 @@ git commit --no-verify
 
 ## Why Version Hooks?
 
-Git hooks in `.git/hooks/` are not versioned by default. By storing them in `scripts/hooks/` and providing installation scripts, we ensure:
+Git hooks in `.git/hooks/` are not versioned by default. By storing them in `scripts/hooks/` and using `git config core.hooksPath`, we ensure:
 
 ✅ **Team Consistency**: Everyone gets the same hooks  
 ✅ **Version Control**: Hook changes are tracked and reviewable  
-✅ **Easy Setup**: Simple installation for new team members  
-✅ **Backup**: Hooks are preserved in the repository  
+✅ **Easy Setup**: Simple one-command setup for new team members  
+✅ **Backup**: Hooks are preserved in the repository
 
 ## Manual Installation
 

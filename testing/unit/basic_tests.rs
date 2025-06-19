@@ -1,4 +1,4 @@
-use rust_watcher::{FileSystemWatcher, WatcherConfig};
+use rust_watcher::{start, MoveDetectorConfig, WatcherConfig};
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::fs;
@@ -8,18 +8,12 @@ use tokio::time::sleep;
 async fn test_basic_file_creation() {
 	let temp_dir = TempDir::new().unwrap();
 	let test_path = temp_dir.path().to_path_buf();
-
 	let config = WatcherConfig {
 		path: test_path.clone(),
 		recursive: true,
-		move_timeout_ms: 1000,
+		move_detector_config: None,
 	};
-	let mut watcher = FileSystemWatcher::new(config).await.unwrap();
-
-	// Start watching in the background
-	tokio::spawn(async move {
-		watcher.start_watching().await.unwrap();
-	});
+	let (handle, mut event_receiver) = start(config).unwrap();
 
 	// Give the watcher time to start
 	sleep(Duration::from_millis(100)).await;
@@ -30,10 +24,23 @@ async fn test_basic_file_creation() {
 
 	// Give some time for the event to be processed
 	sleep(Duration::from_millis(200)).await;
-
 	// The watcher should have detected the file creation
 	// This is a basic smoke test to ensure the watcher starts without errors
 	assert!(test_file.exists());
+
+	// Check that we can receive at least one event
+	tokio::select! {
+		event = event_receiver.recv() => {
+			assert!(event.is_some(), "Should receive at least one event");
+		}
+		_ = sleep(Duration::from_millis(1000)) => {
+			// Timeout is OK for basic test - just checking the file exists
+		}
+	}
+
+	// Clean shutdown
+	handle.stop().await.unwrap();
+	sleep(Duration::from_millis(100)).await;
 }
 
 #[tokio::test]
@@ -44,20 +51,17 @@ async fn test_file_move_detection() {
 	// Create test files
 	let source_file = test_path.join("source.txt");
 	let dest_file = test_path.join("destination.txt");
-
 	fs::write(&source_file, "test content").await.unwrap();
-
+	let move_config = MoveDetectorConfig {
+		timeout: Duration::from_millis(2000),
+		..Default::default()
+	};
 	let config = WatcherConfig {
 		path: test_path.clone(),
 		recursive: true,
-		move_timeout_ms: 2000,
+		move_detector_config: Some(move_config),
 	};
-
-	let mut watcher = FileSystemWatcher::new(config).await.unwrap();
-
-	tokio::spawn(async move {
-		watcher.start_watching().await.unwrap();
-	});
+	let (handle, mut event_receiver) = start(config).unwrap();
 
 	sleep(Duration::from_millis(100)).await;
 
@@ -72,24 +76,27 @@ async fn test_file_move_detection() {
 
 	let content = fs::read_to_string(&dest_file).await.unwrap();
 	assert_eq!(content, "test content");
+	// Consume any pending events
+	tokio::select! {
+		_ = event_receiver.recv() => {}
+		_ = sleep(Duration::from_millis(100)) => {}
+	}
+
+	// Clean shutdown
+	handle.stop().await.unwrap();
+	sleep(Duration::from_millis(100)).await;
 }
 
 #[tokio::test]
 async fn test_directory_operations() {
 	let temp_dir = TempDir::new().unwrap();
 	let test_path = temp_dir.path().to_path_buf();
-
 	let config = WatcherConfig {
 		path: test_path.clone(),
 		recursive: true,
-		move_timeout_ms: 1000,
+		move_detector_config: None,
 	};
-
-	let mut watcher = FileSystemWatcher::new(config).await.unwrap();
-
-	tokio::spawn(async move {
-		watcher.start_watching().await.unwrap();
-	});
+	let (handle, mut event_receiver) = start(config).unwrap();
 
 	sleep(Duration::from_millis(100)).await;
 
@@ -109,4 +116,14 @@ async fn test_directory_operations() {
 
 	let content = fs::read_to_string(&subfile).await.unwrap();
 	assert_eq!(content, "subdir content");
+
+	// Consume any pending events
+	tokio::select! {
+		_ = event_receiver.recv() => {}
+		_ = sleep(Duration::from_millis(100)) => {}
+	}
+
+	// Clean shutdown
+	handle.stop().await.unwrap();
+	sleep(Duration::from_millis(100)).await;
 }

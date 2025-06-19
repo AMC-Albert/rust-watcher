@@ -1,6 +1,7 @@
 use clap::Parser;
-use rust_watcher::{FileSystemWatcher, WatcherConfig};
+use rust_watcher::{start, MoveDetectorConfig, WatcherConfig};
 use std::path::PathBuf;
+use std::time::Duration;
 use tracing::{info, Level};
 
 #[derive(Parser)]
@@ -37,19 +38,28 @@ async fn main() -> anyhow::Result<()> {
 		Level::INFO
 	};
 	tracing_subscriber::fmt().with_max_level(level).init();
-
 	info!("Starting filesystem watcher for path: {:?}", cli.path);
-
+	let move_config = MoveDetectorConfig {
+		timeout: Duration::from_millis(cli.timeout),
+		..Default::default()
+	};
 	let config = WatcherConfig {
 		path: cli.path,
 		recursive: cli.recursive,
-		move_timeout_ms: cli.timeout,
+		move_detector_config: Some(move_config),
 	};
 
-	let mut watcher = FileSystemWatcher::new(config).await?;
+	// Start watching and get the event receiver
+	let (_handle, mut event_receiver) = start(config)?;
 
-	// Start watching and handle events
-	watcher.start_watching().await?;
+	// Handle events in a loop
+	tokio::spawn(async move {
+		while let Some(event) = event_receiver.recv().await {
+			// Events are already logged by the watcher's handle_processed_event
+			// But we could do additional processing here if needed
+			let _ = event; // Acknowledge we received the event
+		}
+	});
 
 	// Keep the program running
 	tokio::signal::ctrl_c().await?;

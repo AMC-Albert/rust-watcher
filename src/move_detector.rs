@@ -1,9 +1,52 @@
 use crate::events::{EventType, FileSystemEvent, MoveDetectionMethod, MoveEvent};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::fs::File;
+use std::hash::Hasher;
+use std::io::Read;
+use std::path::Path;
 use std::time::Duration;
 use tokio::time::Instant;
 use tracing::{debug, warn};
+use twox_hash::XxHash64;
+
+/// Configuration for the move detector
+#[derive(Debug, Clone)]
+pub struct MoveDetectorConfig {
+	/// Timeout for matching remove/create events
+	pub timeout: Duration,
+	/// Confidence threshold for considering a match valid (0.0 to 1.0)
+	pub confidence_threshold: f32,
+	/// Weight for size matching in confidence calculation
+	pub weight_size_match: f32,
+	/// Weight for time factor in confidence calculation
+	pub weight_time_factor: f32,
+	/// Weight for inode matching in confidence calculation (Unix only)
+	pub weight_inode_match: f32,
+	/// Weight for content hash matching in confidence calculation
+	pub weight_content_hash: f32,
+	/// Weight for name similarity in confidence calculation
+	pub weight_name_similarity: f32,
+	/// Maximum number of pending events to prevent memory leaks
+	pub max_pending_events: usize,
+	/// Maximum file size for content hashing (bytes)
+	pub content_hash_max_file_size: u64,
+}
+
+impl Default for MoveDetectorConfig {
+	fn default() -> Self {
+		Self {
+			timeout: Duration::from_millis(1000),
+			confidence_threshold: 0.7,
+			weight_size_match: 0.2,
+			weight_time_factor: 0.15,
+			weight_inode_match: 0.4, // High weight for most reliable method
+			weight_content_hash: 0.35,
+			weight_name_similarity: 0.1,
+			max_pending_events: 1000,
+			content_hash_max_file_size: 1_048_576, // 1MB
+		}
+	}
+}
 
 #[derive(Debug, Clone)]
 struct PendingEvent {
@@ -14,20 +57,38 @@ struct PendingEvent {
 }
 
 pub struct MoveDetector {
-	pending_removes: HashMap<PathBuf, PendingEvent>,
-	pending_creates: HashMap<PathBuf, PendingEvent>,
-	timeout: Duration,
-	max_pending: usize,
+	// Bucketed pending removes for O(1) size-based lookups
+	pending_removes_by_size: HashMap<u64, Vec<PendingEvent>>,
+	pending_removes_no_size: Vec<PendingEvent>,
+	pending_removes_by_inode: HashMap<u64, PendingEvent>, // Unix only
+
+	// Bucketed pending creates for O(1) size-based lookups
+	pending_creates_by_size: HashMap<u64, Vec<PendingEvent>>,
+	pending_creates_no_size: Vec<PendingEvent>,
+	pending_creates_by_inode: HashMap<u64, PendingEvent>, // Unix only
+
+	config: MoveDetectorConfig,
 }
 
 impl MoveDetector {
-	pub fn new(timeout_ms: u64) -> Self {
+	pub fn new(config: MoveDetectorConfig) -> Self {
 		Self {
-			pending_removes: HashMap::new(),
-			pending_creates: HashMap::new(),
-			timeout: Duration::from_millis(timeout_ms),
-			max_pending: 1000, // Prevent memory leaks
+			pending_removes_by_size: HashMap::new(),
+			pending_removes_no_size: Vec::new(),
+			pending_removes_by_inode: HashMap::new(),
+			pending_creates_by_size: HashMap::new(),
+			pending_creates_no_size: Vec::new(),
+			pending_creates_by_inode: HashMap::new(),
+			config,
 		}
+	}
+	/// Create a new MoveDetector with default configuration and custom timeout
+	pub fn with_timeout(timeout_ms: u64) -> Self {
+		let config = MoveDetectorConfig {
+			timeout: Duration::from_millis(timeout_ms),
+			..Default::default()
+		};
+		Self::new(config)
 	}
 
 	/// Process a filesystem event and potentially detect moves
@@ -60,10 +121,8 @@ impl MoveDetector {
 
 			let mut move_event_fs = matching_create.event.clone();
 			move_event_fs = move_event_fs.with_move_data(move_event);
-
 			// Remove the matching create from pending
-			self.pending_creates
-				.retain(|_, p| p.event.id != matching_create.event.id);
+			self.remove_pending_create_by_id(matching_create.event.id);
 
 			debug!(
 				"Detected move: {:?} -> {:?}",
@@ -73,8 +132,8 @@ impl MoveDetector {
 		}
 
 		// Store this removal as pending
-		if self.pending_removes.len() < self.max_pending {
-			self.pending_removes.insert(event.path.clone(), pending);
+		if self.count_pending_removes() < self.config.max_pending_events {
+			self.add_pending_remove(pending);
 		} else {
 			warn!(
 				"Too many pending remove events, dropping event for: {:?}",
@@ -107,15 +166,13 @@ impl MoveDetector {
 			let move_event_fs = event.with_move_data(move_event);
 
 			// Remove the matching removal from pending
-			self.pending_removes
-				.retain(|_, p| p.event.id != matching_remove.event.id);
-
+			self.remove_pending_remove_by_id(matching_remove.event.id);
 			return vec![move_event_fs];
 		}
 
 		// Store this creation as pending
-		if self.pending_creates.len() < self.max_pending {
-			self.pending_creates.insert(event.path.clone(), pending);
+		if self.count_pending_creates() < self.config.max_pending_events {
+			self.add_pending_create(pending);
 		} else {
 			warn!(
 				"Too many pending create events, dropping event for: {:?}",
@@ -125,16 +182,45 @@ impl MoveDetector {
 
 		vec![event]
 	}
-
 	async fn find_matching_remove(&self, create_event: &PendingEvent) -> Option<PendingEvent> {
 		let mut best_match: Option<(PendingEvent, f32)> = None;
 
-		for pending_remove in self.pending_removes.values() {
+		// Fast path: inode matching (Unix only) - highest confidence
+		if let Some(inode) = create_event.inode {
+			if let Some(pending_remove) = self.pending_removes_by_inode.get(&inode) {
+				if self.is_within_timeout(&pending_remove.timestamp) {
+					return Some(pending_remove.clone());
+				}
+			}
+		}
+
+		// Fast path: size-based matching
+		if let Some(size) = create_event.event.size {
+			if let Some(removes_with_size) = self.pending_removes_by_size.get(&size) {
+				for pending_remove in removes_with_size {
+					if self.is_within_timeout(&pending_remove.timestamp) {
+						let confidence = self.calculate_confidence(pending_remove, create_event);
+						if confidence > 0.3 {
+							match best_match {
+								Some((_, best_confidence)) if confidence > best_confidence => {
+									best_match = Some((pending_remove.clone(), confidence));
+								}
+								None => {
+									best_match = Some((pending_remove.clone(), confidence));
+								}
+								_ => {}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Fallback: check events without size
+		for pending_remove in &self.pending_removes_no_size {
 			if self.is_within_timeout(&pending_remove.timestamp) {
 				let confidence = self.calculate_confidence(pending_remove, create_event);
-
 				if confidence > 0.3 {
-					// Minimum confidence threshold
 					match best_match {
 						Some((_, best_confidence)) if confidence > best_confidence => {
 							best_match = Some((pending_remove.clone(), confidence));
@@ -150,16 +236,45 @@ impl MoveDetector {
 
 		best_match.map(|(event, _)| event)
 	}
-
 	async fn find_matching_create(&self, remove_event: &PendingEvent) -> Option<PendingEvent> {
 		let mut best_match: Option<(PendingEvent, f32)> = None;
 
-		for pending_create in self.pending_creates.values() {
+		// Fast path: inode matching (Unix only) - highest confidence
+		if let Some(inode) = remove_event.inode {
+			if let Some(pending_create) = self.pending_creates_by_inode.get(&inode) {
+				if self.is_within_timeout(&pending_create.timestamp) {
+					return Some(pending_create.clone());
+				}
+			}
+		}
+
+		// Fast path: size-based matching
+		if let Some(size) = remove_event.event.size {
+			if let Some(creates_with_size) = self.pending_creates_by_size.get(&size) {
+				for pending_create in creates_with_size {
+					if self.is_within_timeout(&pending_create.timestamp) {
+						let confidence = self.calculate_confidence(remove_event, pending_create);
+						if confidence > 0.3 {
+							match best_match {
+								Some((_, best_confidence)) if confidence > best_confidence => {
+									best_match = Some((pending_create.clone(), confidence));
+								}
+								None => {
+									best_match = Some((pending_create.clone(), confidence));
+								}
+								_ => {}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Fallback: check events without size
+		for pending_create in &self.pending_creates_no_size {
 			if self.is_within_timeout(&pending_create.timestamp) {
 				let confidence = self.calculate_confidence(remove_event, pending_create);
-
 				if confidence > 0.3 {
-					// Minimum confidence threshold
 					match best_match {
 						Some((_, best_confidence)) if confidence > best_confidence => {
 							best_match = Some((pending_create.clone(), confidence));
@@ -201,8 +316,9 @@ impl MoveDetector {
 			.timestamp
 			.duration_since(event2.timestamp)
 			.as_millis();
-		let time_factor = (self.timeout.as_millis() - time_diff.min(self.timeout.as_millis()))
-			as f32 / self.timeout.as_millis() as f32;
+		let time_factor = (self.config.timeout.as_millis()
+			- time_diff.min(self.config.timeout.as_millis())) as f32
+			/ self.config.timeout.as_millis() as f32;
 		confidence += time_factor * 0.3;
 		factors += 1;
 
@@ -282,36 +398,166 @@ impl MoveDetector {
 	}
 
 	fn is_within_timeout(&self, timestamp: &Instant) -> bool {
-		timestamp.elapsed() <= self.timeout
+		timestamp.elapsed() <= self.config.timeout
 	}
-
 	async fn cleanup_expired_events(&mut self) {
 		let now = Instant::now();
+		// Clean up inode-based removes
+		self.pending_removes_by_inode
+			.retain(|_, pending| now.duration_since(pending.timestamp) <= self.config.timeout);
 
-		self.pending_removes
-			.retain(|_, pending| now.duration_since(pending.timestamp) <= self.timeout);
+		// Clean up size-based removes
+		for events in self.pending_removes_by_size.values_mut() {
+			events.retain(|pending| now.duration_since(pending.timestamp) <= self.config.timeout);
+		}
+		self.pending_removes_by_size
+			.retain(|_, events| !events.is_empty());
+		// Clean up no-size removes
+		self.pending_removes_no_size
+			.retain(|pending| now.duration_since(pending.timestamp) <= self.config.timeout);
 
-		self.pending_creates
-			.retain(|_, pending| now.duration_since(pending.timestamp) <= self.timeout);
+		// Clean up inode-based creates
+		self.pending_creates_by_inode
+			.retain(|_, pending| now.duration_since(pending.timestamp) <= self.config.timeout);
+		// Clean up size-based creates
+		for events in self.pending_creates_by_size.values_mut() {
+			events.retain(|pending| now.duration_since(pending.timestamp) <= self.config.timeout);
+		}
+		self.pending_creates_by_size
+			.retain(|_, events| !events.is_empty());
+
+		// Clean up no-size creates
+		self.pending_creates_no_size
+			.retain(|pending| now.duration_since(pending.timestamp) <= self.config.timeout);
 	}
-
-	async fn get_inode(&self, _path: &Path) -> Option<u64> {
-		// Platform-specific inode retrieval would go here
-		// For now, return None (not implemented for Windows compatibility)
-		None
-	}
-
-	async fn get_content_hash(&self, path: &Path) -> Option<String> {
-		// For files only, and only if they're small enough to hash quickly
-		if path.is_file() {
+	async fn get_inode(&self, path: &Path) -> Option<u64> {
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::MetadataExt;
 			if let Ok(metadata) = std::fs::metadata(path) {
-				if metadata.len() < 1024 * 1024 { // 1MB limit
-					 // Simple hash implementation would go here
-					 // For now, return None to keep example simple
-				}
+				return Some(metadata.ino());
 			}
 		}
+
+		// On non-unix platforms, this will do nothing.
+		#[cfg(not(unix))]
+		let _ = path; // Prevent unused variable warning
+
 		None
+	}
+	async fn get_content_hash(&self, path: &Path) -> Option<String> {
+		if !path.is_file() {
+			return None;
+		}
+
+		let metadata = match tokio::fs::metadata(path).await {
+			Ok(md) => md,
+			Err(_) => return None,
+		};
+		// Only hash small files for performance
+		if metadata.len() > self.config.content_hash_max_file_size {
+			return None;
+		}
+
+		let mut file = match File::open(path) {
+			Ok(f) => f,
+			Err(_) => return None,
+		};
+
+		// Use a fast, non-cryptographic hash
+		let mut hasher = XxHash64::with_seed(0);
+		let mut buffer = [0; 8192]; // 8KB buffer
+
+		loop {
+			match file.read(&mut buffer) {
+				Ok(0) => break, // End of file
+				Ok(n) => hasher.write(&buffer[..n]),
+				Err(_) => return None, // IO error
+			}
+		}
+
+		Some(format!("{:x}", hasher.finish()))
+	}
+
+	// Helper methods for managing bucketed pending events
+	fn add_pending_remove(&mut self, pending: PendingEvent) {
+		// Fast path: inode-based indexing (Unix only)
+		if let Some(inode) = pending.inode {
+			self.pending_removes_by_inode.insert(inode, pending);
+			return;
+		}
+		// Fast path: size-based indexing
+		if let Some(size) = pending.event.size {
+			self.pending_removes_by_size
+				.entry(size)
+				.or_default()
+				.push(pending);
+		} else {
+			self.pending_removes_no_size.push(pending);
+		}
+	}
+
+	fn add_pending_create(&mut self, pending: PendingEvent) {
+		// Fast path: inode-based indexing (Unix only)
+		if let Some(inode) = pending.inode {
+			self.pending_creates_by_inode.insert(inode, pending);
+			return;
+		}
+		// Fast path: size-based indexing
+		if let Some(size) = pending.event.size {
+			self.pending_creates_by_size
+				.entry(size)
+				.or_default()
+				.push(pending);
+		} else {
+			self.pending_creates_no_size.push(pending);
+		}
+	}
+
+	fn remove_pending_create_by_id(&mut self, id: uuid::Uuid) {
+		// Remove from inode-based storage
+		self.pending_creates_by_inode
+			.retain(|_, p| p.event.id != id);
+
+		// Remove from size-based storage
+		for events in self.pending_creates_by_size.values_mut() {
+			events.retain(|p| p.event.id != id);
+		}
+		self.pending_creates_by_size
+			.retain(|_, events| !events.is_empty());
+
+		// Remove from no-size storage
+		self.pending_creates_no_size.retain(|p| p.event.id != id);
+	}
+
+	fn remove_pending_remove_by_id(&mut self, id: uuid::Uuid) {
+		// Remove from inode-based storage
+		self.pending_removes_by_inode
+			.retain(|_, p| p.event.id != id);
+
+		// Remove from size-based storage
+		for events in self.pending_removes_by_size.values_mut() {
+			events.retain(|p| p.event.id != id);
+		}
+		self.pending_removes_by_size
+			.retain(|_, events| !events.is_empty());
+
+		// Remove from no-size storage
+		self.pending_removes_no_size.retain(|p| p.event.id != id);
+	}
+
+	fn count_pending_removes(&self) -> usize {
+		let inode_count = self.pending_removes_by_inode.len();
+		let size_count: usize = self.pending_removes_by_size.values().map(|v| v.len()).sum();
+		let no_size_count = self.pending_removes_no_size.len();
+		inode_count + size_count + no_size_count
+	}
+
+	fn count_pending_creates(&self) -> usize {
+		let inode_count = self.pending_creates_by_inode.len();
+		let size_count: usize = self.pending_creates_by_size.values().map(|v| v.len()).sum();
+		let no_size_count = self.pending_creates_no_size.len();
+		inode_count + size_count + no_size_count
 	}
 }
 

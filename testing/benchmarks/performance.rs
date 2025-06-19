@@ -1,17 +1,20 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use rust_watcher::{EventType, FileSystemEvent};
-use rust_watcher::{FileSystemWatcher, MoveDetector, WatcherConfig};
+use rust_watcher::{
+	start, EventType, FileSystemEvent, MoveDetector, MoveDetectorConfig, WatcherConfig,
+};
 use std::path::PathBuf;
 use tempfile::TempDir;
 
 // Benchmark move detection performance
+#[allow(dead_code)]
 fn benchmark_move_detection(c: &mut Criterion) {
 	let rt = tokio::runtime::Runtime::new().unwrap();
 
 	c.bench_function("move_detector_process_event", |b| {
 		b.iter(|| {
 			rt.block_on(async {
-				let mut detector = MoveDetector::new(1000);
+				let config = MoveDetectorConfig::default();
+				let mut detector = MoveDetector::new(config);
 
 				let remove_event = FileSystemEvent::new(
 					EventType::Remove,
@@ -36,34 +39,41 @@ fn benchmark_move_detection(c: &mut Criterion) {
 }
 
 // Benchmark watcher initialization
+#[allow(dead_code)]
 fn benchmark_watcher_init(c: &mut Criterion) {
-	let rt = tokio::runtime::Runtime::new().unwrap();
-
 	c.bench_function("watcher_initialization", |b| {
 		b.iter(|| {
-			rt.block_on(async {
-				let temp_dir = TempDir::new().unwrap();
-				let config = WatcherConfig {
-					path: temp_dir.path().to_path_buf(),
-					recursive: true,
-					move_timeout_ms: 1000,
-				};
-
-				let watcher = FileSystemWatcher::new(config).await.unwrap();
-				black_box(watcher);
-			});
+			let temp_dir = TempDir::new().unwrap();
+			let config = WatcherConfig {
+				path: temp_dir.path().to_path_buf(),
+				recursive: true,
+				move_detector_config: Some(MoveDetectorConfig::default()),
+			};
+			let result = start(config);
+			match result {
+				Ok((handle, _receiver)) => {
+					// Immediately stop the watcher to clean up
+					std::mem::drop(handle.stop());
+					black_box(());
+				}
+				Err(e) => {
+					panic!("Watcher initialization failed: {}", e);
+				}
+			}
 		});
 	});
 }
 
 // Benchmark confidence calculation
+#[allow(dead_code)]
 fn benchmark_confidence_calculation(c: &mut Criterion) {
 	let rt = tokio::runtime::Runtime::new().unwrap();
 
 	c.bench_function("confidence_calculation", |b| {
 		b.iter(|| {
 			rt.block_on(async {
-				let mut detector = MoveDetector::new(1000);
+				let config = MoveDetectorConfig::default();
+				let mut detector = MoveDetector::new(config);
 
 				// Create multiple events to test batch processing
 				let mut events = Vec::new();

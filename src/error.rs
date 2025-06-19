@@ -17,6 +17,9 @@ pub enum WatcherError {
 	#[error("Invalid path: {path}")]
 	InvalidPath { path: String },
 
+	#[error("Failed to send stop signal to watcher")]
+	StopSignal,
+
 	#[error("Watcher not initialized")]
 	NotInitialized,
 }
