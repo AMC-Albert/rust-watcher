@@ -8,7 +8,9 @@ pub enum EventType {
 	Create,
 	Write,
 	Remove,
-	Rename,
+	RenameFrom, // Old name in rename operation
+	RenameTo,   // New name in rename operation
+	Rename,     // Generic rename (when direction unclear)
 	Move,
 	Chmod,
 	Other(String),
@@ -18,7 +20,14 @@ impl From<notify::EventKind> for EventType {
 	fn from(kind: notify::EventKind) -> Self {
 		match kind {
 			notify::EventKind::Create(_) => EventType::Create,
-			notify::EventKind::Modify(_) => EventType::Write,
+			notify::EventKind::Modify(modify_kind) => match modify_kind {
+				notify::event::ModifyKind::Name(name_kind) => match name_kind {
+					notify::event::RenameMode::From => EventType::RenameFrom,
+					notify::event::RenameMode::To => EventType::RenameTo,
+					_ => EventType::Rename,
+				},
+				_ => EventType::Write,
+			},
 			notify::EventKind::Remove(_) => EventType::Remove,
 			notify::EventKind::Access(_) => EventType::Other("Access".to_string()),
 			notify::EventKind::Other => EventType::Other("Unknown".to_string()),

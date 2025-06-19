@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::hash::Hasher;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::time::Instant;
 use tracing::{debug, warn};
@@ -34,14 +34,27 @@ pub struct MoveDetectorConfig {
 
 impl Default for MoveDetectorConfig {
 	fn default() -> Self {
+		// Adjust weights and threshold based on platform capabilities
+		#[cfg(unix)]
+		let (confidence_threshold, weight_inode, weight_size, weight_name, weight_time) =
+			(0.7, 0.4, 0.2, 0.1, 0.15);
+
+		#[cfg(windows)]
+		let (confidence_threshold, weight_inode, weight_size, weight_name, weight_time) =
+			(0.5, 0.3, 0.25, 0.2, 0.2); // Lower threshold, higher name/time weights
+
+		#[cfg(not(any(unix, windows)))]
+		let (confidence_threshold, weight_inode, weight_size, weight_name, weight_time) =
+			(0.5, 0.3, 0.25, 0.2, 0.2);
+
 		Self {
 			timeout: Duration::from_millis(1000),
-			confidence_threshold: 0.7,
-			weight_size_match: 0.2,
-			weight_time_factor: 0.15,
-			weight_inode_match: 0.4, // High weight for most reliable method
+			confidence_threshold,
+			weight_size_match: weight_size,
+			weight_time_factor: weight_time,
+			weight_inode_match: weight_inode,
 			weight_content_hash: 0.35,
-			weight_name_similarity: 0.1,
+			weight_name_similarity: weight_name,
 			max_pending_events: 1000,
 			content_hash_max_file_size: 1_048_576, // 1MB
 		}
@@ -54,6 +67,15 @@ struct PendingEvent {
 	timestamp: Instant,
 	inode: Option<u64>,
 	content_hash: Option<String>,
+	// Windows-specific identifier (creation_time_nanos << 32 | size_lower_32_bits)
+	windows_id: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+struct FileMetadata {
+	size: Option<u64>,
+	windows_id: Option<u64>,
+	last_seen: Instant,
 }
 
 pub struct MoveDetector {
@@ -61,11 +83,19 @@ pub struct MoveDetector {
 	pending_removes_by_size: HashMap<u64, Vec<PendingEvent>>,
 	pending_removes_no_size: Vec<PendingEvent>,
 	pending_removes_by_inode: HashMap<u64, PendingEvent>, // Unix only
+	pending_removes_by_windows_id: HashMap<u64, PendingEvent>, // Windows only
 
 	// Bucketed pending creates for O(1) size-based lookups
 	pending_creates_by_size: HashMap<u64, Vec<PendingEvent>>,
 	pending_creates_no_size: Vec<PendingEvent>,
 	pending_creates_by_inode: HashMap<u64, PendingEvent>, // Unix only
+	pending_creates_by_windows_id: HashMap<u64, PendingEvent>, // Windows only
+
+	// Cache metadata for files we've seen (for use when they get removed)
+	metadata_cache: HashMap<PathBuf, FileMetadata>,
+
+	// Rename event pairing (Windows sends Name(From) then Name(To))
+	pending_rename_from: Option<(FileSystemEvent, Instant)>,
 
 	config: MoveDetectorConfig,
 }
@@ -76,9 +106,13 @@ impl MoveDetector {
 			pending_removes_by_size: HashMap::new(),
 			pending_removes_no_size: Vec::new(),
 			pending_removes_by_inode: HashMap::new(),
+			pending_removes_by_windows_id: HashMap::new(),
 			pending_creates_by_size: HashMap::new(),
 			pending_creates_no_size: Vec::new(),
 			pending_creates_by_inode: HashMap::new(),
+			pending_creates_by_windows_id: HashMap::new(),
+			metadata_cache: HashMap::new(),
+			pending_rename_from: None,
 			config,
 		}
 	}
@@ -90,23 +124,111 @@ impl MoveDetector {
 		};
 		Self::new(config)
 	}
-
 	/// Process a filesystem event and potentially detect moves
 	pub async fn process_event(&mut self, event: FileSystemEvent) -> Vec<FileSystemEvent> {
+		// Cache metadata for files we can still access (not for remove events)
+		if !matches!(event.event_type, EventType::Remove | EventType::RenameFrom) {
+			self.cache_file_metadata(&event.path).await;
+		}
+
 		self.cleanup_expired_events().await;
 
 		match event.event_type {
 			EventType::Remove => self.handle_remove_event(event).await,
 			EventType::Create => self.handle_create_event(event).await,
+			EventType::RenameFrom => self.handle_rename_from_event(event).await,
+			EventType::RenameTo => self.handle_rename_to_event(event).await,
+			EventType::Rename => {
+				// Generic rename event - treat as both remove and create
+				debug!("Processing generic rename event for: {:?}", event.path);
+				vec![event] // Pass through for now
+			}
 			_ => vec![event], // Pass through other events
 		}
 	}
 
-	async fn handle_remove_event(&mut self, event: FileSystemEvent) -> Vec<FileSystemEvent> {
+	async fn handle_rename_from_event(&mut self, event: FileSystemEvent) -> Vec<FileSystemEvent> {
+		debug!("Processing rename FROM event for: {:?}", event.path);
+
+		// Store this as a pending rename-from event
+		self.pending_rename_from = Some((event.clone(), Instant::now()));
+
+		// Also cache metadata before the file is renamed
+		self.cache_file_metadata(&event.path).await;
+
+		// Don't emit any events yet, wait for the RenameTo
+		vec![]
+	}
+
+	async fn handle_rename_to_event(&mut self, event: FileSystemEvent) -> Vec<FileSystemEvent> {
+		debug!("Processing rename TO event for: {:?}", event.path);
+
+		// Check if we have a pending rename-from event
+		if let Some((from_event, timestamp)) = self.pending_rename_from.take() {
+			// Check if the rename pair is within timeout
+			if timestamp.elapsed() <= Duration::from_millis(100) {
+				// Short timeout for rename pairs
+				debug!(
+					"Pairing rename events: {:?} -> {:?}",
+					from_event.path, event.path
+				);
+
+				// Create a move event from the rename pair
+				let move_event = MoveEvent {
+					source_path: from_event.path.clone(),
+					destination_path: event.path.clone(),
+					confidence: 1.0, // High confidence for paired rename events
+					detection_method: MoveDetectionMethod::NameAndTiming,
+				};
+
+				let mut move_event_fs = event.clone();
+				move_event_fs = move_event_fs.with_move_data(move_event);
+
+				debug!("Detected rename: {:?} -> {:?}", from_event.path, event.path);
+				return vec![move_event_fs];
+			} else {
+				debug!("Rename FROM event expired, treating TO event as standalone");
+			}
+		} else {
+			debug!("No pending rename FROM event, treating TO event as standalone");
+		}
+
+		// No matching rename-from event, treat as a regular create
+		vec![event]
+	}
+
+	async fn cache_file_metadata(&mut self, path: &Path) {
+		if let Ok(metadata) = tokio::fs::metadata(path).await {
+			let windows_id = self.get_windows_id(path).await;
+			let file_metadata = FileMetadata {
+				size: if metadata.is_file() {
+					Some(metadata.len())
+				} else {
+					None
+				},
+				windows_id,
+				last_seen: Instant::now(),
+			};
+			self.metadata_cache
+				.insert(path.to_path_buf(), file_metadata);
+		}
+	}
+	async fn handle_remove_event(&mut self, mut event: FileSystemEvent) -> Vec<FileSystemEvent> {
+		// Try to get cached metadata for this file (since it's being removed)
+		let cached_metadata = self.metadata_cache.remove(&event.path);
+
+		// Update event with cached metadata if available
+		if let Some(metadata) = &cached_metadata {
+			if event.size.is_none() {
+				event.size = metadata.size;
+			}
+		}
+
 		let pending = PendingEvent {
 			timestamp: Instant::now(),
 			inode: self.get_inode(&event.path).await,
 			content_hash: None, // File is being removed, can't hash
+			windows_id: cached_metadata.as_ref().and_then(|m| m.windows_id),
 			event: event.clone(),
 		};
 
@@ -143,12 +265,12 @@ impl MoveDetector {
 
 		vec![event]
 	}
-
 	async fn handle_create_event(&mut self, event: FileSystemEvent) -> Vec<FileSystemEvent> {
 		let pending = PendingEvent {
 			timestamp: Instant::now(),
 			inode: self.get_inode(&event.path).await,
 			content_hash: self.get_content_hash(&event.path).await,
+			windows_id: self.get_windows_id(&event.path).await,
 			event: event.clone(),
 		}; // Check if this creation matches a recent removal
 		if let Some(matching_remove) = self.find_matching_remove(&pending).await {
@@ -186,8 +308,8 @@ impl MoveDetector {
 		let mut best_match: Option<(PendingEvent, f32)> = None;
 
 		debug!(
-			"Finding matching remove for create event: path={:?}, size={:?}, inode={:?}",
-			create_event.event.path, create_event.event.size, create_event.inode
+			"Finding matching remove for create event: path={:?}, size={:?}, inode={:?}, windows_id={:?}",
+			create_event.event.path, create_event.event.size, create_event.inode, create_event.windows_id
 		);
 
 		// Fast path: inode matching (Unix only) - highest confidence
@@ -204,6 +326,22 @@ impl MoveDetector {
 				debug!("No pending remove found for inode {}", inode);
 			}
 		}
+
+		// Fast path: Windows ID matching - high confidence
+		if let Some(windows_id) = create_event.windows_id {
+			debug!("Checking Windows ID {} for matching remove", windows_id);
+			if let Some(pending_remove) = self.pending_removes_by_windows_id.get(&windows_id) {
+				if self.is_within_timeout(&pending_remove.timestamp) {
+					debug!("Found Windows ID match for {}", windows_id);
+					return Some(pending_remove.clone());
+				} else {
+					debug!("Windows ID match {} found but expired", windows_id);
+				}
+			} else {
+				debug!("No pending remove found for Windows ID {}", windows_id);
+			}
+		}
+
 		// Fast path: size-based matching
 		if let Some(size) = create_event.event.size {
 			debug!("Checking size {} for matching removes", size);
@@ -312,6 +450,16 @@ impl MoveDetector {
 				}
 			}
 		}
+
+		// Fast path: Windows ID matching - high confidence
+		if let Some(windows_id) = remove_event.windows_id {
+			if let Some(pending_create) = self.pending_creates_by_windows_id.get(&windows_id) {
+				if self.is_within_timeout(&pending_create.timestamp) {
+					return Some(pending_create.clone());
+				}
+			}
+		}
+
 		// Fast path: size-based matching
 		if let Some(size) = remove_event.event.size {
 			if let Some(creates_with_size) = self.pending_creates_by_size.get(&size) {
@@ -412,7 +560,6 @@ impl MoveDetector {
 			self.config.timeout.as_millis(),
 			time_factor
 		);
-
 		// Inode matching (Unix-like systems) - highest confidence when available
 		if let (Some(inode1), Some(inode2)) = (event1.inode, event2.inode) {
 			if inode1 == inode2 {
@@ -424,9 +571,20 @@ impl MoveDetector {
 			} else {
 				debug!("Different inodes: {} vs {}", inode1, inode2);
 			}
+		} else if let (Some(wid1), Some(wid2)) = (event1.windows_id, event2.windows_id) {
+			// Windows ID matching - high confidence when available
+			if wid1 == wid2 {
+				confidence += self.config.weight_inode_match; // Use same weight as inode
+				debug!(
+					"Same Windows ID (+{}): {}",
+					self.config.weight_inode_match, wid1
+				);
+			} else {
+				debug!("Different Windows IDs: {} vs {}", wid1, wid2);
+			}
 		} else {
 			debug!(
-				"Inodes not available: {:?} vs {:?}",
+				"Inodes/Windows IDs not available: {:?} vs {:?}",
 				event1.inode, event2.inode
 			);
 		}
@@ -446,11 +604,28 @@ impl MoveDetector {
 				event2.content_hash.is_some()
 			);
 		}
-
 		// Name similarity - configurable weight
 		let name_similarity =
 			self.calculate_name_similarity(&event1.event.path, &event2.event.path);
-		let name_contribution = name_similarity * self.config.weight_name_similarity;
+		let mut name_contribution = name_similarity * self.config.weight_name_similarity;
+
+		// Bonus for same filename in different directories (strong indicator of move)
+		if name_similarity == 1.0 {
+			if let (Some(dir1), Some(dir2)) =
+				(event1.event.path.parent(), event2.event.path.parent())
+			{
+				if dir1 != dir2 {
+					// Same filename, different directories - strong move indicator
+					let directory_move_bonus = self.config.weight_name_similarity * 1.5; // 1.5x bonus
+					name_contribution += directory_move_bonus;
+					debug!(
+						"Directory move bonus (+{:.3}): same filename in different directories",
+						directory_move_bonus
+					);
+				}
+			}
+		}
+
 		confidence += name_contribution;
 		debug!(
 			"Name similarity (+{:.3}): similarity={:.3}",
@@ -465,12 +640,23 @@ impl MoveDetector {
 		);
 		final_confidence
 	}
-
 	fn calculate_name_similarity(&self, path1: &Path, path2: &Path) -> f32 {
 		let name1 = path1.file_name().and_then(|n| n.to_str()).unwrap_or("");
 		let name2 = path2.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
 		if name1 == name2 {
+			// Same filename - check if this looks like a move between directories
+			if let (Some(dir1), Some(dir2)) = (path1.parent(), path2.parent()) {
+				if dir1 != dir2 {
+					// Different directories with same filename - likely a move!
+					// Give this a higher confidence boost
+					debug!(
+						"Same filename in different directories: {:?} -> {:?}",
+						dir1, dir2
+					);
+					return 1.0; // Maximum similarity for same filename in different dirs
+				}
+			}
 			return 1.0;
 		}
 
@@ -484,7 +670,6 @@ impl MoveDetector {
 			1.0 - (distance as f32 / max_len as f32)
 		}
 	}
-
 	fn determine_detection_method(
 		&self,
 		event1: &PendingEvent,
@@ -493,6 +678,13 @@ impl MoveDetector {
 		// Priority order for detection methods
 		if event1.inode.is_some() && event2.inode.is_some() && event1.inode == event2.inode {
 			return MoveDetectionMethod::InodeMatching;
+		}
+
+		if event1.windows_id.is_some()
+			&& event2.windows_id.is_some()
+			&& event1.windows_id == event2.windows_id
+		{
+			return MoveDetectionMethod::InodeMatching; // Treat Windows ID same as inode
 		}
 
 		if event1.content_hash.is_some()
@@ -516,8 +708,21 @@ impl MoveDetector {
 	}
 	async fn cleanup_expired_events(&mut self) {
 		let now = Instant::now();
+
+		// Clean up expired pending rename-from event
+		if let Some((_, timestamp)) = &self.pending_rename_from {
+			if now.duration_since(*timestamp) > Duration::from_millis(100) {
+				debug!("Cleaning up expired rename FROM event");
+				self.pending_rename_from = None;
+			}
+		}
+
 		// Clean up inode-based removes
 		self.pending_removes_by_inode
+			.retain(|_, pending| now.duration_since(pending.timestamp) <= self.config.timeout);
+
+		// Clean up Windows ID-based removes
+		self.pending_removes_by_windows_id
 			.retain(|_, pending| now.duration_since(pending.timestamp) <= self.config.timeout);
 
 		// Clean up size-based removes
@@ -533,6 +738,11 @@ impl MoveDetector {
 		// Clean up inode-based creates
 		self.pending_creates_by_inode
 			.retain(|_, pending| now.duration_since(pending.timestamp) <= self.config.timeout);
+
+		// Clean up Windows ID-based creates
+		self.pending_creates_by_windows_id
+			.retain(|_, pending| now.duration_since(pending.timestamp) <= self.config.timeout);
+
 		// Clean up size-based creates
 		for events in self.pending_creates_by_size.values_mut() {
 			events.retain(|pending| now.duration_since(pending.timestamp) <= self.config.timeout);
@@ -543,6 +753,10 @@ impl MoveDetector {
 		// Clean up no-size creates
 		self.pending_creates_no_size
 			.retain(|pending| now.duration_since(pending.timestamp) <= self.config.timeout);
+
+		// Clean up old metadata cache entries
+		self.metadata_cache
+			.retain(|_, metadata| now.duration_since(metadata.last_seen) <= self.config.timeout);
 	}
 	async fn get_inode(&self, path: &Path) -> Option<u64> {
 		#[cfg(unix)]
@@ -555,6 +769,26 @@ impl MoveDetector {
 
 		// On non-unix platforms, this will do nothing.
 		#[cfg(not(unix))]
+		let _ = path; // Prevent unused variable warning
+
+		None
+	}
+
+	async fn get_windows_id(&self, path: &Path) -> Option<u64> {
+		#[cfg(windows)]
+		{
+			use std::os::windows::fs::MetadataExt;
+			if let Ok(metadata) = std::fs::metadata(path) {
+				// Combine creation time and file size for a pseudo-unique identifier
+				let creation_time = metadata.creation_time();
+				let file_size = metadata.len();
+				// Use upper 32 bits for creation time, lower 32 bits for size
+				let windows_id = ((creation_time >> 32) << 32) | (file_size & 0xFFFFFFFF);
+				return Some(windows_id);
+			}
+		}
+
+		#[cfg(not(windows))]
 		let _ = path; // Prevent unused variable warning
 
 		None
@@ -596,8 +830,8 @@ impl MoveDetector {
 	// Helper methods for managing bucketed pending events
 	fn add_pending_remove(&mut self, pending: PendingEvent) {
 		debug!(
-			"Adding pending remove: path={:?}, size={:?}, inode={:?}",
-			pending.event.path, pending.event.size, pending.inode
+			"Adding pending remove: path={:?}, size={:?}, inode={:?}, windows_id={:?}",
+			pending.event.path, pending.event.size, pending.inode, pending.windows_id
 		);
 
 		// Fast path: inode-based indexing (Unix only)
@@ -606,6 +840,15 @@ impl MoveDetector {
 			self.pending_removes_by_inode.insert(inode, pending);
 			return;
 		}
+
+		// Fast path: Windows ID-based indexing
+		if let Some(windows_id) = pending.windows_id {
+			debug!("Storing remove by Windows ID: {}", windows_id);
+			self.pending_removes_by_windows_id
+				.insert(windows_id, pending);
+			return;
+		}
+
 		// Fast path: size-based indexing
 		if let Some(size) = pending.event.size {
 			debug!("Storing remove by size: {}", size);
@@ -618,13 +861,20 @@ impl MoveDetector {
 			self.pending_removes_no_size.push(pending);
 		}
 	}
-
 	fn add_pending_create(&mut self, pending: PendingEvent) {
 		// Fast path: inode-based indexing (Unix only)
 		if let Some(inode) = pending.inode {
 			self.pending_creates_by_inode.insert(inode, pending);
 			return;
 		}
+
+		// Fast path: Windows ID-based indexing
+		if let Some(windows_id) = pending.windows_id {
+			self.pending_creates_by_windows_id
+				.insert(windows_id, pending);
+			return;
+		}
+
 		// Fast path: size-based indexing
 		if let Some(size) = pending.event.size {
 			self.pending_creates_by_size
@@ -635,10 +885,13 @@ impl MoveDetector {
 			self.pending_creates_no_size.push(pending);
 		}
 	}
-
 	fn remove_pending_create_by_id(&mut self, id: uuid::Uuid) {
 		// Remove from inode-based storage
 		self.pending_creates_by_inode
+			.retain(|_, p| p.event.id != id);
+
+		// Remove from Windows ID-based storage
+		self.pending_creates_by_windows_id
 			.retain(|_, p| p.event.id != id);
 
 		// Remove from size-based storage
@@ -651,10 +904,13 @@ impl MoveDetector {
 		// Remove from no-size storage
 		self.pending_creates_no_size.retain(|p| p.event.id != id);
 	}
-
 	fn remove_pending_remove_by_id(&mut self, id: uuid::Uuid) {
 		// Remove from inode-based storage
 		self.pending_removes_by_inode
+			.retain(|_, p| p.event.id != id);
+
+		// Remove from Windows ID-based storage
+		self.pending_removes_by_windows_id
 			.retain(|_, p| p.event.id != id);
 
 		// Remove from size-based storage
@@ -667,19 +923,20 @@ impl MoveDetector {
 		// Remove from no-size storage
 		self.pending_removes_no_size.retain(|p| p.event.id != id);
 	}
-
 	fn count_pending_removes(&self) -> usize {
 		let inode_count = self.pending_removes_by_inode.len();
+		let windows_id_count = self.pending_removes_by_windows_id.len();
 		let size_count: usize = self.pending_removes_by_size.values().map(|v| v.len()).sum();
 		let no_size_count = self.pending_removes_no_size.len();
-		inode_count + size_count + no_size_count
+		inode_count + windows_id_count + size_count + no_size_count
 	}
 
 	fn count_pending_creates(&self) -> usize {
 		let inode_count = self.pending_creates_by_inode.len();
+		let windows_id_count = self.pending_creates_by_windows_id.len();
 		let size_count: usize = self.pending_creates_by_size.values().map(|v| v.len()).sum();
 		let no_size_count = self.pending_creates_no_size.len();
-		inode_count + size_count + no_size_count
+		inode_count + windows_id_count + size_count + no_size_count
 	}
 }
 

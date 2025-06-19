@@ -102,8 +102,7 @@ async fn run_watcher(
 			_ = &mut stop_rx => {
 				info!("Watcher shutdown requested, stopping event processing.");
 				break;
-			}
-			Some(event) = raw_event_rx.recv() => {
+			}			Some(event) = raw_event_rx.recv() => {
 				for path in event.paths {
 					let fs_event = convert_notify_event(&event.kind, path);
 					let processed_events = move_detector.process_event(fs_event).await;

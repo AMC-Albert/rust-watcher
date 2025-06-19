@@ -4,18 +4,38 @@ mod tests {
 	use std::path::PathBuf;
 	use std::time::Duration;
 	use tempfile::TempDir;
-
 	#[test]
 	fn test_move_detector_config_defaults() {
 		let config = MoveDetectorConfig::default();
 
 		assert_eq!(config.timeout, Duration::from_millis(1000));
-		assert_eq!(config.confidence_threshold, 0.7);
-		assert_eq!(config.weight_size_match, 0.2);
-		assert_eq!(config.weight_time_factor, 0.15);
-		assert_eq!(config.weight_inode_match, 0.4);
+		// Platform-specific defaults
+		#[cfg(windows)]
+		{
+			assert_eq!(config.confidence_threshold, 0.5);
+			assert_eq!(config.weight_size_match, 0.25);
+			assert_eq!(config.weight_time_factor, 0.2);
+			assert_eq!(config.weight_inode_match, 0.3);
+			assert_eq!(config.weight_name_similarity, 0.2);
+		}
+		#[cfg(unix)]
+		{
+			assert_eq!(config.confidence_threshold, 0.7);
+			assert_eq!(config.weight_size_match, 0.2);
+			assert_eq!(config.weight_time_factor, 0.15);
+			assert_eq!(config.weight_inode_match, 0.4);
+			assert_eq!(config.weight_name_similarity, 0.1);
+		}
+		#[cfg(not(any(unix, windows)))]
+		{
+			assert_eq!(config.confidence_threshold, 0.5);
+			assert_eq!(config.weight_size_match, 0.25);
+			assert_eq!(config.weight_time_factor, 0.2);
+			assert_eq!(config.weight_inode_match, 0.3);
+			assert_eq!(config.weight_name_similarity, 0.2);
+		}
+
 		assert_eq!(config.weight_content_hash, 0.35);
-		assert_eq!(config.weight_name_similarity, 0.1);
 		assert_eq!(config.max_pending_events, 1000);
 		assert_eq!(config.content_hash_max_file_size, 1_048_576);
 	}
@@ -84,7 +104,6 @@ mod tests {
 		assert_eq!(stored_config.timeout, Duration::from_millis(1500));
 		assert_eq!(stored_config.confidence_threshold, 0.75);
 	}
-
 	#[test]
 	fn test_move_detector_config_validation_ranges() {
 		// Test confidence threshold bounds
@@ -100,20 +119,27 @@ mod tests {
 		};
 		assert_eq!(config_high.confidence_threshold, 1.0);
 
-		// Test weights are reasonable
+		// Test weights are reasonable and configured for the platform
 		let config = MoveDetectorConfig::default();
 		let total_weight = config.weight_size_match
 			+ config.weight_time_factor
 			+ config.weight_inode_match
 			+ config.weight_content_hash
 			+ config.weight_name_similarity;
-
-		// Weights should sum to approximately 1.0 for proper scoring
+		// Weights should be reasonable (between 1.0 and 1.5 depending on platform)
+		// Different platforms have different optimal weight distributions
 		assert!(
-			(total_weight - 1.2).abs() < 0.1,
-			"Total weight: {}",
+			(1.0..=1.5).contains(&total_weight),
+			"Total weight should be between 1.0 and 1.5, got: {}",
 			total_weight
 		);
+
+		// All individual weights should be positive and reasonable
+		assert!(config.weight_size_match > 0.0 && config.weight_size_match <= 0.5);
+		assert!(config.weight_time_factor > 0.0 && config.weight_time_factor <= 0.5);
+		assert!(config.weight_inode_match > 0.0 && config.weight_inode_match <= 0.5);
+		assert!(config.weight_content_hash > 0.0 && config.weight_content_hash <= 0.5);
+		assert!(config.weight_name_similarity > 0.0 && config.weight_name_similarity <= 0.5);
 	}
 
 	#[test]
