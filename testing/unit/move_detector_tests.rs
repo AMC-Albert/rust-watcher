@@ -353,4 +353,170 @@ mod tests {
 		// Just ensure we don't crash - check the actual confidence in output
 		assert_eq!(result.len(), 1);
 	}
+
+	#[tokio::test]
+	async fn test_path_type_inference_heuristics() {
+		let mut detector = MoveDetector::new(create_test_config());
+
+		// Test 1: Path with extension should be inferred as file
+		let file_path = PathBuf::from("/test/document.txt");
+		let result = detector.infer_path_type(&file_path);
+		assert_eq!(
+			result,
+			Some(false),
+			"File with extension should be inferred as file"
+		);
+
+		// Test 2: Path without extension should return None (uncertain)
+		let no_ext_path = PathBuf::from("/test/document");
+		let result = detector.infer_path_type(&no_ext_path);
+		assert_eq!(
+			result, None,
+			"Path without extension should return None when no context"
+		);
+
+		// Test 3: Add a create event for a child path, then check parent inference
+		let parent_path = PathBuf::from("/test/folder");
+		let child_path = PathBuf::from("/test/folder/child.txt");
+
+		let child_event = FileSystemEvent::new(EventType::Create, child_path, false, Some(512));
+
+		// Process the child create event to populate detector state
+		let _result = detector.process_event(child_event).await;
+
+		// Now check if we can infer the parent is a directory
+		let result = detector.infer_path_type(&parent_path);
+		assert_eq!(
+			result,
+			Some(true),
+			"Path with children should be inferred as directory"
+		);
+
+		// Test 4: Test metadata cache usage
+		let cached_file_path = PathBuf::from("/test/cached_file.txt");
+		let cached_event = FileSystemEvent::new(
+			EventType::Create,
+			cached_file_path.clone(),
+			false,
+			Some(1024),
+		);
+
+		// Process event to cache metadata
+		let _result = detector.process_event(cached_event).await;
+
+		// Simulate file removal and check inference
+		let result = detector.infer_path_type(&cached_file_path);
+		// Should infer as file because it had size in cache
+		assert_eq!(
+			result,
+			Some(false),
+			"Cached file with size should be inferred as file"
+		);
+	}
+
+	#[tokio::test]
+	async fn test_path_type_heuristics_detailed() {
+		let mut detector = MoveDetector::new(create_test_config());
+
+		// Test detailed heuristics for a directory
+		let dir_path = PathBuf::from("/test/my_directory");
+		let child1_path = PathBuf::from("/test/my_directory/file1.txt");
+		let child2_path = PathBuf::from("/test/my_directory/subdir");
+
+		// Add children to pending creates
+		let child1_event = FileSystemEvent::new(EventType::Create, child1_path, false, Some(100));
+		let child2_event = FileSystemEvent::new(EventType::Create, child2_path, true, None);
+
+		let _result1 = detector.process_event(child1_event).await;
+		let _result2 = detector.process_event(child2_event).await;
+
+		// Get detailed heuristics
+		let heuristics = detector.get_path_type_heuristics(&dir_path);
+
+		assert!(
+			heuristics.has_children_in_pending,
+			"Should detect children in pending"
+		);
+		assert!(
+			heuristics.confidence > 0.5,
+			"Should have high confidence for directory"
+		);
+		assert_eq!(
+			heuristics.is_likely_directory(),
+			Some(true),
+			"Should be classified as directory"
+		);
+
+		// Test for a file with extension
+		let file_path = PathBuf::from("/test/document.pdf");
+		let heuristics = detector.get_path_type_heuristics(&file_path);
+
+		assert!(heuristics.has_extension, "Should detect file extension");
+		assert_eq!(
+			heuristics.extension,
+			Some("pdf".to_string()),
+			"Should capture extension"
+		);
+		assert_eq!(
+			heuristics.is_likely_directory(),
+			Some(false),
+			"Should be classified as file"
+		);
+	}
+
+	#[tokio::test]
+	async fn test_improved_remove_event_handling() {
+		let temp_dir = TempDir::new().unwrap();
+		let mut detector = MoveDetector::new(create_test_config());
+
+		// Create a file and then simulate its removal
+		let file_path = temp_dir.path().join("test_file.txt");
+		fs::write(&file_path, "test content").await.unwrap();
+
+		// First create an event for this file to cache metadata
+		let create_event = FileSystemEvent::new(
+			EventType::Create,
+			file_path.clone(),
+			false,
+			Some(12), // "test content" length
+		);
+
+		let _result = detector.process_event(create_event).await;
+
+		// Now simulate a remove event (file no longer exists)
+		fs::remove_file(&file_path).await.unwrap();
+
+		// The improved heuristics should correctly identify this as a file
+		let inferred_type = detector.infer_path_type(&file_path);
+		assert_eq!(
+			inferred_type,
+			Some(false),
+			"Removed file should be correctly identified as file using cached metadata"
+		);
+
+		// Test directory case
+		let dir_path = temp_dir.path().join("test_dir");
+		fs::create_dir(&dir_path).await.unwrap();
+
+		// Create a child file to establish the directory relationship
+		let child_path = dir_path.join("child.txt");
+		fs::write(&child_path, "child content").await.unwrap();
+
+		let child_create_event =
+			FileSystemEvent::new(EventType::Create, child_path.clone(), false, Some(13));
+
+		let _result = detector.process_event(child_create_event).await;
+
+		// Remove the directory
+		fs::remove_file(&child_path).await.unwrap();
+		fs::remove_dir(&dir_path).await.unwrap();
+
+		// Should infer directory based on having had children
+		let inferred_type = detector.infer_path_type(&dir_path);
+		assert_eq!(
+			inferred_type,
+			Some(true),
+			"Removed directory should be correctly identified based on cached children"
+		);
+	}
 }

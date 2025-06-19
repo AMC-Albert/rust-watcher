@@ -104,7 +104,7 @@ async fn run_watcher(
 				break;
 			}			Some(event) = raw_event_rx.recv() => {
 				for path in event.paths {
-					let fs_event = convert_notify_event(&event.kind, path);
+					let fs_event = convert_notify_event(&event.kind, path, &move_detector);
 					let processed_events = move_detector.process_event(fs_event).await;
 					for processed in processed_events {
 						if event_tx.send(processed).await.is_err() {
@@ -123,7 +123,11 @@ async fn run_watcher(
 	info!("Watcher event loop finished. Channel will be closed.");
 }
 
-fn convert_notify_event(kind: &EventKind, path: PathBuf) -> FileSystemEvent {
+fn convert_notify_event(
+	kind: &EventKind,
+	path: PathBuf,
+	move_detector: &MoveDetector,
+) -> FileSystemEvent {
 	let event_type = EventType::from(*kind);
 
 	let (is_directory, size) = if path.exists() {
@@ -132,7 +136,17 @@ fn convert_notify_event(kind: &EventKind, path: PathBuf) -> FileSystemEvent {
 		let file_size = metadata.as_ref().filter(|m| m.is_file()).map(|m| m.len());
 		(is_dir, file_size)
 	} else {
-		let is_dir = path.extension().is_none();
+		// File/directory no longer exists - use improved heuristics
+		let is_dir = match move_detector.infer_path_type(&path) {
+			Some(is_directory) => is_directory,
+			None => {
+				// Fallback to original heuristic with improved logging
+				let fallback_is_dir = path.extension().is_none();
+				warn!("Could not determine path type for removed path: {:?}, falling back to extension-based heuristic: is_directory={}", 
+					path, fallback_is_dir);
+				fallback_is_dir
+			}
+		};
 		(is_dir, None)
 	};
 

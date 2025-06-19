@@ -4,35 +4,37 @@ This document outlines the remaining tasks to further enhance the rust-watcher p
 
 ## 🔧 **Code Quality Improvements** (Medium Priority)
 
-### Task 3.2: Improve Remove Event Heuristics ⭐
+### Task 3.2: Improve Remove Event Heuristics ⭐ **COMPLETED**
 **Priority**: Medium
 **Estimated Time**: 2-3 hours
 **Description**: Replace fragile file extension heuristics with smarter detection.
 
 **Current State**:
-- Guessing directory vs file based on file extension
-- Unreliable for extensionless files
-- No context from previous events
+- [x] Enhanced with intelligent path type inference
+- [x] Uses cached metadata from recent events
+- [x] Analyzes parent-child relationships in pending events
 
 **Target State**:
-- Check against recent create events for context
-- Better heuristics for directory detection
-- Fallback strategies when uncertain
+- [x] Check against recent create events for context
+- [x] Better heuristics for directory detection
+- [x] Fallback strategies when uncertain
 
-**Files to Modify**:
-- [ ] `src/watcher.rs` - Update `convert_notify_event()` method
-- [ ] `src/move_detector.rs` - Add path type inference
+**Files Modified**:
+- [x] `src/watcher.rs` - Updated `convert_notify_event()` method
+- [x] `src/move_detector.rs` - Added path type inference methods
 
 **Implementation Details**:
-- [ ] Check if path exists in `pending_creates`
-- [ ] Use parent directory structure analysis
-- [ ] Maintain recently seen paths cache
-- [ ] Improved logging for uncertain cases
+- [x] Check if path exists in cached metadata
+- [x] Use parent directory structure analysis via pending events
+- [x] Maintain recently seen paths cache
+- [x] Improved logging for uncertain cases
+- [x] Added `PathTypeHeuristics` struct for detailed analysis
+- [x] Added `infer_path_type()` and `get_path_type_heuristics()` methods
 
 **Acceptance Criteria**:
-- [ ] Reduced misclassification of files/directories
-- [ ] Better handling of extensionless files
-- [ ] Unit tests for various path scenarios
+- [x] Reduced misclassification of files/directories
+- [x] Better handling of extensionless files
+- [x] Unit tests for various path scenarios
 
 ---
 

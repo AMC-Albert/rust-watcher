@@ -96,7 +96,6 @@ pub struct MoveDetector {
 
 	// Rename event pairing (Windows sends Name(From) then Name(To))
 	pending_rename_from: Option<(FileSystemEvent, Instant)>,
-
 	config: MoveDetectorConfig,
 }
 
@@ -937,6 +936,144 @@ impl MoveDetector {
 		let size_count: usize = self.pending_creates_by_size.values().map(|v| v.len()).sum();
 		let no_size_count = self.pending_creates_no_size.len();
 		inode_count + windows_id_count + size_count + no_size_count
+	}
+
+	/// Infer whether a removed path was likely a directory based on available context
+	pub fn infer_path_type(&self, path: &Path) -> Option<bool> {
+		// First check if we have cached metadata for this exact path
+		if let Some(metadata) = self.metadata_cache.get(path) {
+			// If we have cached info and no size, it was likely a directory
+			return Some(metadata.size.is_none());
+		}
+		// Check if any pending creates are under this path (indicating it's a directory)
+		let has_children_in_pending = self
+			.pending_creates_by_size
+			.values()
+			.flatten()
+			.chain(self.pending_creates_no_size.iter())
+			.any(|pending| pending.event.path.parent() == Some(path));
+
+		if has_children_in_pending {
+			return Some(true); // Has children, likely a directory
+		}
+
+		// Check recently cached paths for children
+		let has_children_in_cache = self
+			.metadata_cache
+			.keys()
+			.any(|cached_path| cached_path.parent() == Some(path));
+
+		if has_children_in_cache {
+			return Some(true); // Has children, likely a directory
+		}
+
+		// Check file extension as fallback (original logic)
+		if path.extension().is_none() {
+			// No extension could indicate directory, but not reliable
+			None // Return None to indicate uncertainty
+		} else {
+			Some(false) // Has extension, likely a file
+		}
+	}
+
+	/// Get better heuristics for directory detection on removed paths
+	pub fn get_path_type_heuristics(&self, path: &Path) -> PathTypeHeuristics {
+		let mut heuristics = PathTypeHeuristics::new();
+
+		// Check cached metadata
+		if let Some(metadata) = self.metadata_cache.get(path) {
+			heuristics.has_cached_metadata = true;
+			heuristics.cached_had_size = metadata.size.is_some();
+			heuristics.confidence += 0.8; // High confidence from cache
+		}
+		// Check for child paths in pending events
+		heuristics.has_children_in_pending = self
+			.pending_creates_by_size
+			.values()
+			.flatten()
+			.chain(self.pending_creates_no_size.iter())
+			.any(|pending| pending.event.path.parent() == Some(path));
+
+		if heuristics.has_children_in_pending {
+			heuristics.confidence += 0.7;
+		}
+
+		// Check for child paths in metadata cache
+		heuristics.has_children_in_cache = self
+			.metadata_cache
+			.keys()
+			.any(|cached_path| cached_path.parent() == Some(path));
+
+		if heuristics.has_children_in_cache {
+			heuristics.confidence += 0.6;
+		}
+
+		// File extension analysis
+		if let Some(ext) = path.extension() {
+			heuristics.has_extension = true;
+			heuristics.extension = Some(ext.to_string_lossy().to_string());
+			heuristics.confidence += 0.3; // Lower confidence, but still useful
+		}
+
+		// Path depth analysis (deeper paths less likely to be directories)
+		let depth = path.components().count();
+		if depth > 5 {
+			heuristics.confidence += 0.1;
+		}
+
+		heuristics
+	}
+}
+
+/// Heuristics for determining if a removed path was a file or directory
+#[derive(Debug, Clone)]
+pub struct PathTypeHeuristics {
+	pub has_cached_metadata: bool,
+	pub cached_had_size: bool,
+	pub has_children_in_pending: bool,
+	pub has_children_in_cache: bool,
+	pub has_extension: bool,
+	pub extension: Option<String>,
+	pub confidence: f32,
+}
+
+impl PathTypeHeuristics {
+	fn new() -> Self {
+		Self {
+			has_cached_metadata: false,
+			cached_had_size: false,
+			has_children_in_pending: false,
+			has_children_in_cache: false,
+			has_extension: false,
+			extension: None,
+			confidence: 0.0,
+		}
+	}
+
+	/// Determine if the path was likely a directory based on heuristics
+	pub fn is_likely_directory(&self) -> Option<bool> {
+		if self.confidence < 0.3 {
+			return None; // Not enough confidence
+		}
+
+		// Strong indicators for directory
+		if self.has_children_in_pending || self.has_children_in_cache {
+			return Some(true);
+		}
+
+		// Strong indicators for file
+		if self.has_cached_metadata && self.cached_had_size {
+			return Some(false);
+		}
+
+		// Weak indicators
+		if self.has_extension {
+			Some(false)
+		} else if self.confidence > 0.5 {
+			Some(true) // No extension and decent confidence = directory
+		} else {
+			None
+		}
 	}
 }
 
