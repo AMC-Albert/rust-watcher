@@ -60,13 +60,23 @@ pub enum MoveDetectionMethod {
 	/// Detected by filesystem events (most reliable)
 	FileSystemEvent,
 	/// Detected by inode matching (Unix-like systems)
+	Inode,
+	/// Detected by inode matching (Unix-like systems) - backwards compatibility alias
 	InodeMatching,
+	/// Detected by Windows-specific file identifier
+	WindowsId,
 	/// Detected by content hash comparison
 	ContentHash,
 	/// Detected by name pattern and timing
 	NameAndTiming,
+	/// Detected by size and timing
+	SizeAndTime,
 	/// Detected by metadata comparison
 	MetadataMatching,
+	/// Detected by rename events
+	Rename,
+	/// Detected by heuristics when other methods uncertain
+	Heuristics,
 }
 
 impl FileSystemEvent {

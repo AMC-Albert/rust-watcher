@@ -1,6 +1,6 @@
 use crate::error::{Result, WatcherError};
 use crate::events::{EventType, FileSystemEvent};
-use crate::move_detector::{MoveDetector, MoveDetectorConfig};
+use crate::move_detection::{MoveDetector, MoveDetectorConfig};
 use log::{error, info, warn};
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher as NotifyWatcher};
 use std::path::PathBuf;

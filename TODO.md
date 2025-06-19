@@ -40,35 +40,32 @@ This document outlines the remaining tasks to further enhance the rust-watcher p
 
 ## 📊 **Enhanced Error Handling and Robustness** (Medium Priority)
 
-### Task 4.1: Implement Resource Cleanup and Limits ⭐⭐
-**Priority**: High
+### Task 4.1: Implement Resource Cleanup and Limits [x]
+**Priority**: High  
+**Status**: ✅ **COMPLETED**
 **Estimated Time**: 2-3 hours
 **Description**: Add comprehensive resource management to prevent memory leaks.
 
-**Current State**:
-- Basic timeout cleanup exists
-- No enforcement of memory limits
-- Potential for runaway memory usage
-
-**Target State**:
-- Configurable limits on pending events
-- Graceful degradation under pressure
-- Comprehensive cleanup strategies
-
-**Files to Modify**:
-- [x] `src/move_detector.rs` - Enhanced cleanup logic
-- [ ] `src/watcher.rs` - Resource monitoring
-
 **Implementation Details**:
 - [x] Configurable `max_pending_events` per type
-- [x] LRU eviction when limits exceeded
+- [x] LRU eviction when limits exceeded  
 - [x] Memory usage monitoring and reporting
 - [x] Graceful degradation strategies
+- [x] **MAJOR REFACTOR**: Reorganized move detection into modular architecture
+  - [x] `src/move_detection/config.rs` - Configuration management
+  - [x] `src/move_detection/events.rs` - Event storage and management
+  - [x] `src/move_detection/metadata.rs` - File metadata caching
+  - [x] `src/move_detection/heuristics.rs` - Path inference and similarity
+  - [x] `src/move_detection/matching.rs` - Move detection algorithms
+  - [x] `src/move_detection/monitoring.rs` - Resource monitoring
+  - [x] `src/move_detection/detector.rs` - Main orchestration
+- [x] Resource monitoring structures (`ResourceStats`, `PendingEventsSummary`)
 
 **Acceptance Criteria**:
 - [x] Memory usage bounded under stress
-- [x] No memory leaks in long-running tests
+- [x] No memory leaks in long-running tests  
 - [x] Graceful handling of resource exhaustion
+- [x] **BONUS**: Improved code organization and maintainability (1099 → ~280 lines per module)
 
 ---
 
