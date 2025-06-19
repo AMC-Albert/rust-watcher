@@ -326,11 +326,11 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
 	if len2 == 0 {
 		return len1;
 	}
-
 	let mut matrix = vec![vec![0; len2 + 1]; len1 + 1];
 
-	for i in 1..=len1 {
-		matrix[i][0] = i;
+	// Initialize first row and column
+	for (i, row) in matrix.iter_mut().enumerate() {
+		row[0] = i;
 	}
 	for j in 1..=len2 {
 		matrix[0][j] = j;

@@ -20,6 +20,7 @@ thiserror = "1.0"
 tempfile = "3.0"
 tokio-test = "0.4"
 criterion = "0.5"
+serial_test = "3.0"
 
 # Separate test profiles for different types of tests
 [[bin]]

@@ -113,9 +113,8 @@ impl FileSystemWatcher {
 			error!("Notify processing task panicked: {}", e);
 		});
 	}
-
 	fn convert_notify_event(kind: &EventKind, path: PathBuf) -> FileSystemEvent {
-		let event_type = EventType::from(kind.clone());
+		let event_type = EventType::from(*kind);
 
 		// Get metadata if the path still exists
 		let (is_directory, size) = if path.exists() {
