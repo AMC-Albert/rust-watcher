@@ -1,0 +1,30 @@
+# Rust formatting configuration for stable channel
+# See https://rust-lang.github.io/rustfmt/ for all options
+
+# Basic formatting
+edition = "2021"
+max_width = 100
+hard_tabs = true
+tab_spaces = 4
+
+# Stable import formatting options
+reorder_imports = true
+
+# Code style (stable options only)
+newline_style = "Windows"  # Using Windows since we're on Windows
+remove_nested_parens = true
+use_field_init_shorthand = true
+use_try_shorthand = true
+
+# Function formatting
+fn_params_layout = "Tall"
+
+# Array and slice formatting
+array_width = 60
+
+# Chain formatting
+chain_width = 60
+single_line_if_else_max_width = 50
+
+# Match formatting
+match_block_trailing_comma = false

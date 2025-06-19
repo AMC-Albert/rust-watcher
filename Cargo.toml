@@ -1,6 +1,42 @@
 [package]
 name = "rust-watcher"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
+notify = "6.1"
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+clap = { version = "4.0", features = ["derive"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+anyhow = "1.0"
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3.0"
+tokio-test = "0.4"
+criterion = "0.5"
+
+# Separate test profiles for different types of tests
+[[bin]]
+name = "watcher"
+path = "src/main.rs"
+
+[[example]]
+name = "advanced_monitor"
+path = "examples/advanced_monitor.rs"
+
+# Unit and integration tests
+[[test]]
+name = "unit_tests"
+path = "testing/unit/mod.rs"
+
+# Benchmark tests
+[[bench]]
+name = "performance"
+path = "testing/benchmarks/performance.rs"
+harness = false
