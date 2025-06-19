@@ -54,19 +54,19 @@ This document outlines the remaining tasks to further enhance the rust-watcher p
 - Comprehensive cleanup strategies
 
 **Files to Modify**:
-- [ ] `src/move_detector.rs` - Enhanced cleanup logic
+- [x] `src/move_detector.rs` - Enhanced cleanup logic
 - [ ] `src/watcher.rs` - Resource monitoring
 
 **Implementation Details**:
-- [ ] Configurable `max_pending_events` per type
-- [ ] LRU eviction when limits exceeded
-- [ ] Memory usage monitoring and reporting
-- [ ] Graceful degradation strategies
+- [x] Configurable `max_pending_events` per type
+- [x] LRU eviction when limits exceeded
+- [x] Memory usage monitoring and reporting
+- [x] Graceful degradation strategies
 
 **Acceptance Criteria**:
-- [ ] Memory usage bounded under stress
-- [ ] No memory leaks in long-running tests
-- [ ] Graceful handling of resource exhaustion
+- [x] Memory usage bounded under stress
+- [x] No memory leaks in long-running tests
+- [x] Graceful handling of resource exhaustion
 
 ---
 
