@@ -2,5 +2,8 @@
 // when compiling many async tests in a single file
 
 mod basic_tests;
+mod config_tests;
 mod debug_tests;
+mod error_handling_tests;
+mod move_detector_tests;
 mod stress_tests;
