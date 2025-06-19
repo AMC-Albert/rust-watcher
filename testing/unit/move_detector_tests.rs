@@ -8,7 +8,7 @@ mod tests {
 	fn create_test_config() -> MoveDetectorConfig {
 		MoveDetectorConfig {
 			timeout: Duration::from_millis(500),
-			confidence_threshold: 0.1, // Very low threshold since current algorithm averages factors
+			confidence_threshold: 0.4, // Reasonable threshold for weighted calculation
 			max_pending_events: 10,
 			..Default::default()
 		}
@@ -243,9 +243,9 @@ mod tests {
 		// Process create event
 		let result = detector.process_event(create_event).await;
 		assert_eq!(result.len(), 1);
-		assert_eq!(result[0].event_type, EventType::Move);		// Verify the move event contains correct information
+		assert_eq!(result[0].event_type, EventType::Move); // Verify the move event contains correct information
 		if let Some(move_data) = &result[0].move_data {
-			assert!(move_data.confidence > 0.2); // Lower threshold since confidence calculation averages factors
+			assert!(move_data.confidence > 0.5); // Higher threshold with weighted calculation
 		}
 	}
 
@@ -308,7 +308,8 @@ mod tests {
 		let result = detector.process_event(create_event).await;
 		assert_eq!(result.len(), 1);
 		assert_eq!(result[0].event_type, EventType::Move);
-	}	#[tokio::test]
+	}
+	#[tokio::test]
 	async fn test_move_detector_debug_confidence() {
 		// Initialize tracing subscriber for this test
 		let _ = tracing_subscriber::fmt()
@@ -341,7 +342,10 @@ mod tests {
 
 		// Check what we actually got
 		if result[0].move_data.is_some() {
-			println!("MOVE DETECTED! Confidence: {:?}", result[0].move_data.as_ref().unwrap().confidence);
+			println!(
+				"MOVE DETECTED! Confidence: {:?}",
+				result[0].move_data.as_ref().unwrap().confidence
+			);
 		} else {
 			println!("NO MOVE DETECTED - got {:?} event", result[0].event_type);
 		}

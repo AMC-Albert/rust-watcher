@@ -181,7 +181,8 @@ impl MoveDetector {
 		}
 
 		vec![event]
-	}	async fn find_matching_remove(&self, create_event: &PendingEvent) -> Option<PendingEvent> {
+	}
+	async fn find_matching_remove(&self, create_event: &PendingEvent) -> Option<PendingEvent> {
 		let mut best_match: Option<(PendingEvent, f32)> = None;
 
 		debug!(
@@ -207,7 +208,12 @@ impl MoveDetector {
 		if let Some(size) = create_event.event.size {
 			debug!("Checking size {} for matching removes", size);
 			if let Some(removes_with_size) = self.pending_removes_by_size.get(&size) {
-				debug!("Found {} pending removes with size {}", removes_with_size.len(), size);				for pending_remove in removes_with_size {
+				debug!(
+					"Found {} pending removes with size {}",
+					removes_with_size.len(),
+					size
+				);
+				for pending_remove in removes_with_size {
 					if self.is_within_timeout(&pending_remove.timestamp) {
 						let confidence = self.calculate_confidence(pending_remove, create_event);
 						debug!(
@@ -229,7 +235,10 @@ impl MoveDetector {
 								}
 							}
 						} else {
-							debug!("Confidence {} too low (< {})", confidence, self.config.confidence_threshold);
+							debug!(
+								"Confidence {} too low (< {})",
+								confidence, self.config.confidence_threshold
+							);
 						}
 					} else {
 						debug!("Remove event for {:?} expired", pending_remove.event.path);
@@ -238,8 +247,11 @@ impl MoveDetector {
 			} else {
 				debug!("No pending removes found for size {}", size);
 			}
-		}		// Fallback: check events without size
-		debug!("Checking {} events without size", self.pending_removes_no_size.len());
+		} // Fallback: check events without size
+		debug!(
+			"Checking {} events without size",
+			self.pending_removes_no_size.len()
+		);
 		for pending_remove in &self.pending_removes_no_size {
 			if self.is_within_timeout(&pending_remove.timestamp) {
 				let confidence = self.calculate_confidence(pending_remove, create_event);
@@ -262,7 +274,10 @@ impl MoveDetector {
 						}
 					}
 				} else {
-					debug!("Confidence {} too low (< {})", confidence, self.config.confidence_threshold);
+					debug!(
+						"Confidence {} too low (< {})",
+						confidence, self.config.confidence_threshold
+					);
 				}
 			} else {
 				debug!("Remove event for {:?} expired", pending_remove.event.path);
@@ -271,10 +286,16 @@ impl MoveDetector {
 
 		match &best_match {
 			Some((event, confidence)) => {
-				debug!("Best match found: {:?} with confidence {}", event.event.path, confidence);
+				debug!(
+					"Best match found: {:?} with confidence {}",
+					event.event.path, confidence
+				);
 			}
 			None => {
-				debug!("No matching remove found for create {:?}", create_event.event.path);
+				debug!(
+					"No matching remove found for create {:?}",
+					create_event.event.path
+				);
 			}
 		}
 
@@ -335,37 +356,46 @@ impl MoveDetector {
 	}
 	fn calculate_confidence(&self, event1: &PendingEvent, event2: &PendingEvent) -> f32 {
 		let mut confidence = 0.0;
-		let mut factors = 0;
 
 		debug!(
 			"Calculating confidence between {:?} and {:?}",
 			event1.event.path, event2.event.path
 		);
 
-		// Same file type (directory vs file)
+		// Same file type (directory vs file) - small weight since it's basic
 		if event1.event.is_directory == event2.event.is_directory {
-			confidence += 0.2;
-			factors += 1;
-			debug!("Same file type (+0.2): directories={}", event1.event.is_directory);
+			let type_contribution = self.config.weight_size_match * 0.5; // Half of size weight
+			confidence += type_contribution;
+			debug!(
+				"Same file type (+{}): directories={}",
+				type_contribution, event1.event.is_directory
+			);
 		} else {
-			debug!("Different file types: {} vs {}", event1.event.is_directory, event2.event.is_directory);
+			debug!(
+				"Different file types: {} vs {}",
+				event1.event.is_directory, event2.event.is_directory
+			);
 		}
 
-		// Same size (if available)
+		// Same size (if available) - configurable weight
 		if let (Some(size1), Some(size2)) = (event1.event.size, event2.event.size) {
 			if size1 == size2 {
-				confidence += 0.3;
-				debug!("Same size (+0.3): {}", size1);
+				confidence += self.config.weight_size_match;
+				debug!("Same size (+{}): {}", self.config.weight_size_match, size1);
 			} else {
-				confidence -= 0.1; // Penalize different sizes
-				debug!("Different sizes (-0.1): {} vs {}", size1, size2);
+				// Penalize different sizes but less than the positive contribution
+				let penalty = self.config.weight_size_match * 0.3;
+				confidence -= penalty;
+				debug!("Different sizes (-{}): {} vs {}", penalty, size1, size2);
 			}
-			factors += 1;
 		} else {
-			debug!("Size not available for one or both events: {:?} vs {:?}", event1.event.size, event2.event.size);
+			debug!(
+				"Size not available for one or both events: {:?} vs {:?}",
+				event1.event.size, event2.event.size
+			);
 		}
 
-		// Timing factor (closer in time = higher confidence)
+		// Timing factor (closer in time = higher confidence) - configurable weight
 		let time_diff = event1
 			.timestamp
 			.duration_since(event2.timestamp)
@@ -373,52 +403,66 @@ impl MoveDetector {
 		let time_factor = (self.config.timeout.as_millis()
 			- time_diff.min(self.config.timeout.as_millis())) as f32
 			/ self.config.timeout.as_millis() as f32;
-		confidence += time_factor * 0.3;
-		factors += 1;
-		debug!("Time factor (+{}): time_diff={}ms, timeout={}ms", 
-			time_factor * 0.3, time_diff, self.config.timeout.as_millis());
+		let time_contribution = time_factor * self.config.weight_time_factor;
+		confidence += time_contribution;
+		debug!(
+			"Time factor (+{}): time_diff={}ms, timeout={}ms, factor={:.3}",
+			time_contribution,
+			time_diff,
+			self.config.timeout.as_millis(),
+			time_factor
+		);
 
-		// Inode matching (Unix-like systems)
+		// Inode matching (Unix-like systems) - highest confidence when available
 		if let (Some(inode1), Some(inode2)) = (event1.inode, event2.inode) {
 			if inode1 == inode2 {
-				confidence += 0.4; // High confidence for inode match
-				debug!("Same inode (+0.4): {}", inode1);
+				confidence += self.config.weight_inode_match;
+				debug!(
+					"Same inode (+{}): {}",
+					self.config.weight_inode_match, inode1
+				);
 			} else {
 				debug!("Different inodes: {} vs {}", inode1, inode2);
 			}
-			factors += 1;
 		} else {
-			debug!("Inodes not available: {:?} vs {:?}", event1.inode, event2.inode);
+			debug!(
+				"Inodes not available: {:?} vs {:?}",
+				event1.inode, event2.inode
+			);
 		}
 
-		// Content hash matching
+		// Content hash matching - very high confidence when available
 		if let (Some(hash1), Some(hash2)) = (&event1.content_hash, &event2.content_hash) {
 			if hash1 == hash2 {
-				confidence += 0.5; // Very high confidence for content match
-				debug!("Same content hash (+0.5)");
+				confidence += self.config.weight_content_hash;
+				debug!("Same content hash (+{})", self.config.weight_content_hash);
 			} else {
 				debug!("Different content hashes");
 			}
-			factors += 1;
 		} else {
-			debug!("Content hashes not available: {:?} vs {:?}", 
-				event1.content_hash.is_some(), event2.content_hash.is_some());
+			debug!(
+				"Content hashes not available: {:?} vs {:?}",
+				event1.content_hash.is_some(),
+				event2.content_hash.is_some()
+			);
 		}
 
-		// Name similarity
+		// Name similarity - configurable weight
 		let name_similarity =
 			self.calculate_name_similarity(&event1.event.path, &event2.event.path);
-		confidence += name_similarity * 0.2;
-		factors += 1;
-		debug!("Name similarity (+{}): similarity={}", name_similarity * 0.2, name_similarity);
+		let name_contribution = name_similarity * self.config.weight_name_similarity;
+		confidence += name_contribution;
+		debug!(
+			"Name similarity (+{:.3}): similarity={:.3}",
+			name_contribution, name_similarity
+		);
 
-		// Normalize by number of factors considered
-		let final_confidence = if factors > 0 {
-			confidence / factors as f32
-		} else {
-			0.0
-		};
-		debug!("Final confidence: {} / {} factors = {}", confidence, factors, final_confidence);
+		// Confidence is now a weighted sum - cap at 1.0 for probability
+		let final_confidence = confidence.clamp(0.0, 1.0);
+		debug!(
+			"Final weighted confidence: {:.3} (before clamp: {:.3})",
+			final_confidence, confidence
+		);
 		final_confidence
 	}
 
@@ -546,7 +590,8 @@ impl MoveDetector {
 			}
 		}
 
-		Some(format!("{:x}", hasher.finish()))	}
+		Some(format!("{:x}", hasher.finish()))
+	}
 
 	// Helper methods for managing bucketed pending events
 	fn add_pending_remove(&mut self, pending: PendingEvent) {
