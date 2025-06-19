@@ -1,0 +1,59 @@
+# Scripts Directory
+
+This directory contains utility scripts for the Rust filesystem watcher project.
+
+## Git Hooks Setup
+
+### Quick Setup
+```bash
+# On Unix/Linux/macOS
+./scripts/install-hooks.sh
+
+# On Windows (PowerShell)
+.\scripts\install-hooks.ps1
+```
+
+### What Gets Installed
+
+The installation script sets up the following git hooks:
+
+#### Pre-commit Hook
+- **Formatting Check**: Ensures all Rust code is properly formatted using `rustfmt`
+- **Clippy Linting**: Runs Clippy to catch potential issues and enforce best practices  
+- **JSON Validation**: Validates JSON/JSONC files for syntax errors
+
+The hook will **prevent commits** if:
+- Code is not properly formatted (run `cargo fmt` to fix)
+- Clippy finds warnings or errors (fix the issues and try again)
+- JSON files have syntax errors
+
+### Bypassing Hooks
+
+If you need to bypass the hooks (not recommended), you can use:
+```bash
+git commit --no-verify
+```
+
+### Hook Files
+
+- `hooks/pre-commit`: Shell script version for Unix/Linux/macOS
+- `hooks/pre-commit.ps1`: PowerShell version for Windows (called by shell script)
+
+## Why Version Hooks?
+
+Git hooks in `.git/hooks/` are not versioned by default. By storing them in `scripts/hooks/` and providing installation scripts, we ensure:
+
+✅ **Team Consistency**: Everyone gets the same hooks  
+✅ **Version Control**: Hook changes are tracked and reviewable  
+✅ **Easy Setup**: Simple installation for new team members  
+✅ **Backup**: Hooks are preserved in the repository  
+
+## Manual Installation
+
+If the scripts don't work for your system, you can manually copy the hooks:
+
+```bash
+cp scripts/hooks/pre-commit .git/hooks/
+cp scripts/hooks/pre-commit.ps1 .git/hooks/
+chmod +x .git/hooks/pre-commit  # Unix/Linux/macOS only
+```

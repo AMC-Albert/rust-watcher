@@ -1,0 +1,67 @@
+#!/bin/sh
+#
+# Pre-commit hook for Rust projects
+# This hook runs formatting checks and clippy before allowing commits
+#
+
+set -e
+
+# Check if we're on Windows and PowerShell is available
+if command -v powershell.exe &> /dev/null; then
+    echo "🔍 Running Windows PowerShell pre-commit checks..."
+    powershell.exe -ExecutionPolicy Bypass -File "$(dirname "$0")/pre-commit.ps1"
+    exit $?
+fi
+
+echo "🔍 Running pre-commit checks..."
+
+# Check if cargo is available
+if ! command -v cargo &> /dev/null; then
+    echo "❌ Error: cargo not found. Please install Rust."
+    exit 1
+fi
+
+# 1. Check formatting
+echo "📝 Checking code formatting..."
+if ! cargo fmt --check; then
+    echo "❌ Code formatting issues found!"
+    echo "💡 Run 'cargo fmt' to fix formatting, then commit again."
+    exit 1
+fi
+echo "✅ Code formatting is correct"
+
+# 2. Run clippy
+echo "🔧 Running clippy..."
+if ! cargo clippy --all-targets --all-features -- -D warnings; then
+    echo "❌ Clippy found issues!"
+    echo "💡 Fix clippy warnings and try committing again."
+    exit 1
+fi
+echo "✅ Clippy checks passed"
+
+# 3. Check JSON files formatting and validation
+echo "📋 Checking JSON files..."
+json_files=$(find . -name "*.json" | grep -v target | grep -v node_modules | grep -v .vscode)
+if [ -n "$json_files" ]; then
+    for file in $json_files; do
+        if command -v python3 &> /dev/null; then
+            if ! python3 -m json.tool "$file" > /dev/null 2>&1; then
+                echo "❌ JSON validation failed for file: $file"
+                exit 1
+            fi
+        elif command -v node &> /dev/null; then
+            if ! node -e "JSON.parse(require('fs').readFileSync('$file', 'utf8'))" > /dev/null 2>&1; then
+                echo "❌ JSON validation failed for file: $file"
+                exit 1
+            fi
+        else
+            echo "⚠️  Warning: No JSON validator found (python3 or node), skipping JSON validation"
+            break
+        fi
+    done
+    echo "✅ JSON files are valid"
+else
+    echo "📝 No JSON files found to validate"
+fi
+
+echo "🎉 All pre-commit checks passed! Proceeding with commit..."

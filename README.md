@@ -125,6 +125,33 @@ When a file is moved from `/old/path/file.txt` to `/new/path/file.txt`, the watc
 }
 ```
 
+## Development Setup
+
+### Git Hooks Installation
+
+After cloning the repository, install the pre-commit hooks to ensure code quality:
+
+```bash
+# On Unix/Linux/macOS
+./scripts/install-hooks.sh
+
+# On Windows (PowerShell)
+.\scripts\install-hooks.ps1
+```
+
+The hooks will automatically:
+- ✅ Check code formatting (`rustfmt`)
+- ✅ Run linting (`clippy`)
+- ✅ Validate JSON files
+
+### VS Code Setup
+
+The project includes VS Code configuration for optimal development:
+- Rust-analyzer with proper settings
+- Debug configurations for tests and applications
+- Task definitions for common operations
+- Format-on-save enabled
+
 ## Testing
 
 Run the comprehensive test suite:
