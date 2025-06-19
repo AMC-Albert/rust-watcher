@@ -20,9 +20,12 @@ impl MoveMatching {
 		#[cfg(unix)]
 		if let Some(inode) = remove_event.inode {
 			if let Some(create_event) = storage.creates_by_inode.get(&inode) {
-				let confidence = Self::calculate_confidence(remove_event, create_event, config);
-				if confidence >= config.confidence_threshold {
-					return Some(create_event.clone());
+				// Don't match events with the same path (not a move)
+				if create_event.event.path != remove_event.event.path {
+					let confidence = Self::calculate_confidence(remove_event, create_event, config);
+					if confidence >= config.confidence_threshold {
+						return Some(create_event.clone());
+					}
 				}
 			}
 		}
@@ -31,25 +34,40 @@ impl MoveMatching {
 		#[cfg(windows)]
 		if let Some(windows_id) = remove_event.windows_id {
 			if let Some(create_event) = storage.creates_by_windows_id.get(&windows_id) {
-				let confidence = Self::calculate_confidence(remove_event, create_event, config);
-				if confidence >= config.confidence_threshold {
-					return Some(create_event.clone());
+				// Don't match events with the same path (not a move)
+				if create_event.event.path != remove_event.event.path {
+					let confidence = Self::calculate_confidence(remove_event, create_event, config);
+					if confidence >= config.confidence_threshold {
+						return Some(create_event.clone());
+					}
 				}
 			}
 		}
-
 		// Size-based matching with confidence calculation
 		if let Some(size) = remove_event.event.size {
+			// Remove event has size - look for creates with same size
 			if let Some(candidates) = storage.creates_by_size.get(&size) {
 				return Self::find_best_match_in_candidates(remove_event, candidates, config);
 			}
 		} else {
-			// Check candidates without size
-			return Self::find_best_match_in_candidates(
-				remove_event,
-				&storage.creates_no_size,
-				config,
-			);
+			// Remove event has no size - this happens when file was removed and we couldn't get metadata
+			// We need to check ALL create events since we don't know what size to match
+
+			// First check creates without size (directories, etc.)
+			if let Some(match_result) =
+				Self::find_best_match_in_candidates(remove_event, &storage.creates_no_size, config)
+			{
+				return Some(match_result);
+			}
+
+			// Then check ALL size-based creates (iterate through all size buckets)
+			for candidates in storage.creates_by_size.values() {
+				if let Some(match_result) =
+					Self::find_best_match_in_candidates(remove_event, candidates, config)
+				{
+					return Some(match_result);
+				}
+			}
 		}
 
 		None
@@ -65,9 +83,12 @@ impl MoveMatching {
 		#[cfg(unix)]
 		if let Some(inode) = create_event.inode {
 			if let Some(remove_event) = storage.removes_by_inode.get(&inode) {
-				let confidence = Self::calculate_confidence(remove_event, create_event, config);
-				if confidence >= config.confidence_threshold {
-					return Some(remove_event.clone());
+				// Don't match events with the same path (not a move)
+				if remove_event.event.path != create_event.event.path {
+					let confidence = Self::calculate_confidence(remove_event, create_event, config);
+					if confidence >= config.confidence_threshold {
+						return Some(remove_event.clone());
+					}
 				}
 			}
 		}
@@ -76,21 +97,33 @@ impl MoveMatching {
 		#[cfg(windows)]
 		if let Some(windows_id) = create_event.windows_id {
 			if let Some(remove_event) = storage.removes_by_windows_id.get(&windows_id) {
-				let confidence = Self::calculate_confidence(remove_event, create_event, config);
-				if confidence >= config.confidence_threshold {
-					return Some(remove_event.clone());
+				// Don't match events with the same path (not a move)
+				if remove_event.event.path != create_event.event.path {
+					let confidence = Self::calculate_confidence(remove_event, create_event, config);
+					if confidence >= config.confidence_threshold {
+						return Some(remove_event.clone());
+					}
 				}
 			}
 		}
-
 		// Size-based matching with confidence calculation
 		if let Some(size) = create_event.event.size {
+			// First check removes with the same size
 			if let Some(candidates) = storage.removes_by_size.get(&size) {
-				return Self::find_best_match_in_candidates_for_create(
-					create_event,
-					candidates,
-					config,
-				);
+				if let Some(match_result) =
+					Self::find_best_match_in_candidates_for_create(create_event, candidates, config)
+				{
+					return Some(match_result);
+				}
+			}
+
+			// Also check removes without size (files removed before we could get metadata)
+			if let Some(match_result) = Self::find_best_match_in_candidates_for_create(
+				create_event,
+				&storage.removes_no_size,
+				config,
+			) {
+				return Some(match_result);
 			}
 		} else {
 			// Check candidates without size
@@ -111,12 +144,13 @@ impl MoveMatching {
 		config: &MoveDetectorConfig,
 	) -> f32 {
 		let mut confidence = 0.0;
-
 		// Size matching
 		let size_match = match (remove_event.event.size, create_event.event.size) {
 			(Some(size1), Some(size2)) if size1 == size2 => 1.0,
-			(None, None) => 0.8, // Both are directories or unknown
-			_ => 0.0,
+			(None, None) => 0.8,    // Both are directories or unknown
+			(None, Some(_)) => 0.6, // Remove event has no size (common in real cut/paste), but create does
+			(Some(_), None) => 0.6, // Create event has no size, but remove does
+			_ => 0.0,               // Different sizes
 		};
 		confidence += size_match * config.weight_size_match;
 
@@ -206,7 +240,6 @@ impl MoveMatching {
 		// Fallback to heuristics
 		MoveDetectionMethod::Heuristics
 	}
-
 	/// Find the best match among candidates
 	fn find_best_match_in_candidates(
 		remove_event: &PendingEvent,
@@ -215,6 +248,8 @@ impl MoveMatching {
 	) -> Option<PendingEvent> {
 		candidates
 			.iter()
+			// Filter out candidates with the same path (not a move, just recreate at same location)
+			.filter(|candidate| candidate.event.path != remove_event.event.path)
 			.map(|candidate| {
 				let confidence = Self::calculate_confidence(remove_event, candidate, config);
 				(candidate, confidence)
@@ -227,7 +262,6 @@ impl MoveMatching {
 			})
 			.map(|(candidate, _)| candidate.clone())
 	}
-
 	/// Find the best match among candidates for create events
 	fn find_best_match_in_candidates_for_create(
 		create_event: &PendingEvent,
@@ -236,6 +270,8 @@ impl MoveMatching {
 	) -> Option<PendingEvent> {
 		candidates
 			.iter()
+			// Filter out candidates with the same path (not a move, just recreate at same location)
+			.filter(|candidate| candidate.event.path != create_event.event.path)
 			.map(|candidate| {
 				let confidence = Self::calculate_confidence(candidate, create_event, config);
 				(candidate, confidence)

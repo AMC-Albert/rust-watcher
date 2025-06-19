@@ -10,8 +10,6 @@ This directory contains utility scripts for the Rust filesystem watcher project.
 git config core.hooksPath scripts/hooks
 ```
 
-### What Gets Installed
-
 Setting the hooks directory enables the following git hooks:
 
 #### Pre-commit Hook
@@ -37,22 +35,3 @@ git commit --no-verify
 
 - `hooks/pre-commit`: Shell script version for Unix/Linux/macOS
 - `hooks/pre-commit.ps1`: PowerShell version for Windows (called by shell script)
-
-## Why Version Hooks?
-
-Git hooks in `.git/hooks/` are not versioned by default. By storing them in `scripts/hooks/` and using `git config core.hooksPath`, we ensure:
-
-✅ **Team Consistency**: Everyone gets the same hooks  
-✅ **Version Control**: Hook changes are tracked and reviewable  
-✅ **Easy Setup**: Simple one-command setup for new team members  
-✅ **Backup**: Hooks are preserved in the repository
-
-## Manual Installation
-
-If the scripts don't work for your system, you can manually copy the hooks:
-
-```bash
-cp scripts/hooks/pre-commit .git/hooks/
-cp scripts/hooks/pre-commit.ps1 .git/hooks/
-chmod +x .git/hooks/pre-commit  # Unix/Linux/macOS only
-```
