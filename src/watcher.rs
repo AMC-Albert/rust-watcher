@@ -1,11 +1,11 @@
 use crate::error::{Result, WatcherError};
 use crate::events::{EventType, FileSystemEvent};
 use crate::move_detection::{MoveDetector, MoveDetectorConfig};
-use log::{error, info, warn};
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher as NotifyWatcher};
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone)]
 pub struct WatcherConfig {
@@ -103,10 +103,18 @@ async fn run_watcher(
 				info!("Watcher shutdown requested, stopping event processing.");
 				break;
 			}			Some(event) = raw_event_rx.recv() => {
+				debug!("Raw filesystem event received: kind={:?}, paths={:?}", event.kind, event.paths);
 				for path in event.paths {
 					let fs_event = convert_notify_event(&event.kind, path, &move_detector);
+					debug!("Converted to filesystem event: type={:?}, path={:?}, is_dir={}, size={:?}",
+						fs_event.event_type, fs_event.path, fs_event.is_directory, fs_event.size);
+
 					let processed_events = move_detector.process_event(fs_event).await;
+
 					for processed in processed_events {
+						// Log the final processed event
+						log_processed_event(&processed);
+
 						if event_tx.send(processed).await.is_err() {
 							warn!("Event receiver dropped, ending processing loop.");
 							return;
@@ -129,16 +137,29 @@ fn convert_notify_event(
 	move_detector: &MoveDetector,
 ) -> FileSystemEvent {
 	let event_type = EventType::from(*kind);
+	debug!(
+		"Converting notify event: kind={:?}, path={:?} -> event_type={:?}",
+		kind, path, event_type
+	);
 
 	let (is_directory, size) = if path.exists() {
+		debug!("Path exists, reading metadata: {:?}", path);
 		let metadata = std::fs::metadata(&path).ok();
 		let is_dir = metadata.as_ref().map(|m| m.is_dir()).unwrap_or(false);
 		let file_size = metadata.as_ref().filter(|m| m.is_file()).map(|m| m.len());
+		debug!("Metadata read: is_dir={}, size={:?}", is_dir, file_size);
 		(is_dir, file_size)
 	} else {
+		debug!("Path does not exist, using heuristics: {:?}", path);
 		// File/directory no longer exists - use improved heuristics
 		let is_dir = match move_detector.infer_path_type(&path) {
-			Some(is_directory) => is_directory,
+			Some(is_directory) => {
+				debug!(
+					"Move detector inferred path type: is_directory={}",
+					is_directory
+				);
+				is_directory
+			}
 			None => {
 				// Fallback to original heuristic with improved logging
 				let fallback_is_dir = path.extension().is_none();
@@ -150,7 +171,52 @@ fn convert_notify_event(
 		(is_dir, None)
 	};
 
+	debug!(
+		"Final conversion result: type={:?}, path={:?}, is_dir={}, size={:?}",
+		event_type, path, is_directory, size
+	);
+
 	FileSystemEvent::new(event_type, path, is_directory, size)
+}
+
+/// Log processed events with appropriate level:
+/// - INFO level for confirmed moves/renames
+/// - DEBUG level for all other events
+fn log_processed_event(event: &FileSystemEvent) {
+	match &event.event_type {
+		EventType::Move => {
+			if let Some(move_data) = &event.move_data {
+				info!(
+					"MOVE DETECTED: {:?} -> {:?} (confidence: {:.2}, method: {:?})",
+					move_data.source_path,
+					move_data.destination_path,
+					move_data.confidence,
+					move_data.detection_method
+				);
+			} else {
+				info!("MOVE: {:?} (generic move)", event.path);
+			}
+		}
+		EventType::RenameFrom | EventType::RenameTo | EventType::Rename => {
+			info!("RENAME: {:?} (type: {:?})", event.path, event.event_type);
+		}
+		_ => {
+			debug!(
+				"{}: {:?} (dir: {}, size: {:?})",
+				match event.event_type {
+					EventType::Create => "CREATE",
+					EventType::Write => "WRITE",
+					EventType::Remove => "REMOVE",
+					EventType::Chmod => "CHMOD",
+					EventType::Other(ref s) => s,
+					_ => "OTHER",
+				},
+				event.path,
+				event.is_directory,
+				event.size
+			);
+		}
+	}
 }
 
 #[cfg(test)]

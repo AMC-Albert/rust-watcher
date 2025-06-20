@@ -38,9 +38,13 @@ impl MoveDetector {
 		let config = MoveDetectorConfig::with_timeout(timeout_ms);
 		Self::new(config)
 	}
-
 	/// Process a filesystem event and potentially detect moves
 	pub async fn process_event(&mut self, event: FileSystemEvent) -> Vec<FileSystemEvent> {
+		debug!(
+			"Processing event: type={:?}, path={:?}, is_dir={}, size={:?}",
+			event.event_type, event.path, event.is_directory, event.size
+		);
+
 		self.stats.record_event_processed();
 
 		// Cache metadata for files we can still access (not for remove events)
@@ -48,20 +52,60 @@ impl MoveDetector {
 			self.cache_file_metadata(&event.path).await;
 		}
 
+		// Log pending events state before processing
+		let summary = self.get_pending_events_summary();
+		debug!("Pending events state: removes={} (size: {}, no_size: {}, inode: {}, win_id: {}), creates={} (size: {}, no_size: {}, inode: {}, win_id: {}), has_rename_from={}",
+			summary.total_removes(),
+			summary.removes_by_size_buckets,
+			summary.removes_no_size,
+			summary.removes_by_inode,
+			summary.removes_by_windows_id,
+			summary.total_creates(),
+			summary.creates_by_size_buckets,
+			summary.creates_no_size,
+			summary.creates_by_inode,
+			summary.creates_by_windows_id,
+			summary.has_pending_rename_from
+		);
+
 		self.cleanup_expired_events().await;
 
-		match event.event_type {
-			EventType::Remove => self.handle_remove_event(event).await,
-			EventType::Create => self.handle_create_event(event).await,
-			EventType::RenameFrom => self.handle_rename_from_event(event).await,
-			EventType::RenameTo => self.handle_rename_to_event(event).await,
+		let result = match event.event_type {
+			EventType::Remove => {
+				debug!("Handling Remove event for: {:?}", event.path);
+				self.handle_remove_event(event).await
+			}
+			EventType::Create => {
+				debug!("Handling Create event for: {:?}", event.path);
+				self.handle_create_event(event).await
+			}
+			EventType::RenameFrom => {
+				debug!("Handling RenameFrom event for: {:?}", event.path);
+				self.handle_rename_from_event(event).await
+			}
+			EventType::RenameTo => {
+				debug!("Handling RenameTo event for: {:?}", event.path);
+				self.handle_rename_to_event(event).await
+			}
 			EventType::Rename => {
 				// Generic rename event - treat as both remove and create
 				debug!("Processing generic rename event for: {:?}", event.path);
 				vec![event] // Pass through for now
 			}
-			_ => vec![event], // Pass through other events
+			_ => {
+				debug!(
+					"Passing through event: type={:?}, path={:?}",
+					event.event_type, event.path
+				);
+				vec![event] // Pass through other events
+			}
+		};
+
+		if result.len() > 1 {
+			debug!("Returning {} events from processing", result.len());
 		}
+
+		result
 	}
 
 	/// Infer whether a removed path was likely a directory based on available context
@@ -108,30 +152,53 @@ impl MoveDetector {
 				.insert(path.to_path_buf(), file_metadata);
 		}
 	}
-
 	async fn handle_remove_event(&mut self, mut event: FileSystemEvent) -> Vec<FileSystemEvent> {
 		// Try to get cached metadata for this file (since it's being removed)
 		let cached_metadata = self.metadata_cache.remove(&event.path);
+		debug!(
+			"Remove event: cached_metadata available={}",
+			cached_metadata.is_some()
+		);
 
 		// Update event with cached metadata if available
 		if let Some(metadata) = &cached_metadata {
 			if event.size.is_none() {
 				event.size = metadata.size;
+				debug!("Updated event size from cache: {:?}", event.size);
 			}
 		}
 
+		let inode = MetadataExtractor::get_inode(&event.path).await;
+		let windows_id = cached_metadata.as_ref().and_then(|m| m.windows_id);
+
+		debug!(
+			"Remove event metadata: inode={:?}, windows_id={:?}",
+			inode, windows_id
+		);
+
 		let pending = PendingEvent::new(event.clone())
-			.with_inode(MetadataExtractor::get_inode(&event.path).await)
-			.with_windows_id(cached_metadata.as_ref().and_then(|m| m.windows_id));
+			.with_inode(inode)
+			.with_windows_id(windows_id);
 
 		// Check if this removal matches a recent create (reverse move detection)
+		debug!("Searching for matching create event...");
 		if let Some(matching_create) =
 			MoveMatching::find_matching_create(&pending, &self.pending_events, &self.config).await
 		{
+			debug!(
+				"Found matching create event: {:?}",
+				matching_create.event.path
+			);
+
 			let confidence =
 				MoveMatching::calculate_confidence(&pending, &matching_create, &self.config);
 			let detection_method =
 				MoveMatching::determine_detection_method(&pending, &matching_create);
+
+			debug!(
+				"Move confidence calculated: {:.2}, method: {:?}",
+				confidence, detection_method
+			);
 
 			let move_event = MoveEvent {
 				source_path: matching_create.event.path.clone(),
@@ -154,11 +221,15 @@ impl MoveDetector {
 				matching_create.event.path, event.path, confidence
 			);
 			return vec![move_event_fs];
-		}
-
-		// Store this removal as pending
+		} else {
+			debug!("No matching create event found");
+		} // Store this removal as pending
 		if self.pending_events.count_removes() < self.config.max_pending_events {
 			self.pending_events.add_remove(pending);
+			debug!(
+				"Added remove event to pending storage (total removes: {})",
+				self.pending_events.count_removes()
+			);
 		} else {
 			warn!(
 				"Too many pending remove events, dropping event for: {:?}",
@@ -168,26 +239,45 @@ impl MoveDetector {
 
 		vec![event]
 	}
-
 	async fn handle_create_event(&mut self, event: FileSystemEvent) -> Vec<FileSystemEvent> {
+		let inode = MetadataExtractor::get_inode(&event.path).await;
+		let content_hash = MetadataExtractor::get_content_hash(
+			&event.path,
+			self.config.content_hash_max_file_size,
+		)
+		.await;
+		let windows_id = MetadataExtractor::get_windows_id(&event.path).await;
+		debug!(
+			"Create event metadata: inode={:?}, content_hash={:?}, windows_id={:?}",
+			inode,
+			content_hash.as_ref().map(|h| h.to_string()),
+			windows_id
+		);
+
 		let pending = PendingEvent::new(event.clone())
-			.with_inode(MetadataExtractor::get_inode(&event.path).await)
-			.with_content_hash(
-				MetadataExtractor::get_content_hash(
-					&event.path,
-					self.config.content_hash_max_file_size,
-				)
-				.await,
-			)
-			.with_windows_id(MetadataExtractor::get_windows_id(&event.path).await);
+			.with_inode(inode)
+			.with_content_hash(content_hash)
+			.with_windows_id(windows_id);
+
 		// Check if this creation matches a recent removal
+		debug!("Searching for matching remove event...");
 		if let Some(matching_remove) =
 			MoveMatching::find_matching_remove(&pending, &self.pending_events, &self.config).await
 		{
+			debug!(
+				"Found matching remove event: {:?}",
+				matching_remove.event.path
+			);
+
 			let confidence =
 				MoveMatching::calculate_confidence(&matching_remove, &pending, &self.config);
 			let detection_method =
 				MoveMatching::determine_detection_method(&matching_remove, &pending);
+
+			debug!(
+				"Move confidence calculated: {:.2}, method: {:?}",
+				confidence, detection_method
+			);
 
 			let event_path = event.path.clone(); // Clone path before moving event
 
@@ -201,17 +291,22 @@ impl MoveDetector {
 			self.stats.record_move_detected(confidence);
 
 			let move_event_fs = event.with_move_data(move_event);
-
 			debug!(
 				"Detected move: {:?} -> {:?} (confidence: {:.2})",
 				matching_remove.event.path, event_path, confidence
 			);
 			return vec![move_event_fs];
+		} else {
+			debug!("No matching remove event found");
 		}
 
 		// Store this creation as pending
 		if self.pending_events.count_creates() < self.config.max_pending_events {
 			self.pending_events.add_create(pending);
+			debug!(
+				"Added create event to pending storage (total creates: {})",
+				self.pending_events.count_creates()
+			);
 		} else {
 			warn!(
 				"Too many pending create events, dropping event for: {:?}",
@@ -221,17 +316,26 @@ impl MoveDetector {
 
 		vec![event]
 	}
-
 	async fn handle_rename_from_event(&mut self, event: FileSystemEvent) -> Vec<FileSystemEvent> {
+		debug!(
+			"Storing RenameFrom event for later pairing: {:?}",
+			event.path
+		);
 		// Store the rename "from" event temporarily
 		self.pending_events.pending_rename_from = Some((event.clone(), Instant::now()));
 
 		// Don't emit anything yet - wait for the "to" event
 		vec![]
 	}
+
 	async fn handle_rename_to_event(&mut self, event: FileSystemEvent) -> Vec<FileSystemEvent> {
 		// Check if we have a matching "from" event
 		if let Some((from_event, _timestamp)) = self.pending_events.pending_rename_from.take() {
+			debug!(
+				"Found matching RenameFrom event: {:?} -> {:?}",
+				from_event.path, event.path
+			);
+
 			let event_path = event.path.clone(); // Clone path before moving event
 
 			// Create a move event from the rename pair
@@ -243,11 +347,14 @@ impl MoveDetector {
 			};
 
 			self.stats.record_move_detected(1.0);
-
 			let move_event_fs = event.with_move_data(move_event);
-			debug!("Detected rename: {:?} -> {:?}", from_event.path, event_path);
+			debug!(
+				"Detected rename: {:?} -> {:?} (confidence: 1.0)",
+				from_event.path, event_path
+			);
 			vec![move_event_fs]
 		} else {
+			debug!("No matching RenameFrom event found, treating as create");
 			// No matching "from" event - treat as regular create
 			warn!(
 				"Received rename 'to' event without matching 'from' event: {:?}",
@@ -256,11 +363,14 @@ impl MoveDetector {
 			return self.handle_create_event(event).await;
 		}
 	}
-
 	/// Clean up expired pending events and old metadata
 	async fn cleanup_expired_events(&mut self) {
 		let now = Instant::now();
 		let timeout = self.config.timeout;
+
+		// Count events before cleanup for logging
+		let initial_removes = self.pending_events.count_removes();
+		let initial_creates = self.pending_events.count_creates();
 
 		// Clean up expired remove events
 		self.pending_events.removes_by_size.retain(|_, events| {
@@ -297,12 +407,27 @@ impl MoveDetector {
 		self.pending_events
 			.creates_by_windows_id
 			.retain(|_, event| now.duration_since(event.timestamp) <= timeout);
-
 		// Clean up old rename from event
+		let had_rename_from = self.pending_events.pending_rename_from.is_some();
 		if let Some((_, timestamp)) = &self.pending_events.pending_rename_from {
 			if now.duration_since(*timestamp) > timeout {
+				debug!("Cleaning up expired RenameFrom event");
 				self.pending_events.pending_rename_from = None;
 			}
+		}
+
+		// Count events after cleanup and log if any were removed
+		let final_removes = self.pending_events.count_removes();
+		let final_creates = self.pending_events.count_creates();
+
+		if initial_removes != final_removes
+			|| initial_creates != final_creates
+			|| had_rename_from && self.pending_events.pending_rename_from.is_none()
+		{
+			debug!(
+				"Cleanup completed: removes {} -> {}, creates {} -> {}",
+				initial_removes, final_removes, initial_creates, final_creates
+			);
 		}
 
 		// Clean up old metadata cache entries
