@@ -32,28 +32,6 @@ pub async fn wait_for_events() {
 	tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 }
 
-/// Safe wrapper for running async code in tests
-/// Uses a single runtime to prevent memory issues
-use std::sync::OnceLock;
-
-static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-
-pub fn get_test_runtime() -> &'static tokio::runtime::Runtime {
-	RUNTIME.get_or_init(|| {
-		tokio::runtime::Builder::new_current_thread()
-			.enable_all()
-			.build()
-			.expect("Failed to create test runtime")
-	})
-}
-
-pub fn run_async_test<F, R>(test: F) -> R
-where
-	F: std::future::Future<Output = R>,
-{
-	get_test_runtime().block_on(test)
-}
-
 /// Create a short timeout for testing
 #[allow(dead_code)]
 pub async fn timeout_short() {
