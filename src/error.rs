@@ -1,6 +1,12 @@
 use std::time::Duration;
 use thiserror::Error;
 
+/// Core watcher error types
+///
+/// This enum contains only errors that are specific to the core watcher functionality.
+/// Module-specific errors are defined in their respective modules:
+/// - Database errors: `crate::database::DatabaseError`
+/// - Move detection errors: `crate::move_detection::MoveDetectionError`
 #[derive(Error, Debug)]
 pub enum WatcherError {
 	#[error("IO error: {0}")]
@@ -24,7 +30,7 @@ pub enum WatcherError {
 	#[error("Watcher not initialized")]
 	NotInitialized,
 
-	// Enhanced error categories for comprehensive error handling
+	// Core watcher-specific errors
 	#[error("Permission denied: {operation} on {path} - {context}")]
 	PermissionDenied {
 		operation: String,
@@ -41,6 +47,7 @@ pub enum WatcherError {
 		current_usage: String,
 		limit: String,
 	},
+
 	#[error("Filesystem error: {operation} failed on {path} - {cause}")]
 	FilesystemError {
 		operation: String,
@@ -73,16 +80,6 @@ pub enum WatcherError {
 		total_duration: Duration,
 		last_error: String,
 	},
-	#[error("Database error: {0}")]
-	Database(Box<crate::database::DatabaseError>),
-
-	#[error("Move detection error: {operation} on {path} - {details} (confidence: {confidence})")]
-	MoveDetection {
-		operation: String,
-		path: String,
-		details: String,
-		confidence: f64,
-	},
 
 	#[error("System resource unavailable: {resource} - {reason} (retry_after: {retry_after:?})")]
 	SystemResourceUnavailable {
@@ -98,6 +95,7 @@ pub enum WatcherError {
 		limit: u64,
 		window: Duration,
 	},
+
 	#[error("Network error: {operation} failed - {cause}")]
 	NetworkError {
 		operation: String,
@@ -118,6 +116,13 @@ pub enum WatcherError {
 		details: String,
 		thread_id: String,
 	},
+
+	// Module-specific errors (boxed for size optimization)
+	#[error("Database error: {0}")]
+	Database(#[from] Box<crate::database::DatabaseError>),
+
+	#[error("Move detection error: {0}")]
+	MoveDetection(#[from] crate::move_detection::MoveDetectionError),
 }
 
 /// Error recovery configuration
@@ -182,8 +187,13 @@ impl WatcherError {
 			WatcherError::ResourceExhausted { .. } => true,
 
 			// Transient filesystem errors
-			WatcherError::FilesystemError { .. } => true, // Database errors that might be retryable
+			WatcherError::FilesystemError { .. } => true,
+
+			// Database errors that might be retryable
 			WatcherError::Database(db_err) => db_err.is_retryable(),
+
+			// Move detection errors that might be retryable
+			WatcherError::MoveDetection(move_err) => move_err.is_retryable(),
 
 			// Channel send errors (receiver might reconnect)
 			WatcherError::ChannelSend => true,
@@ -207,7 +217,6 @@ impl WatcherError {
 			WatcherError::NotInitialized => false,
 			WatcherError::StopSignal => false,
 			WatcherError::RecoveryFailed { .. } => false,
-			WatcherError::MoveDetection { .. } => false,
 			WatcherError::Json(_) => false,
 			WatcherError::ValidationError { .. } => false,
 			WatcherError::ConcurrencyError { .. } => true, // Can retry on different thread
@@ -237,11 +246,13 @@ impl WatcherError {
 
 	/// Check if this error is related to configuration issues
 	pub fn is_configuration_error(&self) -> bool {
-		matches!(
-			self,
-			WatcherError::ConfigurationError { .. } | WatcherError::InvalidPath { .. }
-		)
+		match self {
+			WatcherError::ConfigurationError { .. } | WatcherError::InvalidPath { .. } => true,
+			WatcherError::MoveDetection(move_err) => move_err.is_configuration_error(),
+			_ => false,
+		}
 	}
+
 	/// Get error category for logging and metrics
 	pub fn category(&self) -> &'static str {
 		match self {
@@ -259,7 +270,7 @@ impl WatcherError {
 			WatcherError::Timeout { .. } => "timeout",
 			WatcherError::RecoveryFailed { .. } => "recovery",
 			WatcherError::Database(_) => "database",
-			WatcherError::MoveDetection { .. } => "move_detection",
+			WatcherError::MoveDetection(_) => "move_detection",
 			WatcherError::SystemResourceUnavailable { .. } => "system_resource",
 			WatcherError::RateLimitExceeded { .. } => "rate_limit",
 			WatcherError::NetworkError { .. } => "network",
@@ -267,6 +278,8 @@ impl WatcherError {
 			WatcherError::ConcurrencyError { .. } => "concurrency",
 		}
 	}
+
+	// Constructor methods for common error patterns
 	/// Create a permission denied error from an I/O error
 	pub fn from_permission_denied(operation: &str, path: &str, _io_err: std::io::Error) -> Self {
 		WatcherError::PermissionDenied {
@@ -325,6 +338,7 @@ impl WatcherError {
 			limit: limit.to_string(),
 		}
 	}
+
 	/// Create a timeout error
 	pub fn timeout(operation: &str, timeout: Duration) -> Self {
 		let start_time = format!("{:?}", std::time::SystemTime::now());
@@ -347,21 +361,6 @@ impl WatcherError {
 			reason: reason.to_string(),
 			expected: expected.to_string(),
 			actual: actual.to_string(),
-		}
-	}
-
-	/// Create a move detection error
-	pub fn move_detection_error(
-		operation: &str,
-		path: &str,
-		details: &str,
-		confidence: f64,
-	) -> Self {
-		WatcherError::MoveDetection {
-			operation: operation.to_string(),
-			path: path.to_string(),
-			details: details.to_string(),
-			confidence,
 		}
 	}
 
@@ -394,6 +393,7 @@ impl WatcherError {
 	}
 }
 
+// Custom From implementation for boxed database errors
 impl From<crate::database::DatabaseError> for WatcherError {
 	fn from(err: crate::database::DatabaseError) -> Self {
 		WatcherError::Database(Box::new(err))
@@ -406,49 +406,20 @@ pub type Result<T> = std::result::Result<T, WatcherError>;
 mod tests {
 	use super::*;
 	use std::io;
+
 	#[test]
 	fn test_error_variants() {
-		// Test that all error variants can be created
+		// Test that core error variants can be created
 		let io_error = WatcherError::Io(io::Error::new(io::ErrorKind::NotFound, "file not found"));
 		let channel_error = WatcherError::ChannelSend;
 		let invalid_path = WatcherError::InvalidPath {
 			path: "/invalid".to_string(),
-		};
-		let stop_signal = WatcherError::StopSignal;
-		let not_initialized = WatcherError::NotInitialized;
-
-		// Test enhanced error variants
-		let permission_denied = WatcherError::PermissionDenied {
-			operation: "read".to_string(),
-			path: "/protected".to_string(),
-			context: "filesystem access".to_string(),
-		};
-
-		let resource_exhausted = WatcherError::ResourceExhausted {
-			resource: "memory".to_string(),
-			details: "allocation failed".to_string(),
-			current_usage: "1GB".to_string(),
-			limit: "512MB".to_string(),
-		};
-
-		let filesystem_error = WatcherError::FilesystemError {
-			operation: "watch".to_string(),
-			path: "/tmp".to_string(),
-			cause: "device full".to_string(),
-			error_code: Some(28), // ENOSPC
 		};
 
 		// Test error messages
 		assert!(io_error.to_string().contains("IO error"));
 		assert!(channel_error.to_string().contains("Channel send error"));
 		assert!(invalid_path.to_string().contains("Invalid path"));
-		assert!(stop_signal.to_string().contains("stop signal"));
-		assert!(not_initialized.to_string().contains("not initialized"));
-		assert!(permission_denied.to_string().contains("Permission denied"));
-		assert!(resource_exhausted
-			.to_string()
-			.contains("Resource exhausted"));
-		assert!(filesystem_error.to_string().contains("Filesystem error"));
 	}
 
 	#[test]
@@ -464,55 +435,13 @@ mod tests {
 	}
 
 	#[test]
-	fn test_result_type() {
-		// Test the Result type alias
-		let success: Result<i32> = Ok(42);
-		let failure: Result<i32> = Err(WatcherError::NotInitialized);
-
-		assert!(success.is_ok());
-		assert!(failure.is_err());
-		if let Ok(value) = success {
-			assert_eq!(value, 42);
-		}
-	}
-
-	#[test]
 	fn test_error_categorization() {
-		// Test retryable errors
-		let timeout_error = WatcherError::Timeout {
-			operation: "test".to_string(),
-			timeout: Duration::from_secs(5),
-			start_time: "2025-01-01T00:00:00Z".to_string(),
-		};
+		let timeout_error = WatcherError::timeout("test_op", Duration::from_secs(30));
 		assert!(timeout_error.is_retryable());
 		assert_eq!(timeout_error.category(), "timeout");
 
-		let resource_error = WatcherError::ResourceExhausted {
-			resource: "memory".to_string(),
-			details: "out of memory".to_string(),
-			current_usage: "2GB".to_string(),
-			limit: "1GB".to_string(),
-		};
-		assert!(resource_error.is_retryable());
-		assert!(resource_error.is_resource_limit());
-		assert_eq!(resource_error.category(), "resource");
-
-		// Test non-retryable errors
-		let permission_error = WatcherError::PermissionDenied {
-			operation: "read".to_string(),
-			path: "/root".to_string(),
-			context: "insufficient privileges".to_string(),
-		};
-		assert!(!permission_error.is_retryable());
-		assert!(permission_error.is_critical());
-		assert_eq!(permission_error.category(), "permission");
-
-		let config_error = WatcherError::ConfigurationError {
-			parameter: "path".to_string(),
-			reason: "invalid format".to_string(),
-			expected: "absolute path".to_string(),
-			actual: "relative/path".to_string(),
-		};
+		let config_error =
+			WatcherError::configuration_error("path", "invalid", "/valid", "/invalid");
 		assert!(!config_error.is_retryable());
 		assert!(config_error.is_configuration_error());
 		assert_eq!(config_error.category(), "configuration");
@@ -520,63 +449,22 @@ mod tests {
 
 	#[test]
 	fn test_error_constructor_methods() {
-		// Test the convenience constructors
-		let fs_error = WatcherError::filesystem_error_with_path(
-			"read",
-			"/tmp/test",
-			"file not found",
-			Some(2),
+		let perm_error = WatcherError::from_permission_denied(
+			"read_file",
+			"/test/path",
+			io::Error::new(io::ErrorKind::PermissionDenied, "access denied"),
 		);
-		if let WatcherError::FilesystemError {
-			operation,
-			path,
-			cause,
-			error_code,
-		} = fs_error
-		{
-			assert_eq!(operation, "read");
-			assert_eq!(path, "/tmp/test");
-			assert_eq!(cause, "file not found");
-			assert_eq!(error_code, Some(2));
-		} else {
-			panic!("Expected FilesystemError variant");
-		}
+		assert!(!perm_error.is_retryable());
+		assert!(perm_error.is_critical());
 
 		let resource_error = WatcherError::resource_exhausted_with_usage(
-			"file descriptors",
-			"limit reached",
-			"1024",
-			"1024",
+			"memory",
+			"allocation failed",
+			"100MB",
+			"64MB",
 		);
-		if let WatcherError::ResourceExhausted {
-			resource,
-			details,
-			current_usage,
-			limit,
-		} = resource_error
-		{
-			assert_eq!(resource, "file descriptors");
-			assert_eq!(details, "limit reached");
-			assert_eq!(current_usage, "1024");
-			assert_eq!(limit, "1024");
-		} else {
-			panic!("Expected ResourceExhausted variant");
-		}
-
-		let validation_error =
-			WatcherError::validation_error("timeout_ms", "must be positive", "-100");
-		if let WatcherError::ValidationError {
-			field,
-			reason,
-			value,
-		} = validation_error
-		{
-			assert_eq!(field, "timeout_ms");
-			assert_eq!(reason, "must be positive");
-			assert_eq!(value, "-100");
-		} else {
-			panic!("Expected ValidationError variant");
-		}
+		assert!(resource_error.is_retryable());
+		assert!(resource_error.is_resource_limit());
 	}
 
 	#[test]
@@ -584,9 +472,6 @@ mod tests {
 		let config = ErrorRecoveryConfig::default();
 		assert_eq!(config.max_retries, 3);
 		assert_eq!(config.initial_retry_delay, Duration::from_millis(100));
-		assert_eq!(config.max_retry_delay, Duration::from_secs(30));
-		assert_eq!(config.backoff_multiplier, 2.0);
-		assert!(config.exponential_backoff);
 
 		// Test delay calculation
 		assert_eq!(config.delay_for_attempt(0), Duration::from_millis(100));

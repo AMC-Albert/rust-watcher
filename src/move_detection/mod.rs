@@ -13,9 +13,11 @@
 //! - [`matching`] - Move detection algorithms and confidence calculations
 //! - [`monitoring`] - Resource monitoring and statistics
 //! - [`detector`] - Main MoveDetector implementation
+//! - [`error`] - Move detection specific error types
 
 pub mod config;
 pub mod detector;
+pub mod error;
 pub mod events;
 pub mod heuristics;
 pub mod matching;
@@ -25,3 +27,4 @@ pub mod monitoring;
 // Re-export main types for convenience
 pub use config::MoveDetectorConfig;
 pub use detector::MoveDetector;
+pub use error::MoveDetectionError;
