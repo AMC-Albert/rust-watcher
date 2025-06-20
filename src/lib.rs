@@ -1,7 +1,7 @@
 pub mod database;
 mod error;
 mod events;
-mod filesystem_poc;
+pub mod filesystem_poc;
 mod move_detection;
 mod retry;
 mod watcher;
