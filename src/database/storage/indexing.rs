@@ -75,13 +75,34 @@ impl IndexingStorage for IndexingImpl {
 
 /// Find events by time range using the provided database
 pub async fn find_events_by_time_range(
-	_database: &Arc<Database>,
-	_start: DateTime<Utc>,
-	_end: DateTime<Utc>,
+	database: &Arc<Database>,
+	start: DateTime<Utc>,
+	end: DateTime<Utc>,
 ) -> DatabaseResult<Vec<EventRecord>> {
-	// TODO: Implement time range query
-	// For now, return empty vector - this would be implemented properly in Phase 1.2
-	Ok(Vec::new())
+	use crate::database::storage::tables::EVENTS_LOG_TABLE;
+	use crate::database::types::EventRecord;
+	use redb::ReadableMultimapTable;
+	let read_txn = database.begin_read()?;
+	let events_log = read_txn.open_multimap_table(EVENTS_LOG_TABLE)?;
+	let mut result = Vec::new();
+	for entry in events_log.iter()? {
+		let (_key_guard, multimap_value) = entry?;
+		for value_result in multimap_value {
+			let value_guard = match value_result {
+				Ok(v) => v,
+				Err(_) => continue, // Skip corrupt
+			};
+			let value_bytes = value_guard.value();
+			let record: EventRecord = match bincode::deserialize(value_bytes) {
+				Ok(r) => r,
+				Err(_) => continue, // Skip corrupt
+			};
+			if record.timestamp >= start && record.timestamp <= end {
+				result.push(record);
+			}
+		}
+	}
+	Ok(result)
 }
 
 /// Index events in the database

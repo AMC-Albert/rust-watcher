@@ -104,3 +104,60 @@ impl MultiWatchStorage for MultiWatchImpl {
 		Ok(Vec::new())
 	}
 }
+
+// --- MultiWatchDatabase: initial design and partial implementation ---
+// This struct will coordinate multiple watches, their metadata, and shared node management.
+// Only watch registration, listing, and metadata retrieval are implemented for now.
+
+pub struct MultiWatchDatabase {
+	database: Arc<Database>,
+}
+
+impl MultiWatchDatabase {
+	pub fn new(database: Arc<Database>) -> Self {
+		Self { database }
+	}
+
+	/// Register a new watch with metadata
+	pub async fn register_watch(&self, metadata: &WatchMetadata) -> DatabaseResult<()> {
+		let write_txn = self.database.begin_write()?;
+		{
+			let mut table = write_txn.open_table(super::tables::WATCH_REGISTRY)?;
+			table.insert(
+				&metadata.watch_id.as_bytes()[..],
+				bincode::serialize(metadata).unwrap().as_slice(),
+			)?;
+		}
+		write_txn.commit()?;
+		Ok(())
+	}
+
+	/// List all registered watches
+	pub async fn list_watches(&self) -> DatabaseResult<Vec<WatchMetadata>> {
+		let read_txn = self.database.begin_read()?;
+		let table = read_txn.open_table(super::tables::WATCH_REGISTRY)?;
+		let mut result = Vec::new();
+		for entry in table.range::<&[u8]>(..)? {
+			let (_key, value) = entry?;
+			if let Ok(meta) = bincode::deserialize::<WatchMetadata>(value.value()) {
+				result.push(meta);
+			}
+		}
+		Ok(result)
+	}
+
+	/// Get metadata for a specific watch
+	pub async fn get_watch_metadata(
+		&self,
+		watch_id: &Uuid,
+	) -> DatabaseResult<Option<WatchMetadata>> {
+		let read_txn = self.database.begin_read()?;
+		let table = read_txn.open_table(super::tables::WATCH_REGISTRY)?;
+		if let Some(value) = table.get(&watch_id.as_bytes()[..])? {
+			let meta = bincode::deserialize::<WatchMetadata>(value.value()).ok();
+			Ok(meta)
+		} else {
+			Ok(None)
+		}
+	}
+}

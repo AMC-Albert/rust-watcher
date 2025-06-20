@@ -500,17 +500,20 @@ mod tests {
 		let adapter = DatabaseAdapter::new(config).await.unwrap();
 		// Store events with different sizes for different paths
 		let mut all_events = Vec::new();
+		let now = Utc::now();
 		for i in 0..5 {
 			let path = temp_dir.path().join(format!("file_{}.txt", i));
 			std::fs::write(&path, format!("test-{}", i)).unwrap();
 			let path = path.canonicalize().unwrap();
-			let event = create_test_event(EventType::Create, path.clone(), Some(1000 + i * 100));
+			let mut event =
+				create_test_event(EventType::Create, path.clone(), Some(1000 + i * 100));
+			// Set event timestamp to 'now' so it is always in the query range
+			event.timestamp = now;
 			adapter.store_event(&event).await.unwrap();
 			all_events.push((path, event));
 		}
 
 		// Query by time range
-		let now = Utc::now();
 		let hour_ago = now - chrono::Duration::hours(1);
 		let recent_events = adapter
 			.find_events_by_time_range(hour_ago, now)

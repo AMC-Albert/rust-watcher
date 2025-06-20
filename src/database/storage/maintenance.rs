@@ -4,7 +4,7 @@
 //! and health monitoring operations.
 
 use crate::database::{config::DatabaseConfig, error::DatabaseResult, types::DatabaseStats};
-use redb::Database;
+use redb::{Database, ReadableMultimapTable};
 use std::sync::Arc;
 
 /// Trait for maintenance and statistics operations
@@ -109,10 +109,57 @@ pub async fn cleanup_expired_events(
 }
 
 /// Get database statistics using the provided database
-pub async fn get_database_stats(_database: &Arc<Database>) -> DatabaseResult<DatabaseStats> {
-	// TODO: Implement stats collection
-	// For now, return default stats - this would be implemented properly in Phase 1.2
-	Ok(DatabaseStats::default())
+///
+/// LIMITATIONS & TODOs (read before using in production):
+/// - This implementation is O(N) over all events. For large event logs (millions of events),
+///   this will cause significant latency (seconds to minutes depending on hardware and DB size).
+/// - Only the event count is accurate. All other fields in DatabaseStats are placeholders and
+///   should not be relied upon for monitoring or alerting.
+/// - No stats for metadata, file size, or performance metrics. These require additional
+///   bookkeeping or Redb API support.
+/// - No caching or incremental update; every call scans the entire log. This will impact
+///   performance if called frequently (e.g., in a dashboard or health check loop).
+/// - If production workloads require frequent stats, implement an indexed or cached approach.
+///   For example, maintain a counter in a separate table updated on every event insert/delete.
+/// - Database compaction and cleanup are not implemented. Stale data will accumulate unless
+///   explicit maintenance is performed in future versions.
+/// - This is a stopgap for correctness, not a scalable solution. Do not use as-is for real-time
+///   monitoring or in high-throughput environments.
+///
+/// Example: On a database with 10 million events, this function may take 10-30 seconds to return
+/// depending on disk speed and system load. For anything beyond basic debugging, redesign is required.
+///
+/// Edge case: If the event log is corrupted or partially written, the count may be inaccurate or
+/// the function may panic. No recovery or validation is performed here.
+///
+/// TODO: Replace with a scalable, indexed, and robust stats subsystem. See README and design docs.
+pub async fn get_database_stats(database: &Arc<Database>) -> DatabaseResult<DatabaseStats> {
+	// This implementation iterates all events in the log to count them.
+	// This is not efficient for large databases, but is necessary for correctness until a better index is implemented.
+	let read_txn = database.begin_read()?;
+	let events_log =
+		read_txn.open_multimap_table(crate::database::storage::tables::EVENTS_LOG_TABLE)?;
+	let mut total_events = 0u64;
+	for entry in events_log.iter()? {
+		let (_key_guard, multimap_value) = entry?;
+		for value_result in multimap_value {
+			if value_result.is_ok() {
+				total_events += 1;
+			}
+		}
+	}
+	// TODO: Count metadata and other stats if needed. For now, only event count is accurate.
+	Ok(crate::database::types::DatabaseStats {
+		total_events,
+		total_metadata: 0, // Not implemented
+		database_size: 0,  // Not implemented
+		read_operations: 0,
+		write_operations: 0,
+		delete_operations: 0,
+		cache_hit_rate: 0.0,
+		avg_query_time_ms: 0.0,
+		cleaned_up_events: 0,
+	})
 }
 
 /// Compact database using the provided database

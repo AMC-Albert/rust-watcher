@@ -5,7 +5,9 @@
 - Trait and implementation mismatches resolved; `DatabaseStorage` and related traits are now consistent.
 - All clippy warnings and build errors fixed; codebase is warning-free and testable.
 - Event log retention/cleanup system implemented, tested, and integrated (see Phase 1.1).
-- No filesystem cache or multi-watch features are implemented yet beyond type definitions and stubs.
+- Brute-force event statistics implementation added (see maintenance.rs). This is O(N) and not suitable for production or large datasets. Only event count is accurate; all other stats are placeholders. See code comments for limitations and future work.
+- No scalable stats/indexing subsystem exists yet. This is a critical TODO for production use.
+- Integration and stress test scaffolding implemented and passing basic checks (see integration_multi_watch.rs, stress_cache_concurrency.rs).
 - Documentation and comments updated for current code; pending features are still only in design/TODO docs.
 
 ---
@@ -33,8 +35,8 @@
 ### 0.4 Testing Infrastructure
 - [x] ~~Create test directory structures with known properties for validation~~ (implemented)
 - [x] ~~Add performance benchmarks for filesystem operations~~ (database benchmarks established)
-- [ ] Create integration test framework for multi-watch scenarios
-- [ ] Add stress tests for concurrent cache access patterns
+- [x] Create integration test framework for multi-watch scenarios  # Scaffolded (integration_multi_watch.rs)
+- [x] Add stress tests for concurrent cache access patterns  # Scaffolded (stress_cache_concurrency.rs)
 
 ## Phase 1: Core Storage and Event Log (Highest Priority)
 
@@ -61,24 +63,39 @@
 
 ## Immediate Next Steps
 
-- [ ] Document event log edge cases, especially around duplicate events, ordering, and retention policy behavior.
+- [x] Document event log edge cases, especially around duplicate events, ordering, and retention policy behavior.  # Complete (see event_retention.rs)
+- [x] Implement brute-force event stats (O(N), not scalable, see maintenance.rs).  # Complete, but not suitable for production
+- [ ] Design and implement a scalable, indexed, and robust stats subsystem.  # Critical for production use
 - [ ] Validate cross-platform path handling (Windows vs Unix).
-- [ ] Create integration test framework for multi-watch scenarios.
-- [ ] Add stress tests for concurrent cache access patterns.
-- [ ] Design and stub out the `MultiWatchDatabase` and related APIs for Phase 2.
+- [x] Create integration test framework for multi-watch scenarios.  # Scaffolded and passing basic checks (integration_multi_watch.rs)
+- [x] Add stress tests for concurrent cache access patterns.  # Scaffolded and passing basic checks (stress_cache_concurrency.rs)
+- [ ] Design and stub out the `MultiWatchDatabase` and related APIs for Phase 2.  # Initial stubs exist, but needs further design and implementation
+
+### Priority Order (as of June 2025)
+
+1. **Validate cross-platform path handling (Windows vs Unix)**
+   - This is a known source of subtle bugs and must be addressed before multi-watch or cache features can be considered robust.
+2. **Design and implement `MultiWatchDatabase` and related APIs**
+   - The foundation for all multi-watch and advanced cache features. Stubs exist, but real design and partial implementation are needed.
+3. **Implement real multi-watch integration tests**
+   - Use the scaffolded framework to drive development and catch regressions early.
+4. **Implement real stress/concurrency tests**
+   - Use the scaffolded stress tests to validate cache and database concurrency under load.
 
 ---
 
 # Summary Table
 
-| Task                         | Status      | Notes                                   |
-| ---------------------------- | ----------- | --------------------------------------- |
-| Event log retention/cleanup  | Complete    | Logic, tests, and integration done      |
-| Event log edge case docs     | Pending     | Needs technical documentation           |
-| Cross-platform path handling | Pending     | Windows/Unix normalization              |
-| Multi-watch test infra       | Pending     | Needed for Phase 2                      |
-| Stress tests                 | Pending     | Needed for cache concurrency validation |
-| Multi-watch core             | Not started | Next major feature                      |
+| Task                         | Status      | Notes                                     |
+| ---------------------------- | ----------- | ----------------------------------------- |
+| Event log retention/cleanup  | Complete    | Logic, tests, and integration done        |
+| Event log edge case docs     | Complete    | Documented in code and event_retention.rs |
+| Brute-force stats impl       | Complete    | O(N), not scalable, see maintenance.rs    |
+| Scalable stats/indexing      | TODO        | Needed for production, not started        |
+| Cross-platform path handling | Pending     | Windows/Unix normalization                |
+| Multi-watch test infra       | Complete    | Scaffolded and passing basic checks       |
+| Stress tests                 | Complete    | Scaffolded and passing basic checks       |
+| Multi-watch core             | Not started | Next major feature                        |
 
 ---
 

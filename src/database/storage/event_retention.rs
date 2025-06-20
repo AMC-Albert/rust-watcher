@@ -6,7 +6,11 @@
 // - Performance depends on underlying database and event volume.
 // - Retention policy is configurable but not dynamic at runtime (requires reconfiguration).
 // - No transactional guarantee: concurrent inserts/deletes may cause temporary inconsistencies.
-// - Edge cases: duplicate events are not deduplicated; ordering is by insertion timestamp only.
+//
+// Edge Cases:
+// - Duplicate events: The event log is append-only; duplicate events for the same path/key are not deduplicated. Consumers must handle this at query time if needed.
+// - Ordering: Events are ordered by insertion timestamp only. There is no guarantee of strict monotonicity if system clocks are skewed or if events are inserted out of order.
+// - Retention: Cleanup is non-atomic. If a crash or concurrent modification occurs during cleanup, some expired events may persist until the next run. Count-based retention may temporarily exceed the limit under heavy concurrent insertions.
 //
 // Exposes both explicit cleanup API and optional background task integration.
 
@@ -57,8 +61,9 @@ pub async fn cleanup_old_events<S: DatabaseStorage>(
 	Ok(removed)
 }
 
-// Edge cases:
+// Edge Cases:
 // - If storage backend does not support efficient range deletes, cleanup may be slow.
 // - If background task panics or fails, events may accumulate until next run.
 // - No transactional guarantee: concurrent inserts/deletes may cause temporary inconsistencies.
 // - Duplicate events are not deduplicated; ordering is by insertion timestamp only.
+// - Retention: Cleanup is non-atomic. If a crash or concurrent modification occurs during cleanup, some expired events may persist until the next run. Count-based retention may temporarily exceed the limit under heavy concurrent insertions.

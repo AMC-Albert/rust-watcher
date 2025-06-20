@@ -208,6 +208,60 @@ mod path_normalization {
 		let file_count = nodes.iter().filter(|n| !n.is_directory).count();
 		assert!(file_count > 0, "No files found with special characters");
 	}
+
+	#[test]
+	fn test_case_sensitivity() {
+		// On Windows, paths are case-insensitive; on Unix, they are case-sensitive.
+		let path1 = PathBuf::from("C:/Test/File.txt");
+		let path2 = PathBuf::from("C:/test/file.TXT");
+		#[cfg(windows)]
+		assert_eq!(
+			path1.to_string_lossy().to_lowercase(),
+			path2.to_string_lossy().to_lowercase()
+		);
+		#[cfg(unix)]
+		assert_ne!(path1, path2);
+	}
+
+	#[test]
+	fn test_separator_normalization() {
+		// Both separators should be treated equivalently on Windows
+		let path1 = PathBuf::from(r"C:\Users\Test\file.txt");
+		let path2 = PathBuf::from("C:/Users/Test/file.txt");
+		#[cfg(windows)]
+		assert_eq!(path1, path2);
+		#[cfg(unix)]
+		assert_ne!(path1, path2); // On Unix, backslash is a valid character
+	}
+
+	#[test]
+	#[cfg(windows)]
+	fn test_reserved_names_and_trailing_dot_space() {
+		// Windows has reserved names and ignores trailing dots/spaces
+		let reserved = ["CON", "PRN", "AUX", "NUL", "COM1", "LPT1"];
+		for name in reserved.iter() {
+			let path = PathBuf::from(name);
+			// Creating these files should fail
+			let result = std::fs::File::create(&path);
+			assert!(
+				result.is_err(),
+				"Should not be able to create reserved name: {}",
+				name
+			);
+		}
+		// Trailing dot/space
+		let path = PathBuf::from("trailingdot.txt.");
+		let file = std::fs::File::create(&path);
+		assert!(
+			file.is_ok(),
+			"Should be able to create file with trailing dot"
+		);
+		let meta = std::fs::metadata("trailingdot.txt");
+		assert!(
+			meta.is_ok(),
+			"Windows should treat trailing dot as equivalent"
+		);
+	}
 }
 
 /// Test symlink and junction point handling
