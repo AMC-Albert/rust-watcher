@@ -19,6 +19,10 @@ pub const METADATA_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("
 pub const INDEXES_TABLE: MultimapTableDefinition<&[u8], &[u8]> =
 	MultimapTableDefinition::new("indexes");
 
+/// Multimap events table for append-only event log (key: path hash, value: serialized EventRecord)
+pub const EVENTS_LOG_TABLE: MultimapTableDefinition<&[u8], &[u8]> =
+	MultimapTableDefinition::new("events_log");
+
 // ===== Filesystem Cache Tables =====
 
 /// Primary filesystem cache table (path_hash -> FilesystemNode)

@@ -48,15 +48,6 @@ impl EventStorageImpl {
 		Ok(())
 	}
 
-	/// Create storage key from record
-	fn create_storage_key(record: &EventRecord) -> StorageKey {
-		match (record.inode, record.windows_id) {
-			(Some(inode), _) => StorageKey::Inode(inode),
-			(_, Some(windows_id)) => StorageKey::WindowsId(windows_id),
-			_ => StorageKey::PathHash(crate::database::types::calculate_path_hash(&record.path)),
-		}
-	}
-
 	/// Serialize record to bytes
 	fn serialize_record(record: &EventRecord) -> DatabaseResult<Vec<u8>> {
 		bincode::serialize(record)
@@ -75,12 +66,12 @@ impl EventStorage for EventStorageImpl {
 	async fn store_event(&mut self, record: &EventRecord) -> DatabaseResult<()> {
 		let write_txn = self.database.begin_write()?;
 		{
-			let mut events_table = write_txn.open_table(super::tables::EVENTS_TABLE)?;
-			let key = Self::create_storage_key(record);
+			let mut events_log = write_txn.open_multimap_table(super::tables::EVENTS_LOG_TABLE)?;
+			let key = StorageKey::path_hash(&record.path);
 			let key_bytes = key.to_bytes();
 			let record_bytes = Self::serialize_record(record)?;
 
-			events_table.insert(key_bytes.as_slice(), record_bytes.as_slice())?;
+			events_log.insert(key_bytes.as_slice(), record_bytes.as_slice())?;
 		}
 		write_txn.commit()?;
 		Ok(())
@@ -88,15 +79,19 @@ impl EventStorage for EventStorageImpl {
 
 	async fn get_events(&mut self, key: &StorageKey) -> DatabaseResult<Vec<EventRecord>> {
 		let read_txn = self.database.begin_read()?;
-		let events_table = read_txn.open_table(super::tables::EVENTS_TABLE)?;
-
+		let events_log = read_txn.open_multimap_table(super::tables::EVENTS_LOG_TABLE)?;
 		let key_bytes = key.to_bytes();
-		if let Some(record_bytes) = events_table.get(key_bytes.as_slice())? {
-			let record = Self::deserialize_record(record_bytes.value())?;
-			Ok(vec![record])
-		} else {
-			Ok(Vec::new())
+		let mut events = Vec::new();
+		let multimap = events_log.get(key_bytes.as_slice())?;
+		for item in multimap {
+			let value = item?;
+			let record = bincode::deserialize::<EventRecord>(value.value()).map_err(|e| {
+				crate::database::error::DatabaseError::Deserialization(e.to_string())
+			})?;
+			events.push(record);
 		}
+		// TODO: Consider sorting by timestamp if order is not guaranteed by storage
+		Ok(events)
 	}
 
 	async fn remove_event(&mut self, key: &StorageKey) -> DatabaseResult<bool> {
@@ -150,18 +145,17 @@ pub async fn get_events(
 	database: &Arc<Database>,
 	key: &StorageKey,
 ) -> DatabaseResult<Vec<EventRecord>> {
-	// Open a read transaction and the events table
 	let read_txn = database.begin_read()?;
-	let events_table = read_txn.open_table(super::tables::EVENTS_TABLE)?;
+	let events_log = read_txn.open_multimap_table(super::tables::EVENTS_LOG_TABLE)?;
 	let key_bytes = key.to_bytes();
-
-	// Attempt to retrieve the value for the given key
-	if let Some(value) = events_table.get(key_bytes.as_slice())? {
-		let record = EventStorageImpl::deserialize_record(value.value())?;
-		// Note: This implementation only supports one event per key (last write wins).
-		// TODO: Support multiple events per path (append-only/event log semantics) if needed.
-		Ok(vec![record])
-	} else {
-		Ok(Vec::new())
+	let multimap = events_log.get(key_bytes.as_slice())?;
+	let mut events = Vec::new();
+	for item in multimap {
+		let value = item?;
+		let record = bincode::deserialize::<EventRecord>(value.value())
+			.map_err(|e| crate::database::error::DatabaseError::Deserialization(e.to_string()))?;
+		events.push(record);
 	}
+	// TODO: Consider sorting by timestamp if order is not guaranteed by storage
+	Ok(events)
 }
