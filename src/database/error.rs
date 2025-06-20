@@ -11,7 +11,10 @@ pub enum DatabaseError {
 	ConnectionFailed(String),
 
 	#[error("Serialization error: {0}")]
-	SerializationError(#[from] bincode::Error),
+	Serialization(String),
+
+	#[error("Deserialization error: {0}")]
+	Deserialization(String),
 
 	#[error("IO error: {0}")]
 	IoError(#[from] std::io::Error),
@@ -78,6 +81,12 @@ impl DatabaseError {
 			self,
 			DatabaseError::SizeLimitExceeded | DatabaseError::ReadOnlyError
 		)
+	}
+}
+
+impl From<redb::DatabaseError> for DatabaseError {
+	fn from(e: redb::DatabaseError) -> Self {
+		DatabaseError::RedbError(redb::Error::from(e))
 	}
 }
 

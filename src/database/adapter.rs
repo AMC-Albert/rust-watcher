@@ -106,20 +106,6 @@ impl DatabaseAdapter {
 		storage.get_metadata(path).await
 	}
 
-	/// Find events by size range (useful for move detection)
-	pub async fn find_events_by_size(
-		&self,
-		min_size: u64,
-		max_size: u64,
-	) -> DatabaseResult<Vec<EventRecord>> {
-		if !self.enabled {
-			return Ok(Vec::new());
-		}
-
-		let mut storage = self.storage.write().await;
-		storage.find_events_by_size(min_size, max_size).await
-	}
-
 	/// Find events in a time range (useful for correlating events)
 	pub async fn find_events_by_time_range(
 		&self,
@@ -225,14 +211,6 @@ impl DatabaseStorage for NoOpStorage {
 
 	async fn get_metadata(&mut self, _path: &Path) -> DatabaseResult<Option<MetadataRecord>> {
 		Ok(None)
-	}
-
-	async fn find_events_by_size(
-		&mut self,
-		_min_size: u64,
-		_max_size: u64,
-	) -> DatabaseResult<Vec<EventRecord>> {
-		Ok(Vec::new())
 	}
 
 	async fn find_events_by_time_range(
@@ -426,10 +404,6 @@ mod tests {
 			let event = create_test_event(EventType::Create, path, Some(1000 + i * 100));
 			adapter.store_event(&event).await.unwrap();
 		}
-
-		// Query by size range
-		let events = adapter.find_events_by_size(1100, 1300).await.unwrap();
-		assert_eq!(events.len(), 3); // Files with sizes 1100, 1200, 1300
 
 		// Query by time range
 		let now = Utc::now();

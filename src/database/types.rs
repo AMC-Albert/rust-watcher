@@ -599,3 +599,10 @@ mod tests {
 		assert!(!node.needs_refresh(Duration::from_secs(3600)));
 	}
 }
+
+/// Key type for scoping cache entries to a specific watch
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct WatchScopedKey {
+	pub watch_id: Uuid,
+	pub path_hash: u64,
+}
