@@ -107,6 +107,11 @@ pub const EVENT_COUNT_KEY: &[u8] = b"event_count";
 // This key is used to store the persistent event count for O(1) stats queries.
 // It must be updated transactionally on every event insert/delete.
 
+/// Key for metadata count in STATS_TABLE (u64, little-endian bytes)
+pub const METADATA_COUNT_KEY: &[u8] = b"metadata_count";
+// This key is used to store the persistent metadata count for O(1) stats queries.
+// It must be updated transactionally on every metadata insert/delete.
+
 /// Initialize all database tables
 pub async fn initialize_tables(database: &Arc<Database>) -> DatabaseResult<()> {
 	let write_txn = database.begin_write()?;

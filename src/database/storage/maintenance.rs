@@ -4,7 +4,7 @@
 //! and health monitoring operations.
 
 use crate::database::{config::DatabaseConfig, error::DatabaseResult, types::DatabaseStats};
-use redb::{Database, ReadableMultimapTable};
+use redb::{Database, ReadableMultimapTable, ReadableTable};
 use std::sync::Arc;
 
 /// Trait for maintenance and statistics operations
@@ -134,7 +134,7 @@ pub async fn cleanup_expired_events(
 ///
 /// TODO: Replace with a scalable, indexed, and robust stats subsystem. See README and design docs.
 pub async fn get_database_stats(database: &Arc<Database>) -> DatabaseResult<DatabaseStats> {
-	// Use persistent event counter for O(1) stats queries. Repair if missing or out-of-sync.
+	// Use persistent event and metadata counters for O(1) stats queries. Repair if missing or out-of-sync.
 	let read_txn = database.begin_read()?;
 	let stats_table = read_txn.open_table(crate::database::storage::tables::STATS_TABLE)?;
 	let count_bytes = stats_table.get(crate::database::storage::tables::EVENT_COUNT_KEY)?;
@@ -172,11 +172,47 @@ pub async fn get_database_stats(database: &Arc<Database>) -> DatabaseResult<Data
 			total_events = 0;
 		}
 	}
-	// TODO: Count metadata and other stats if needed. For now, only event count is accurate.
+
+	// Persistent metadata counter
+	let metadata_count_bytes =
+		stats_table.get(crate::database::storage::tables::METADATA_COUNT_KEY)?;
+	let mut total_metadata = metadata_count_bytes
+		.map(|v| u64::from_le_bytes(v.value().try_into().unwrap_or([0u8; 8])))
+		.unwrap_or(u64::MAX); // Use u64::MAX as a sentinel for missing/corrupt
+
+	if total_metadata == u64::MAX {
+		// Counter missing/corrupt: rescan and repair
+		if let Ok(metadata_table) =
+			read_txn.open_table(crate::database::storage::tables::METADATA_TABLE)
+		{
+			let mut count = 0u64;
+			let iter = metadata_table.iter();
+			if let Ok(iter) = iter {
+				for item in iter.flatten() {
+					let (_key, _value) = item;
+					count += 1;
+				}
+			}
+			// Write repaired counter
+			let write_txn = database.begin_write()?;
+			let mut stats_table =
+				write_txn.open_table(crate::database::storage::tables::STATS_TABLE)?;
+			stats_table.insert(
+				crate::database::storage::tables::METADATA_COUNT_KEY,
+				&count.to_le_bytes()[..],
+			)?;
+			drop(stats_table);
+			write_txn.commit()?;
+			total_metadata = count;
+		} else {
+			total_metadata = 0;
+		}
+	}
+
 	Ok(crate::database::types::DatabaseStats {
 		total_events,
-		total_metadata: 0, // Not implemented
-		database_size: 0,  // Not implemented
+		total_metadata,
+		database_size: 0, // Not implemented
 		read_operations: 0,
 		write_operations: 0,
 		delete_operations: 0,

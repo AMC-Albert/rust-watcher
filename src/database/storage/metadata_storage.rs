@@ -68,11 +68,22 @@ impl MetadataStorage for MetadataStorageImpl {
 		let write_txn = self.database.begin_write()?;
 		{
 			let mut metadata_table = write_txn.open_table(super::tables::METADATA_TABLE)?;
+			let mut stats_table = write_txn.open_table(super::tables::STATS_TABLE)?;
 			let path_hash = Self::path_hash(&record.path);
 			let key_bytes = path_hash.to_le_bytes();
 			let record_bytes = Self::serialize_record(record)?;
 
+			let existed = metadata_table.get(key_bytes.as_slice())?.is_some();
 			metadata_table.insert(key_bytes.as_slice(), record_bytes.as_slice())?;
+			// Only increment if this is a new record
+			if !existed {
+				let count_bytes = stats_table.get(super::tables::METADATA_COUNT_KEY)?;
+				let mut count = count_bytes
+					.map(|v| u64::from_le_bytes(v.value().try_into().unwrap_or([0u8; 8])))
+					.unwrap_or(0);
+				count = count.saturating_add(1);
+				stats_table.insert(super::tables::METADATA_COUNT_KEY, &count.to_le_bytes()[..])?;
+			}
 		}
 		write_txn.commit()?;
 		Ok(())
@@ -97,12 +108,19 @@ impl MetadataStorage for MetadataStorageImpl {
 		let write_txn = self.database.begin_write()?;
 		let removed = {
 			let mut metadata_table = write_txn.open_table(super::tables::METADATA_TABLE)?;
+			let mut stats_table = write_txn.open_table(super::tables::STATS_TABLE)?;
 			let path_hash = Self::path_hash(path);
 			let key_bytes = path_hash.to_le_bytes();
 
 			let existed = metadata_table.get(key_bytes.as_slice())?.is_some();
 			if existed {
 				metadata_table.remove(key_bytes.as_slice())?;
+				let count_bytes = stats_table.get(super::tables::METADATA_COUNT_KEY)?;
+				let mut count = count_bytes
+					.map(|v| u64::from_le_bytes(v.value().try_into().unwrap_or([0u8; 8])))
+					.unwrap_or(0);
+				count = count.saturating_sub(1);
+				stats_table.insert(super::tables::METADATA_COUNT_KEY, &count.to_le_bytes()[..])?;
 			}
 			existed
 		};
