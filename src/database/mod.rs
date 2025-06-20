@@ -4,11 +4,13 @@
 //! using the `redb` embedded database. It's designed to handle directories
 //! with hundreds of thousands or millions of files without memory exhaustion.
 
+pub mod adapter;
 pub mod config;
 pub mod error;
 pub mod storage;
 pub mod types;
 
+pub use adapter::DatabaseAdapter;
 pub use config::DatabaseConfig;
 pub use error::{DatabaseError, DatabaseResult};
 pub use storage::{DatabaseStorage, RedbStorage};

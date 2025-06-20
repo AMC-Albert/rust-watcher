@@ -14,6 +14,7 @@ async fn test_watcher_creation() {
 		recursive: true,
 		move_detector_config: None,
 		error_recovery_config: None,
+		database_config: None,
 	};
 
 	// Test that watcher can be created without panicking
@@ -35,6 +36,7 @@ async fn test_watcher_basic_file_detection() {
 		recursive: true,
 		move_detector_config: None,
 		error_recovery_config: None,
+		database_config: None,
 	};
 
 	let (handle, mut receiver) = start(config).unwrap();
@@ -91,6 +93,7 @@ async fn test_watcher_config_validation() {
 		recursive: true,
 		move_detector_config: None,
 		error_recovery_config: None,
+		database_config: None,
 	};
 
 	let result = start(valid_config);

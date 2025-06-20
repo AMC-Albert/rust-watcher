@@ -23,6 +23,7 @@ async fn main() -> anyhow::Result<()> {
 		recursive: true,
 		move_detector_config: Some(move_config),
 		error_recovery_config: None,
+		database_config: None,
 	};
 
 	info!("Monitor started. Press Ctrl+C to stop.");

@@ -1,3 +1,4 @@
+use crate::database::{DatabaseAdapter, DatabaseConfig};
 use crate::error::{ErrorRecoveryConfig, Result, WatcherError};
 use crate::events::{EventType, FileSystemEvent};
 use crate::move_detection::{MoveDetector, MoveDetectorConfig};
@@ -14,6 +15,7 @@ pub struct WatcherConfig {
 	pub recursive: bool,
 	pub move_detector_config: Option<MoveDetectorConfig>,
 	pub error_recovery_config: Option<ErrorRecoveryConfig>,
+	pub database_config: Option<DatabaseConfig>,
 }
 
 impl WatcherConfig {
@@ -69,10 +71,15 @@ impl WatcherConfig {
 
 		Ok(())
 	}
-
 	/// Create a configuration with error recovery
 	pub fn with_error_recovery(mut self, config: ErrorRecoveryConfig) -> Self {
 		self.error_recovery_config = Some(config);
+		self
+	}
+
+	/// Create a configuration with database support
+	pub fn with_database(mut self, config: DatabaseConfig) -> Self {
+		self.database_config = Some(config);
 		self
 	}
 }
@@ -111,6 +118,25 @@ async fn run_watcher(
 	event_tx: mpsc::Sender<FileSystemEvent>,
 	mut stop_rx: oneshot::Receiver<()>,
 ) {
+	// Initialize database adapter if configured
+	let database = if let Some(db_config) = config.database_config.clone() {
+		match DatabaseAdapter::new(db_config).await {
+			Ok(adapter) => {
+				info!("Database adapter initialized successfully");
+				adapter
+			}
+			Err(e) => {
+				warn!(
+					"Failed to initialize database, continuing without persistence: {}",
+					e
+				);
+				DatabaseAdapter::disabled()
+			}
+		}
+	} else {
+		DatabaseAdapter::disabled()
+	};
+
 	// Initialize retry manager
 	let retry_config = config.error_recovery_config.unwrap_or_default();
 	let retry_manager = RetryManager::new(retry_config); // Initialize watcher with retry logic
@@ -159,7 +185,7 @@ async fn run_watcher(
 				break;
 			}
 			Some(event) = raw_event_rx.recv() => {				// Process event with direct error handling for now
-				if let Err(e) = process_single_event(event.clone(), &mut move_detector, &event_tx).await {
+				if let Err(e) = process_single_event(event.clone(), &mut move_detector, &database, &event_tx).await {
 					warn!("Failed to process filesystem event: {} - Event: {:?}", e, event);
 					// Continue processing other events even if one fails
 				}
@@ -259,6 +285,7 @@ async fn setup_watcher_callback(
 async fn process_single_event(
 	event: notify::Event,
 	move_detector: &mut MoveDetector,
+	database: &DatabaseAdapter,
 	event_tx: &mpsc::Sender<FileSystemEvent>,
 ) -> Result<()> {
 	debug!(
@@ -272,6 +299,20 @@ async fn process_single_event(
 			"Converted to filesystem event: type={:?}, path={:?}, is_dir={}, size={:?}",
 			fs_event.event_type, fs_event.path, fs_event.is_directory, fs_event.size
 		);
+
+		// Store event in database if enabled
+		if let Err(e) = database.store_event(&fs_event).await {
+			warn!("Failed to store event in database: {}", e);
+			// Continue processing even if database storage fails
+		}
+		// Store metadata if this is a create/write event
+		if matches!(fs_event.event_type, EventType::Create | EventType::Write) {
+			if let Ok(metadata) = std::fs::metadata(&fs_event.path) {
+				if let Err(e) = database.store_metadata(&fs_event.path, &metadata).await {
+					warn!("Failed to store metadata in database: {}", e);
+				}
+			}
+		}
 
 		let processed_events = move_detector.process_event(fs_event).await;
 
@@ -390,6 +431,7 @@ mod tests {
 			recursive: true,
 			move_detector_config: None,
 			error_recovery_config: None,
+			database_config: None,
 		};
 
 		assert_eq!(config.path, temp_dir.path());
@@ -397,7 +439,6 @@ mod tests {
 		assert!(config.move_detector_config.is_none());
 		assert!(config.error_recovery_config.is_none());
 	}
-
 	#[test]
 	fn test_watcher_config_with_move_detector() {
 		let temp_dir = TempDir::new().unwrap();
@@ -407,12 +448,12 @@ mod tests {
 			recursive: false,
 			move_detector_config: Some(move_config),
 			error_recovery_config: None,
+			database_config: None,
 		};
 
 		assert!(!config.recursive);
 		assert!(config.move_detector_config.is_some());
 	}
-
 	#[test]
 	fn test_start_with_invalid_path() {
 		let config = WatcherConfig {
@@ -420,6 +461,7 @@ mod tests {
 			recursive: true,
 			move_detector_config: None,
 			error_recovery_config: None,
+			database_config: None,
 		};
 
 		let result = start(config);
