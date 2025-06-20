@@ -151,7 +151,7 @@ pub struct FilesystemNode {
 }
 
 /// Type of filesystem node
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum NodeType {
 	File {
 		size: u64,

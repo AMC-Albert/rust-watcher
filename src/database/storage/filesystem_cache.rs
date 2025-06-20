@@ -3,23 +3,17 @@
 //! This module handles storage and retrieval of filesystem cache data,
 //! including nodes, hierarchy relationships, and shared node management.
 
+use crate::database::storage::tables::{
+	MULTI_WATCH_FS_CACHE, MULTI_WATCH_HIERARCHY, PATH_TO_WATCHES, SHARED_NODES, WATCH_REGISTRY,
+};
 use crate::database::{
 	error::DatabaseResult,
 	types::{calculate_path_hash, FilesystemNode, SharedNodeInfo, WatchMetadata, WatchScopedKey},
 };
-use redb::{Database, MultimapTableDefinition, ReadableTable, TableDefinition};
+use redb::{Database, ReadableTable};
 use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
-
-// Filesystem cache table definitions
-const FS_CACHE_NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("fs_cache_nodes");
-const FS_HIERARCHY: MultimapTableDefinition<&[u8], &[u8]> =
-	MultimapTableDefinition::new("fs_hierarchy");
-const SHARED_NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("shared_nodes");
-const WATCH_REGISTRY: TableDefinition<&[u8], &[u8]> = TableDefinition::new("watch_registry");
-const PATH_TO_WATCHES: MultimapTableDefinition<&[u8], &[u8]> =
-	MultimapTableDefinition::new("path_to_watches");
 
 /// Trait for filesystem cache storage operations
 #[async_trait::async_trait]
@@ -131,9 +125,9 @@ impl RedbFilesystemCache {
 	pub async fn initialize(&mut self) -> DatabaseResult<()> {
 		let write_txn = self.database.begin_write()?;
 		{
-			// Create tables if they don't exist
-			let _fs_cache_table = write_txn.open_table(FS_CACHE_NODES)?;
-			let _hierarchy_table = write_txn.open_multimap_table(FS_HIERARCHY)?;
+			// Use shared table constants from tables.rs
+			let _fs_cache_table = write_txn.open_table(MULTI_WATCH_FS_CACHE)?;
+			let _hierarchy_table = write_txn.open_multimap_table(MULTI_WATCH_HIERARCHY)?;
 			let _shared_table = write_txn.open_table(SHARED_NODES)?;
 			let _watch_registry = write_txn.open_table(WATCH_REGISTRY)?;
 			let _path_watches = write_txn.open_multimap_table(PATH_TO_WATCHES)?;
@@ -189,14 +183,14 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		let write_txn = self.database.begin_write()?;
 		{
 			// Store the node
-			let mut fs_cache_table = write_txn.open_table(FS_CACHE_NODES)?;
+			let mut fs_cache_table = write_txn.open_table(MULTI_WATCH_FS_CACHE)?;
 			fs_cache_table.insert(key_bytes.as_slice(), node_bytes.as_slice())?;
 
 			// Update hierarchy relationships
 			if let Some(parent_hash) = node.computed.parent_hash {
 				let parent_key = Self::create_scoped_key(watch_id, parent_hash);
 				let parent_key_bytes = Self::key_to_bytes(&parent_key);
-				let mut hierarchy_table = write_txn.open_multimap_table(FS_HIERARCHY)?;
+				let mut hierarchy_table = write_txn.open_multimap_table(MULTI_WATCH_HIERARCHY)?;
 				hierarchy_table.insert(parent_key_bytes.as_slice(), key_bytes.as_slice())?;
 			}
 
@@ -220,7 +214,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		let key_bytes = Self::key_to_bytes(&scoped_key);
 
 		let read_txn = self.database.begin_read()?;
-		let fs_cache_table = read_txn.open_table(FS_CACHE_NODES)?;
+		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
 
 		if let Some(node_bytes) = fs_cache_table.get(key_bytes.as_slice())? {
 			let node: FilesystemNode = Self::deserialize(node_bytes.value())?;
@@ -240,8 +234,8 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		let parent_key_bytes = Self::key_to_bytes(&parent_key);
 
 		let read_txn = self.database.begin_read()?;
-		let hierarchy_table = read_txn.open_multimap_table(FS_HIERARCHY)?;
-		let fs_cache_table = read_txn.open_table(FS_CACHE_NODES)?;
+		let hierarchy_table = read_txn.open_multimap_table(MULTI_WATCH_HIERARCHY)?;
+		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
 
 		let mut nodes = Vec::new();
 
@@ -348,14 +342,15 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 				let node_bytes = Self::serialize(node)?;
 
 				// Store the node
-				let mut fs_cache_table = write_txn.open_table(FS_CACHE_NODES)?;
+				let mut fs_cache_table = write_txn.open_table(MULTI_WATCH_FS_CACHE)?;
 				fs_cache_table.insert(key_bytes.as_slice(), node_bytes.as_slice())?;
 
 				// Update hierarchy relationships
 				if let Some(parent_hash) = node.computed.parent_hash {
 					let parent_key = Self::create_scoped_key(watch_id, parent_hash);
 					let parent_key_bytes = Self::key_to_bytes(&parent_key);
-					let mut hierarchy_table = write_txn.open_multimap_table(FS_HIERARCHY)?;
+					let mut hierarchy_table =
+						write_txn.open_multimap_table(MULTI_WATCH_HIERARCHY)?;
 					hierarchy_table.insert(parent_key_bytes.as_slice(), key_bytes.as_slice())?;
 				}
 
@@ -380,7 +375,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		// TODO: Implement efficient prefix indexing for better performance
 
 		let read_txn = self.database.begin_read()?;
-		let fs_cache_table = read_txn.open_table(FS_CACHE_NODES)?;
+		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
 
 		let mut matching_nodes = Vec::new();
 		let prefix_str = prefix.to_string_lossy();
@@ -404,7 +399,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 
 	async fn get_cache_stats(&mut self, watch_id: &Uuid) -> DatabaseResult<CacheStats> {
 		let read_txn = self.database.begin_read()?;
-		let fs_cache_table = read_txn.open_table(FS_CACHE_NODES)?;
+		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
 
 		let mut stats = CacheStats::default();
 		let current_time = chrono::Utc::now();
@@ -445,7 +440,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		max_age_seconds: u64,
 	) -> DatabaseResult<usize> {
 		let read_txn = self.database.begin_read()?;
-		let fs_cache_table = read_txn.open_table(FS_CACHE_NODES)?;
+		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
 
 		let current_time = chrono::Utc::now();
 		let mut stale_keys = Vec::new();
@@ -472,7 +467,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		if !stale_keys.is_empty() {
 			let write_txn = self.database.begin_write()?;
 			{
-				let mut fs_cache_table = write_txn.open_table(FS_CACHE_NODES)?;
+				let mut fs_cache_table = write_txn.open_table(MULTI_WATCH_FS_CACHE)?;
 				for key in &stale_keys {
 					fs_cache_table.remove(key.as_slice())?;
 				}
@@ -484,183 +479,206 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	}
 }
 
+// --- Serialization Format Notes ---
+// FilesystemNode and related types use bincode for serialization.
+// bincode is not forward/backward compatible by default; schema changes can break deserialization.
+// Any change to FilesystemNode or its fields must be accompanied by a migration or versioning plan.
+// Test round-trip serialization to catch schema drift early.
+
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use redb::Database;
-	// use std::path::PathBuf;
+	use crate::database::types::FilesystemNode;
+	use std::fs;
 	use tempfile::tempdir;
 
-	async fn create_test_cache() -> DatabaseResult<RedbFilesystemCache> {
-		let temp_dir = tempdir().unwrap();
-		let db_path = temp_dir.path().join("test_cache.db");
-		let database = Database::create(&db_path)?;
-		let database = Arc::new(database);
+	#[test]
+	fn test_filesystem_node_roundtrip() {
+		// Create a temp file to get real metadata
+		let dir = tempdir().unwrap();
+		let file_path = dir.path().join("testfile.txt");
+		fs::write(&file_path, b"hello world").unwrap();
+		let metadata = fs::metadata(&file_path).unwrap();
+		let node = FilesystemNode::new(file_path.clone(), &metadata);
 
-		let mut cache = RedbFilesystemCache::new(database);
-		cache.initialize().await?;
-		Ok(cache)
+		let bytes = RedbFilesystemCache::serialize(&node).expect("serialize");
+		let decoded: FilesystemNode =
+			RedbFilesystemCache::deserialize(&bytes).expect("deserialize");
+
+		// Path equality is strict; on Windows, normalization may be needed for robust tests
+		assert_eq!(node.path, decoded.path);
+		assert_eq!(node.node_type, decoded.node_type);
+		assert_eq!(node.metadata.permissions, decoded.metadata.permissions);
+		assert_eq!(node.computed.path_hash, decoded.computed.path_hash);
 	}
 
-	#[tokio::test]
-	async fn test_store_and_retrieve_node() {
-		let _cache = create_test_cache().await.unwrap();
-		let _watch_id = Uuid::new_v4();
-		// Test is a stub; see above for TODO.
-		return;
-
-		// Create a test node
-		// TODO: Implement FilesystemNode::from_path or use FilesystemNode::new with real metadata in tests
-		// let node = FilesystemNode::from_path(PathBuf::from("/test/file.txt")).unwrap();
-		// The FilesystemNode::new signature does not match; test is a stub until a proper constructor is available.
-		// let node = FilesystemNode::new(
-		//     &PathBuf::from("/test/file.txt"),
-		//     None,
-		//     None,
-		//     None,
-		//     None,
-		//     None,
-		// );
-		// TODO: Restore this test when FilesystemNode::new or from_path is implemented for testability.
-		// return;
-
-		// Store the node
-		// cache.store_filesystem_node(&watch_id, &node).await.unwrap();
-
-		// Retrieve the node
-		// let retrieved = cache
-		// 	.get_filesystem_node(&watch_id, &node.path)
-		// 	.await
-		// 	.unwrap();
-		// assert!(retrieved.is_some());
-		// assert_eq!(retrieved.unwrap().path, node.path);
+	#[test]
+	fn test_filesystem_node_serialization_failure() {
+		// Corrupt data should fail to deserialize
+		let bad_bytes = vec![0, 1, 2, 3, 4, 5];
+		let result: Result<FilesystemNode, _> = RedbFilesystemCache::deserialize(&bad_bytes);
+		assert!(result.is_err());
 	}
 
-	#[tokio::test]
-	async fn test_watch_metadata() {
-		let _cache = create_test_cache().await.unwrap();
-		let _watch_id = Uuid::new_v4();
-		// Test is a stub; see above for TODO.
-		return;
+	// #[tokio::test]
+	// async fn test_store_and_retrieve_node() {
+	//     let _cache = create_test_cache().await.unwrap();
+	//     let _watch_id = Uuid::new_v4();
+	//     // Test is a stub; see above for TODO.
+	//     return;
 
-		// let metadata = WatchMetadata {
-		//     watch_id,
-		//     root_path: PathBuf::from("/test"),
-		//     created_at: chrono::Utc::now(),
-		//     last_scan: None,
-		//     node_count: 0,
-		//     is_active: true,
-		//     config_hash: 12345,
-		// };
-		// cache.store_watch_metadata(&metadata).await.unwrap();
-		// let retrieved = cache.get_watch_metadata(&watch_id).await.unwrap();
-		// assert!(retrieved.is_some());
-		// assert_eq!(retrieved.unwrap().watch_id, watch_id);
-		// TODO: Restore this test when FilesystemNode::new or from_path is implemented for testability.
-		// return;
-	}
+	//     // Create a test node
+	//     // TODO: Implement FilesystemNode::from_path or use FilesystemNode::new with real metadata in tests
+	//     // let node = FilesystemNode::from_path(PathBuf::from("/test/file.txt")).unwrap();
+	//     // The FilesystemNode::new signature does not match; test is a stub until a proper constructor is available.
+	//     // let node = FilesystemNode::new(
+	//     //     &PathBuf::from("/test/file.txt"),
+	//     //     None,
+	//     //     None,
+	//     //     None,
+	//     //     None,
+	//     //     None,
+	//     // );
+	//     // TODO: Restore this test when FilesystemNode::new or from_path is implemented for testability.
+	//     // return;
 
-	#[tokio::test]
-	async fn test_batch_operations() {
-		let _cache = create_test_cache().await.unwrap();
-		let _watch_id = Uuid::new_v4();
-		// Test is a stub; see above for TODO.
-		return;
+	//     // Store the node
+	//     // cache.store_filesystem_node(&watch_id, &node).await.unwrap();
 
-		// Create test nodes
-		// TODO: Implement FilesystemNode::from_path or use FilesystemNode::new with real metadata in tests
-		// let nodes = vec![
-		//     FilesystemNode::from_path(PathBuf::from("/test/file1.txt")).unwrap(),
-		//     FilesystemNode::from_path(PathBuf::from("/test/file2.txt")).unwrap(),
-		//     FilesystemNode::from_path(PathBuf::from("/test/dir")).unwrap(),
-		// ];
-		// let nodes = vec![
-		//     FilesystemNode::new(
-		//         &PathBuf::from("/test/file1.txt"),
-		//         None,
-		//         None,
-		//         None,
-		//         None,
-		//         None,
-		//     ),
-		//     FilesystemNode::new(
-		//         &PathBuf::from("/test/file2.txt"),
-		//         None,
-		//         None,
-		//         None,
-		//         None,
-		//         None,
-		//     ),
-		//     FilesystemNode::new(
-		//         &PathBuf::from("/test/dir"),
-		//         None,
-		//         None,
-		//         None,
-		//         None,
-		//         None,
-		//     ),
-		// ];
-		// TODO: Restore this test when FilesystemNode::new or from_path is implemented for testability.
-		// return;
+	//     // Retrieve the node
+	//     // let retrieved = cache
+	//     // 	.get_filesystem_node(&watch_id, &node.path)
+	//     // 	.await
+	//     // 	.unwrap();
+	//     // assert!(retrieved.is_some());
+	//     // assert_eq!(retrieved.unwrap().path, node.path);
+	// }
 
-		// Batch store nodes
-		// cache
-		// 	.batch_store_filesystem_nodes(&watch_id, &nodes)
-		// 	.await
-		// 	.unwrap();
+	// #[tokio::test]
+	// async fn test_watch_metadata() {
+	//     let _cache = create_test_cache().await.unwrap();
+	//     let _watch_id = Uuid::new_v4();
+	//     // Test is a stub; see above for TODO.
+	//     return;
 
-		// Verify all nodes were stored
-		// for node in &nodes {
-		// 	let retrieved = cache
-		// 		.get_filesystem_node(&watch_id, &node.path)
-		// 		.await
-		// 		.unwrap();
-		// 	assert!(retrieved.is_some());
-		// }
-	}
+	//     // let metadata = WatchMetadata {
+	//     //     watch_id,
+	//     //     root_path: PathBuf::from("/test"),
+	//     //     created_at: chrono::Utc::now(),
+	//     //     last_scan: None,
+	//     //     node_count: 0,
+	//     //     is_active: true,
+	//     //     config_hash: 12345,
+	//     // };
+	//     // cache.store_watch_metadata(&metadata).await.unwrap();
+	//     // let retrieved = cache.get_watch_metadata(&watch_id).await.unwrap();
+	//     // assert!(retrieved.is_some());
+	//     // assert_eq!(retrieved.unwrap().watch_id, watch_id);
+	//     // TODO: Restore this test when FilesystemNode::new or from_path is implemented for testability.
+	//     // return;
+	// }
 
-	#[tokio::test]
-	async fn test_cache_stats() {
-		let _cache = create_test_cache().await.unwrap();
-		let _watch_id = Uuid::new_v4();
-		// Test is a stub; see above for TODO.
-		return;
+	// #[tokio::test]
+	// async fn test_batch_operations() {
+	//     let _cache = create_test_cache().await.unwrap();
+	//     let _watch_id = Uuid::new_v4();
+	//     // Test is a stub; see above for TODO.
+	//     return;
 
-		// Store some test nodes
-		// TODO: Implement FilesystemNode::from_path or use FilesystemNode::new with real metadata in tests
-		// let nodes = vec![
-		//     FilesystemNode::from_path(PathBuf::from("/test/file1.txt")).unwrap(),
-		//     FilesystemNode::from_path(PathBuf::from("/test/dir")).unwrap(),
-		// ];
-		// let nodes = vec![
-		//     FilesystemNode::new(
-		//         &PathBuf::from("/test/file1.txt"),
-		//         None,
-		//         None,
-		//         None,
-		//         None,
-		//         None,
-		//     ),
-		//     FilesystemNode::new(
-		//         &PathBuf::from("/test/dir"),
-		//         None,
-		//         None,
-		//         None,
-		//         None,
-		//         None,
-		//     ),
-		// ];
-		// TODO: Restore this test when FilesystemNode::new or from_path is implemented for testability.
-		// return;
+	//     // Create test nodes
+	//     // TODO: Implement FilesystemNode::from_path or use FilesystemNode::new with real metadata in tests
+	//     // let nodes = vec![
+	//     //     FilesystemNode::from_path(PathBuf::from("/test/file1.txt")).unwrap(),
+	//     //     FilesystemNode::from_path(PathBuf::from("/test/file2.txt")).unwrap(),
+	//     //     FilesystemNode::from_path(PathBuf::from("/test/dir")).unwrap(),
+	//     // ];
+	//     // let nodes = vec![
+	//     //     FilesystemNode::new(
+	//     //         &PathBuf::from("/test/file1.txt"),
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //     ),
+	//     //     FilesystemNode::new(
+	//     //         &PathBuf::from("/test/file2.txt"),
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //     ),
+	//     //     FilesystemNode::new(
+	//     //         &PathBuf::from("/test/dir"),
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //     ),
+	//     // ];
+	//     // TODO: Restore this test when FilesystemNode::new or from_path is implemented for testability.
+	//     // return;
 
-		// cache
-		// 	.batch_store_filesystem_nodes(&watch_id, &nodes)
-		// 	.await
-		// 	.unwrap();
+	//     // Batch store nodes
+	//     // cache
+	//     // 	.batch_store_filesystem_nodes(&watch_id, &nodes)
+	//     // 	.await
+	//     // 	.unwrap();
 
-		// Get stats
-		// let stats = cache.get_cache_stats(&watch_id).await.unwrap();
-		// assert_eq!(stats.total_nodes, 2);
-		// assert!(stats.cache_size_bytes > 0);
-	}
+	//     // Verify all nodes were stored
+	//     // for node in &nodes {
+	//     // 	let retrieved = cache
+	//     // 		.get_filesystem_node(&watch_id, &node.path)
+	//     // 		.await
+	//     // 		.unwrap();
+	//     // 	assert!(retrieved.is_some());
+	//     // }
+	// }
+
+	// #[tokio::test]
+	// async fn test_cache_stats() {
+	//     let _cache = create_test_cache().await.unwrap();
+	//     let _watch_id = Uuid::new_v4();
+	//     // Test is a stub; see above for TODO.
+	//     return;
+
+	//     // Store some test nodes
+	//     // TODO: Implement FilesystemNode::from_path or use FilesystemNode::new with real metadata in tests
+	//     // let nodes = vec![
+	//     //     FilesystemNode::from_path(PathBuf::from("/test/file1.txt")).unwrap(),
+	//     //     FilesystemNode::from_path(PathBuf::from("/test/dir")).unwrap(),
+	//     // ];
+	//     // let nodes = vec![
+	//     //     FilesystemNode::new(
+	//     //         &PathBuf::from("/test/file1.txt"),
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //     ),
+	//     //     FilesystemNode::new(
+	//     //         &PathBuf::from("/test/dir"),
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //         None,
+	//     //     ),
+	//     // ];
+	//     // TODO: Restore this test when FilesystemNode::new or from_path is implemented for testability.
+	//     // return;
+
+	//     // cache
+	//     // 	.batch_store_filesystem_nodes(&watch_id, &nodes)
+	//     // 	.await
+	//     // 	.unwrap();
+
+	//     // Get stats
+	//     // let stats = cache.get_cache_stats(&watch_id).await.unwrap();
+	//     // assert_eq!(stats.total_nodes, 2);
+	//     // assert!(stats.cache_size_bytes > 0);
+	// }
 }

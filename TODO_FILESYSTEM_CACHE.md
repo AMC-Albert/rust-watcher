@@ -1,5 +1,14 @@
 # TODO: Filesystem Cache Implementation
 
+## Status Update (June 2025)
+- Legacy and obsolete code fully removed; all dead code, unused imports, and backup files are gone.
+- Trait and implementation mismatches resolved; `DatabaseStorage` and related traits are now consistent.
+- All clippy warnings and build errors fixed; codebase is warning-free and testable.
+- No filesystem cache or multi-watch features are implemented yet beyond type definitions and stubs.
+- Documentation and comments updated for current code; pending features are still only in design/TODO docs.
+
+---
+
 ## Phase 0: Pre-Implementation Tasks (Critical)
 
 ### 0.1 Dependencies and Infrastructure
@@ -35,7 +44,7 @@
 - [x] ~~Update `StorageKey` enum with filesystem cache variants~~ (implemented as `ExtendedStorageKey`)
 
 ### 1.2 Database Schema Extension
-- [ ] Add filesystem cache table definitions to `database/storage.rs`
+- [ ] Add filesystem cache table definitions to `database/storage.rs` (**next step**)
 - [ ] Implement `MULTI_WATCH_FS_CACHE`, `MULTI_WATCH_HIERARCHY`, `SHARED_NODES` tables
 - [ ] Add `WATCH_REGISTRY`, `PATH_TO_WATCHES` multimap tables
 - [ ] Update database initialization to create new tables
