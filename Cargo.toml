@@ -25,6 +25,9 @@ thiserror = "1.0"
 twox-hash = "1.6" # Fast non-cryptographic hash for content matching
 log = "0.4.27"
 env_logger = "0.11.8"
+redb = "2.1" # Embedded database for large-scale event storage
+async-trait = "0.1" # Async trait support
+bincode = "1.3" # Binary serialization for database records
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.28" # For inode information on Unix-like systems
