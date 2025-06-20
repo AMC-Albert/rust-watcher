@@ -1,11 +1,12 @@
 pub mod database;
 mod error;
 mod events;
+mod filesystem_poc;
 mod move_detection;
 mod retry;
 mod watcher;
 
-pub use database::{DatabaseConfig, DatabaseStorage, RedbStorage};
+pub use database::{DatabaseAdapter, DatabaseConfig, DatabaseStorage, RedbStorage};
 pub use error::{ErrorRecoveryConfig, Result, WatcherError};
 pub use events::{EventType, FileSystemEvent, MoveDetectionMethod, MoveEvent};
 pub use move_detection::{MoveDetector, MoveDetectorConfig};

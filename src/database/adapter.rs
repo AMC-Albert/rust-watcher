@@ -6,7 +6,7 @@
 
 use crate::database::{
 	config::DatabaseConfig,
-	error::DatabaseResult,
+	error::{DatabaseError, DatabaseResult},
 	storage::{DatabaseStorage, RedbStorage},
 	types::{DatabaseStats, EventRecord, MetadataRecord, StorageKey},
 };
@@ -66,7 +66,7 @@ impl DatabaseAdapter {
 			return Ok(());
 		}
 
-		let record = EventRecord::from_event(event)?;
+		let record = EventRecord::from_event_with_retention(event, self.config.event_retention)?;
 		let mut storage = self.storage.write().await;
 		storage.store_event(&record).await
 	}
@@ -264,9 +264,19 @@ impl DatabaseStorage for NoOpStorage {
 impl EventRecord {
 	#[allow(clippy::result_large_err)]
 	pub fn from_event(event: &FileSystemEvent) -> DatabaseResult<Self> {
+		Self::from_event_with_retention(event, std::time::Duration::from_secs(24 * 60 * 60))
+	}
+	#[allow(clippy::result_large_err)]
+	pub fn from_event_with_retention(
+		event: &FileSystemEvent,
+		retention: std::time::Duration,
+	) -> DatabaseResult<Self> {
 		use uuid::Uuid;
 
-		let expires_at = Utc::now() + chrono::Duration::hours(24); // Default 24h expiration
+		let expires_at = Utc::now()
+			+ chrono::Duration::from_std(retention).map_err(|e| {
+				DatabaseError::InitializationFailed(format!("Invalid retention duration: {}", e))
+			})?;
 
 		Ok(EventRecord {
 			event_id: Uuid::new_v4(),
