@@ -2,12 +2,14 @@ pub mod database;
 mod error;
 mod events;
 mod move_detection;
+mod retry;
 mod watcher;
 
 pub use database::{DatabaseConfig, DatabaseStorage, RedbStorage};
-pub use error::{Result, WatcherError};
+pub use error::{ErrorRecoveryConfig, Result, WatcherError};
 pub use events::{EventType, FileSystemEvent, MoveDetectionMethod, MoveEvent};
 pub use move_detection::{MoveDetector, MoveDetectorConfig};
+pub use retry::{RetryConfigBuilder, RetryManager, RetryableOperation};
 pub use watcher::{start, WatcherConfig, WatcherHandle};
 
 #[cfg(test)]

@@ -12,6 +12,7 @@ async fn test_basic_file_creation_detection() {
 		path: temp_dir.path().to_path_buf(),
 		recursive: true,
 		move_detector_config: None,
+		error_recovery_config: None,
 	};
 
 	let (handle, mut event_receiver) = start(config).unwrap();
@@ -60,6 +61,7 @@ async fn test_file_move_detection_with_config() {
 		path: temp_dir.path().to_path_buf(),
 		recursive: true,
 		move_detector_config: Some(move_config),
+		error_recovery_config: None,
 	};
 
 	let (handle, mut event_receiver) = start(config).unwrap();
@@ -110,6 +112,7 @@ async fn test_recursive_directory_watching() {
 		path: temp_dir.path().to_path_buf(),
 		recursive: true,
 		move_detector_config: None,
+		error_recovery_config: None,
 	};
 
 	let (handle, mut event_receiver) = start(config).unwrap();
@@ -163,6 +166,7 @@ async fn test_non_recursive_directory_watching() {
 		path: temp_dir.path().to_path_buf(),
 		recursive: false, // Non-recursive
 		move_detector_config: None,
+		error_recovery_config: None,
 	};
 
 	let (handle, _event_receiver) = start(config).unwrap();

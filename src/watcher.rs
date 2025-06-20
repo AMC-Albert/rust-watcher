@@ -1,6 +1,7 @@
-use crate::error::{Result, WatcherError};
+use crate::error::{ErrorRecoveryConfig, Result, WatcherError};
 use crate::events::{EventType, FileSystemEvent};
 use crate::move_detection::{MoveDetector, MoveDetectorConfig};
+use crate::retry::RetryManager;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher as NotifyWatcher};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -12,6 +13,68 @@ pub struct WatcherConfig {
 	pub path: PathBuf,
 	pub recursive: bool,
 	pub move_detector_config: Option<MoveDetectorConfig>,
+	pub error_recovery_config: Option<ErrorRecoveryConfig>,
+}
+
+impl WatcherConfig {
+	/// Validate the watcher configuration
+	pub fn validate(&self) -> Result<()> {
+		// Check if path exists
+		if !self.path.exists() {
+			return Err(WatcherError::InvalidPath {
+				path: self.path.to_string_lossy().to_string(),
+			});
+		}
+
+		// Check if path is readable
+		match std::fs::metadata(&self.path) {
+			Ok(metadata) => {
+				if !metadata.is_dir() && !metadata.is_file() {
+					return Err(WatcherError::ConfigurationError {
+						parameter: "path".to_string(),
+						reason: "Path is neither a file nor a directory".to_string(),
+						expected: "directory or file".to_string(),
+						actual: format!("{:?}", metadata.file_type()),
+					});
+				}
+			}
+			Err(io_err) => match io_err.kind() {
+				std::io::ErrorKind::PermissionDenied => {
+					return Err(WatcherError::from_permission_denied(
+						"read metadata",
+						&self.path.to_string_lossy(),
+						io_err,
+					));
+				}
+				_ => {
+					return Err(WatcherError::filesystem_error(
+						"read metadata",
+						&io_err.to_string(),
+					));
+				}
+			},
+		}
+
+		// Validate move detector config if present
+		if let Some(ref move_config) = self.move_detector_config {
+			if let Err(reason) = move_config.validate() {
+				return Err(WatcherError::ConfigurationError {
+					parameter: "move_detector_config".to_string(),
+					reason,
+					expected: "valid move detector configuration".to_string(),
+					actual: "invalid configuration".to_string(),
+				});
+			}
+		}
+
+		Ok(())
+	}
+
+	/// Create a configuration with error recovery
+	pub fn with_error_recovery(mut self, config: ErrorRecoveryConfig) -> Self {
+		self.error_recovery_config = Some(config);
+		self
+	}
 }
 
 #[derive(Debug)]
@@ -28,11 +91,8 @@ impl WatcherHandle {
 }
 
 pub fn start(config: WatcherConfig) -> Result<(WatcherHandle, mpsc::Receiver<FileSystemEvent>)> {
-	if !config.path.exists() {
-		return Err(WatcherError::InvalidPath {
-			path: config.path.to_string_lossy().to_string(),
-		});
-	}
+	// Validate configuration first
+	config.validate()?;
 
 	let (event_tx, event_rx) = mpsc::channel(100);
 	let (stop_tx, stop_rx) = oneshot::channel();
@@ -51,75 +111,57 @@ async fn run_watcher(
 	event_tx: mpsc::Sender<FileSystemEvent>,
 	mut stop_rx: oneshot::Receiver<()>,
 ) {
-	let (notify_tx, notify_rx) = std::sync::mpsc::channel();
+	// Initialize retry manager
+	let retry_config = config.error_recovery_config.unwrap_or_default();
+	let retry_manager = RetryManager::new(retry_config); // Initialize watcher with retry logic
+	let watcher_result = retry_manager
+		.execute_simple("initialize_watcher", || {
+			create_filesystem_watcher(&config.path)
+		})
+		.await;
 
-	let notify_config = Config::default().with_poll_interval(Duration::from_millis(50));
-
-	let mut watcher: RecommendedWatcher = match RecommendedWatcher::new(
-		move |res| {
-			if let Ok(event) = res {
-				if let Err(e) = notify_tx.send(event) {
-					error!("Error sending notify event: {}", e);
-				}
-			} else if let Err(e) = res {
-				error!("Notify error: {}", e);
-			}
-		},
-		notify_config,
-	) {
+	let mut watcher = match watcher_result {
 		Ok(w) => w,
 		Err(e) => {
-			error!("Failed to create watcher: {}", e);
+			error!(
+				"Failed to initialize filesystem watcher after retries: {}",
+				e
+			);
 			return;
 		}
 	};
-
-	let mode = if config.recursive {
-		RecursiveMode::Recursive
-	} else {
-		RecursiveMode::NonRecursive
-	};
-	if let Err(e) = watcher.watch(&config.path, mode) {
-		error!("Failed to watch path: {}", e);
-		return;
-	}
 
 	let move_detector_config = config.move_detector_config.unwrap_or_default();
 	let mut move_detector = MoveDetector::new(move_detector_config);
 
 	let (raw_event_tx, mut raw_event_rx) = mpsc::channel(100);
+	let (notify_tx, notify_rx) = std::sync::mpsc::channel(); // Set up the watcher callback with direct error handling for now
+	if let Err(e) = setup_watcher_callback(&mut watcher, &config.path, notify_tx.clone()).await {
+		error!("Failed to setup watcher callback: {}", e);
+		return;
+	}
+
+	// Spawn blocking task to bridge sync notify channel to async
 	let _blocking_task = tokio::task::spawn_blocking(move || {
 		for event in notify_rx {
 			if raw_event_tx.blocking_send(event).is_err() {
-				error!("Event receiver dropped, stopping notify thread.");
+				debug!("Event receiver dropped, stopping notify thread.");
 				break;
 			}
 		}
 	});
 
+	// Main event processing loop with error recovery
 	loop {
 		tokio::select! {
 			_ = &mut stop_rx => {
 				info!("Watcher shutdown requested, stopping event processing.");
 				break;
-			}			Some(event) = raw_event_rx.recv() => {
-				debug!("Raw filesystem event received: kind={:?}, paths={:?}", event.kind, event.paths);
-				for path in event.paths {
-					let fs_event = convert_notify_event(&event.kind, path, &move_detector);
-					debug!("Converted to filesystem event: type={:?}, path={:?}, is_dir={}, size={:?}",
-						fs_event.event_type, fs_event.path, fs_event.is_directory, fs_event.size);
-
-					let processed_events = move_detector.process_event(fs_event).await;
-
-					for processed in processed_events {
-						// Log the final processed event
-						log_processed_event(&processed);
-
-						if event_tx.send(processed).await.is_err() {
-							warn!("Event receiver dropped, ending processing loop.");
-							return;
-						}
-					}
+			}
+			Some(event) = raw_event_rx.recv() => {				// Process event with direct error handling for now
+				if let Err(e) = process_single_event(event.clone(), &mut move_detector, &event_tx).await {
+					warn!("Failed to process filesystem event: {} - Event: {:?}", e, event);
+					// Continue processing other events even if one fails
 				}
 			}
 			else => {
@@ -129,6 +171,122 @@ async fn run_watcher(
 		}
 	}
 	info!("Watcher event loop finished. Channel will be closed.");
+}
+
+/// Create a filesystem watcher with proper error handling
+async fn create_filesystem_watcher(path: &std::path::Path) -> Result<RecommendedWatcher> {
+	let notify_config = Config::default().with_poll_interval(Duration::from_millis(50));
+
+	let watcher = RecommendedWatcher::new(
+		|_| {}, // Placeholder callback, will be set up later
+		notify_config,
+	)
+	.map_err(|e| {
+		error!("Failed to create filesystem watcher: {}", e);
+		match &e.kind {
+			notify::ErrorKind::Generic(msg) if msg.contains("permission") => {
+				WatcherError::from_permission_denied(
+					"create watcher",
+					&path.to_string_lossy(),
+					std::io::Error::new(std::io::ErrorKind::PermissionDenied, msg.clone()),
+				)
+			}
+			notify::ErrorKind::Io(io_err) => match io_err.kind() {
+				std::io::ErrorKind::PermissionDenied => WatcherError::from_permission_denied(
+					"create watcher",
+					&path.to_string_lossy(),
+					std::io::Error::new(std::io::ErrorKind::PermissionDenied, "Permission denied"),
+				),
+				_ => WatcherError::Notify(e),
+			},
+			_ => WatcherError::Notify(e),
+		}
+	})?;
+
+	Ok(watcher)
+}
+
+/// Setup watcher callback and start watching
+async fn setup_watcher_callback(
+	watcher: &mut RecommendedWatcher,
+	path: &std::path::Path,
+	notify_tx: std::sync::mpsc::Sender<notify::Event>,
+) -> Result<()> {
+	// Replace the watcher callback
+	*watcher = RecommendedWatcher::new(
+		move |res| {
+			if let Ok(event) = res {
+				if let Err(e) = notify_tx.send(event) {
+					error!("Error sending notify event: {}", e);
+				}
+			} else if let Err(e) = res {
+				error!("Notify error: {}", e);
+			}
+		},
+		Config::default().with_poll_interval(Duration::from_millis(50)),
+	)
+	.map_err(WatcherError::Notify)?;
+
+	// Start watching the path
+	let mode = RecursiveMode::Recursive; // You could make this configurable
+	watcher.watch(path, mode).map_err(|e| {
+		error!("Failed to watch path {:?}: {}", path, e);
+		match &e.kind {
+			notify::ErrorKind::Generic(msg) if msg.contains("permission") => {
+				WatcherError::from_permission_denied(
+					"watch path",
+					&path.to_string_lossy(),
+					std::io::Error::new(std::io::ErrorKind::PermissionDenied, msg.clone()),
+				)
+			}
+			notify::ErrorKind::Io(io_err) => match io_err.kind() {
+				std::io::ErrorKind::PermissionDenied => WatcherError::from_permission_denied(
+					"watch path",
+					&path.to_string_lossy(),
+					std::io::Error::new(std::io::ErrorKind::PermissionDenied, "Permission denied"),
+				),
+				_ => WatcherError::Notify(e),
+			},
+			_ => WatcherError::Notify(e),
+		}
+	})?;
+
+	info!("Successfully started watching path: {:?}", path);
+	Ok(())
+}
+
+/// Process a single filesystem event with proper error handling
+async fn process_single_event(
+	event: notify::Event,
+	move_detector: &mut MoveDetector,
+	event_tx: &mpsc::Sender<FileSystemEvent>,
+) -> Result<()> {
+	debug!(
+		"Raw filesystem event received: kind={:?}, paths={:?}",
+		event.kind, event.paths
+	);
+
+	for path in event.paths {
+		let fs_event = convert_notify_event(&event.kind, path, move_detector);
+		debug!(
+			"Converted to filesystem event: type={:?}, path={:?}, is_dir={}, size={:?}",
+			fs_event.event_type, fs_event.path, fs_event.is_directory, fs_event.size
+		);
+
+		let processed_events = move_detector.process_event(fs_event).await;
+
+		for processed in processed_events {
+			// Log the final processed event
+			log_processed_event(&processed);
+
+			event_tx.send(processed).await.map_err(|_| {
+				warn!("Event receiver dropped, ending processing loop.");
+				WatcherError::ChannelSend
+			})?;
+		}
+	}
+
+	Ok(())
 }
 
 fn convert_notify_event(
@@ -224,7 +382,6 @@ mod tests {
 	use super::*;
 	use std::path::PathBuf;
 	use tempfile::TempDir;
-
 	#[test]
 	fn test_watcher_config_creation() {
 		let temp_dir = TempDir::new().unwrap();
@@ -232,11 +389,13 @@ mod tests {
 			path: temp_dir.path().to_path_buf(),
 			recursive: true,
 			move_detector_config: None,
+			error_recovery_config: None,
 		};
 
 		assert_eq!(config.path, temp_dir.path());
 		assert!(config.recursive);
 		assert!(config.move_detector_config.is_none());
+		assert!(config.error_recovery_config.is_none());
 	}
 
 	#[test]
@@ -247,6 +406,7 @@ mod tests {
 			path: temp_dir.path().to_path_buf(),
 			recursive: false,
 			move_detector_config: Some(move_config),
+			error_recovery_config: None,
 		};
 
 		assert!(!config.recursive);
@@ -259,6 +419,7 @@ mod tests {
 			path: PathBuf::from("/nonexistent/path/that/should/not/exist"),
 			recursive: true,
 			move_detector_config: None,
+			error_recovery_config: None,
 		};
 
 		let result = start(config);

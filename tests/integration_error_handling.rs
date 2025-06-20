@@ -12,6 +12,7 @@ async fn test_watcher_invalid_path() {
 		path: PathBuf::from("/nonexistent/invalid/path/that/should/not/exist"),
 		recursive: true,
 		move_detector_config: None,
+		error_recovery_config: None,
 	};
 
 	let result = start(config);
@@ -32,6 +33,7 @@ async fn test_watcher_stop_after_start() {
 		path: temp_dir.path().to_path_buf(),
 		recursive: true,
 		move_detector_config: None,
+		error_recovery_config: None,
 	};
 
 	let (handle, _receiver) = start(config).unwrap();
@@ -44,12 +46,12 @@ async fn test_watcher_stop_after_start() {
 #[tokio::test]
 async fn test_watcher_multiple_start_stop() {
 	let temp_dir = common::setup_temp_dir();
-
 	for i in 0..3 {
 		let config = WatcherConfig {
 			path: temp_dir.path().to_path_buf(),
 			recursive: true,
 			move_detector_config: None,
+			error_recovery_config: None,
 		};
 
 		let (handle, _receiver) = start(config)

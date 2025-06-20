@@ -13,6 +13,7 @@ async fn test_watcher_creation() {
 		path: temp_dir.path().to_path_buf(),
 		recursive: true,
 		move_detector_config: None,
+		error_recovery_config: None,
 	};
 
 	// Test that watcher can be created without panicking
@@ -33,6 +34,7 @@ async fn test_watcher_basic_file_detection() {
 		path: temp_dir.path().to_path_buf(),
 		recursive: true,
 		move_detector_config: None,
+		error_recovery_config: None,
 	};
 
 	let (handle, mut receiver) = start(config).unwrap();
@@ -83,12 +85,12 @@ async fn test_watcher_basic_file_detection() {
 #[tokio::test]
 async fn test_watcher_config_validation() {
 	let temp_dir = common::setup_temp_dir();
-
 	// Test valid config
 	let valid_config = WatcherConfig {
 		path: temp_dir.path().to_path_buf(),
 		recursive: true,
 		move_detector_config: None,
+		error_recovery_config: None,
 	};
 
 	let result = start(valid_config);
