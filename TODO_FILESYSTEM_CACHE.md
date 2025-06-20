@@ -10,8 +10,8 @@
 
 ### 0.2 Database Foundation Validation
 - [x] ~~Fix existing database test failure in `test_database_integration`~~ (retention policy bug fixed)
-- [ ] Validate current ReDB schema supports concurrent read/write operations
-- [ ] Test database recovery after unclean shutdown scenarios
+- [x] ~~Validate current ReDB schema supports concurrent read/write operations~~ (concurrency tests pass)
+- [x] ~~Test database recovery after unclean shutdown scenarios~~ (recovery test implemented and passing)
 - [x] ~~Benchmark current database operations to establish baseline~~ (benchmarks created)
 
 ### 0.3 Architecture Validation

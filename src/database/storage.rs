@@ -361,15 +361,36 @@ impl DatabaseStorage for RedbStorage {
 
 		Ok(removed_count)
 	}
-
 	async fn get_stats(&self) -> DatabaseResult<DatabaseStats> {
-		// Update database size
-		let mut stats = self.stats.clone();
-		if let Ok(metadata) = std::fs::metadata(&self.config.database_path) {
-			stats.database_size = metadata.len();
-		}
+		let read_txn = self.database.begin_read()?;
 
-		Ok(stats)
+		// Count actual events in database
+		let events_table = read_txn.open_table(EVENTS_TABLE)?;
+		let total_events = events_table.iter()?.count() as u64;
+
+		// Count actual metadata records in database
+		let metadata_table = read_txn.open_table(METADATA_TABLE)?;
+		let total_metadata = metadata_table.iter()?.count() as u64;
+
+		// Get database file size
+		let database_size = if let Ok(metadata) = std::fs::metadata(&self.config.database_path) {
+			metadata.len()
+		} else {
+			0
+		};
+
+		Ok(DatabaseStats {
+			total_events,
+			total_metadata,
+			database_size,
+			// Use cached stats for operation counters and performance metrics
+			read_operations: self.stats.read_operations,
+			write_operations: self.stats.write_operations,
+			delete_operations: self.stats.delete_operations,
+			cache_hit_rate: self.stats.cache_hit_rate,
+			avg_query_time_ms: self.stats.avg_query_time_ms,
+			cleaned_up_events: self.stats.cleaned_up_events,
+		})
 	}
 
 	async fn compact(&mut self) -> DatabaseResult<()> {
