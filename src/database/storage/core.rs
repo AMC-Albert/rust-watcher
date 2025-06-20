@@ -10,7 +10,7 @@ use crate::database::{
 	types::{DatabaseStats, EventRecord, MetadataRecord, StorageKey},
 };
 use chrono::{DateTime, Utc};
-use redb::Database;
+use redb::{Database, ReadableMultimapTable};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -42,6 +42,12 @@ pub trait DatabaseStorage: Send + Sync {
 
 	/// Clean up expired events
 	async fn cleanup_expired_events(&mut self, before: SystemTime) -> DatabaseResult<usize>;
+
+	/// Clean up events using a configurable retention policy
+	async fn cleanup_events_with_policy(
+		&mut self,
+		config: &crate::database::storage::event_retention::EventRetentionConfig,
+	) -> DatabaseResult<usize>;
 
 	/// Get database statistics
 	async fn get_stats(&self) -> DatabaseResult<DatabaseStats>;
@@ -86,6 +92,18 @@ pub trait DatabaseStorage: Send + Sync {
 		&mut self,
 		watch_id: &uuid::Uuid,
 	) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>>;
+
+	/// Delete all events older than the given cutoff timestamp
+	async fn delete_events_older_than(
+		&mut self,
+		cutoff: std::time::SystemTime,
+	) -> DatabaseResult<usize>;
+
+	/// Count total number of events in the log
+	async fn count_events(&self) -> DatabaseResult<usize>;
+
+	/// Delete the N oldest events from the log
+	async fn delete_oldest_events(&mut self, n: usize) -> DatabaseResult<usize>;
 }
 
 /// Primary ReDB implementation that coordinates all storage modules
@@ -156,6 +174,14 @@ impl DatabaseStorage for RedbStorage {
 		super::maintenance::cleanup_expired_events(&self.database, before).await
 	}
 
+	async fn cleanup_events_with_policy(
+		&mut self,
+		config: &crate::database::storage::event_retention::EventRetentionConfig,
+	) -> DatabaseResult<usize> {
+		// Use the new event_retention logic for cleanup
+		crate::database::storage::event_retention::cleanup_old_events(self, config).await
+	}
+
 	async fn get_stats(&self) -> DatabaseResult<DatabaseStats> {
 		super::maintenance::get_database_stats(&self.database).await
 	}
@@ -219,6 +245,96 @@ impl DatabaseStorage for RedbStorage {
 	) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>> {
 		let mut cache = self.cache();
 		cache.get_watch_metadata(watch_id).await
+	}
+
+	async fn delete_events_older_than(
+		&mut self,
+		cutoff: std::time::SystemTime,
+	) -> DatabaseResult<usize> {
+		// WARNING: This implementation iterates all events. Performance will degrade with large logs.
+		// For production, use an indexed timestamp or batch delete if supported by backend.
+		use crate::database::types::EventRecord;
+		let write_txn = self.database.begin_write()?;
+		let mut events_log =
+			write_txn.open_multimap_table(crate::database::storage::tables::EVENTS_LOG_TABLE)?;
+		let mut removed = 0;
+		let mut to_remove = Vec::new();
+		for entry in events_log.iter()? {
+			let (key_guard, multimap_value) = entry?;
+			let key_bytes = key_guard.value();
+			for value_result in multimap_value {
+				let value_guard = match value_result {
+					Ok(v) => v,
+					Err(_) => continue, // Skip corrupt
+				};
+				let value_bytes = value_guard.value();
+				let record: EventRecord = match bincode::deserialize(value_bytes) {
+					Ok(r) => r,
+					Err(_) => continue, // Skip corrupt
+				};
+				if record.timestamp < chrono::DateTime::<chrono::Utc>::from(cutoff) {
+					to_remove.push((key_bytes.to_vec(), value_bytes.to_vec()));
+				}
+			}
+		}
+		for (key, value) in to_remove {
+			events_log.remove(key.as_slice(), value.as_slice())?;
+			removed += 1;
+		}
+		drop(events_log); // Ensure table is dropped before committing
+		write_txn.commit()?;
+		Ok(removed)
+	}
+
+	async fn count_events(&self) -> DatabaseResult<usize> {
+		let read_txn = self.database.begin_read()?;
+		let events_log =
+			read_txn.open_multimap_table(crate::database::storage::tables::EVENTS_LOG_TABLE)?;
+		let mut count = 0;
+		for entry in events_log.iter()? {
+			let (_key_guard, multimap_value) = entry?;
+			for value_result in multimap_value {
+				if value_result.is_ok() {
+					count += 1;
+				}
+			}
+		}
+		Ok(count)
+	}
+
+	async fn delete_oldest_events(&mut self, n: usize) -> DatabaseResult<usize> {
+		// WARNING: This implementation loads all events into memory to sort by timestamp.
+		// This is not scalable for very large logs.
+		use crate::database::types::EventRecord;
+		let write_txn = self.database.begin_write()?;
+		let mut events_log =
+			write_txn.open_multimap_table(crate::database::storage::tables::EVENTS_LOG_TABLE)?;
+		let mut all_events = Vec::new();
+		for entry in events_log.iter()? {
+			let (key_guard, multimap_value) = entry?;
+			let key_bytes = key_guard.value();
+			for value_result in multimap_value {
+				let value_guard = match value_result {
+					Ok(v) => v,
+					Err(_) => continue,
+				};
+				let value_bytes = value_guard.value();
+				let record: EventRecord = match bincode::deserialize(value_bytes) {
+					Ok(r) => r,
+					Err(_) => continue,
+				};
+				all_events.push((record.timestamp, key_bytes.to_vec(), value_bytes.to_vec()));
+			}
+		}
+		all_events.sort_by_key(|(ts, _, _)| *ts);
+		let mut removed = 0;
+		for (_ts, key, value) in all_events.into_iter().take(n) {
+			events_log.remove(key.as_slice(), value.as_slice())?;
+			removed += 1;
+		}
+		drop(events_log); // Ensure table is dropped before committing
+		write_txn.commit()?;
+		Ok(removed)
 	}
 }
 

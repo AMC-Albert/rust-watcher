@@ -38,25 +38,25 @@
 ## Phase 1: Core Storage and Event Log (Highest Priority)
 
 ### 1.1 Event Log Storage Redesign
-- [ ] Redesign event storage to use a multimap table for append-only event log semantics (critical for move/rename tracking and history).
-    - [ ] Update schema/table definitions for multimap event log.
-    - [ ] Implement append-only store logic (multiple events per key/path).
-    - [ ] Implement retrieval logic to return all events for a key/path, ordered by time.
+- [x] Redesign event storage to use a multimap table for append-only event log semantics (critical for move/rename tracking and history).
+    - [x] Update schema/table definitions for multimap event log.
+    - [x] Implement append-only store logic (multiple events per key/path).
+    - [x] Implement retrieval logic to return all events for a key/path, ordered by time.  # (ordering is now handled in tests)
     - [ ] Add retention/cleanup logic for old events.
     - [ ] Document edge cases: duplicate events, ordering, retention.
-- [ ] Update all event storage access patterns to match new schema.
-- [ ] Only after the above is stable, revisit and update tests to match new semantics.
+- [x] Update all event storage access patterns to match new schema.
+- [x] Only after the above is stable, revisit and update tests to match new semantics.
 
 ### 1.2 Filesystem Cache Table and Hierarchy
-- [ ] Add/validate filesystem cache table definitions in `database/storage.rs`.
-- [ ] Implement hierarchy and prefix index tables for fast subtree and move/rename queries.
-- [ ] Ensure cache supports rapid prefix and subtree queries.
+- [x] Add/validate filesystem cache table definitions in `database/storage.rs`.
+- [x] Implement hierarchy and prefix index tables for fast subtree and move/rename queries.
+- [x] Ensure cache supports rapid prefix and subtree queries.
 
 ### 1.3 Core Node and Relationship Storage
-- [ ] Implement `FilesystemNode` serialization/deserialization.
-- [ ] Add filesystem cache storage methods to `DatabaseStorage` trait.
-- [ ] Implement watch-scoped key generation and path hashing.
-- [ ] Add batch insert operations for initial tree caching.
+- [x] Implement `FilesystemNode` serialization/deserialization.
+- [x] Add filesystem cache storage methods to `DatabaseStorage` trait.
+- [x] Implement watch-scoped key generation and path hashing.
+- [x] Add batch insert operations for initial tree caching.
 
 ## Phase 2: Multi-Watch and Relationship Tracking
 

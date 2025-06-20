@@ -139,6 +139,18 @@ impl DatabaseAdapter {
 		Ok(count)
 	}
 
+	/// Clean up old events using a configurable retention policy
+	pub async fn cleanup_old_events_with_policy(
+		&self,
+		config: &crate::database::storage::event_retention::EventRetentionConfig,
+	) -> DatabaseResult<usize> {
+		if !self.enabled {
+			return Ok(0);
+		}
+		let mut storage = self.storage.write().await;
+		storage.cleanup_events_with_policy(config).await
+	}
+
 	/// Get database statistics
 	pub async fn get_stats(&self) -> DatabaseResult<DatabaseStats> {
 		if !self.enabled {
@@ -281,6 +293,26 @@ impl DatabaseStorage for NoOpStorage {
 		_watch_id: &uuid::Uuid,
 	) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>> {
 		Ok(None)
+	}
+
+	async fn cleanup_events_with_policy(
+		&mut self,
+		_config: &crate::database::storage::event_retention::EventRetentionConfig,
+	) -> DatabaseResult<usize> {
+		Ok(0)
+	}
+
+	async fn delete_events_older_than(
+		&mut self,
+		_cutoff: std::time::SystemTime,
+	) -> DatabaseResult<usize> {
+		Ok(0)
+	}
+	async fn count_events(&self) -> DatabaseResult<usize> {
+		Ok(0)
+	}
+	async fn delete_oldest_events(&mut self, _n: usize) -> DatabaseResult<usize> {
+		Ok(0)
 	}
 }
 

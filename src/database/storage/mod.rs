@@ -1,6 +1,7 @@
 //! Storage module for database operations
 
 pub mod core;
+pub mod event_retention;
 pub mod event_storage;
 pub mod filesystem_cache;
 pub mod indexing;
