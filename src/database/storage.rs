@@ -6,7 +6,7 @@ use crate::database::{
 	types::{DatabaseStats, EventRecord, MetadataRecord, StorageKey},
 };
 use chrono::{DateTime, Utc};
-use redb::{Database, ReadableTable, TableDefinition};
+use redb::{Database, MultimapTableDefinition, ReadableTable, TableDefinition};
 #[allow(unused_imports)]
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -16,7 +16,8 @@ use tracing::{debug, info, warn};
 // Table definitions for redb
 const EVENTS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("events");
 const METADATA_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("metadata");
-const INDEXES_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("indexes");
+const INDEXES_TABLE: MultimapTableDefinition<&[u8], &[u8]> =
+	MultimapTableDefinition::new("indexes");
 
 /// Trait for database storage operations
 #[async_trait::async_trait]
@@ -120,11 +121,11 @@ impl RedbStorage {
 	fn deserialize_metadata(data: &[u8]) -> DatabaseResult<MetadataRecord> {
 		bincode::deserialize(data).map_err(DatabaseError::SerializationError)
 	}
-
 	/// Generate index entries for an event
 	fn generate_indexes(&self, record: &EventRecord) -> Vec<(StorageKey, Vec<u8>)> {
 		let mut indexes = Vec::new();
-		let event_id_bytes = record.event_id.as_bytes().to_vec();
+		let event_key = StorageKey::EventId(record.event_id);
+		let event_id_bytes = event_key.to_bytes();
 
 		// Path hash index
 		indexes.push((StorageKey::path_hash(&record.path), event_id_bytes.clone()));
@@ -170,7 +171,7 @@ impl DatabaseStorage for RedbStorage {
 			// Create tables if they don't exist
 			let _events_table = write_txn.open_table(EVENTS_TABLE)?;
 			let _metadata_table = write_txn.open_table(METADATA_TABLE)?;
-			let _indexes_table = write_txn.open_table(INDEXES_TABLE)?;
+			let _indexes_table = write_txn.open_multimap_table(INDEXES_TABLE)?;
 		}
 		write_txn.commit()?;
 
@@ -187,10 +188,8 @@ impl DatabaseStorage for RedbStorage {
 		{
 			// Store the event
 			let mut events_table = write_txn.open_table(EVENTS_TABLE)?;
-			events_table.insert(event_key.as_slice(), event_data.as_slice())?;
-
-			// Store indexes
-			let mut indexes_table = write_txn.open_table(INDEXES_TABLE)?;
+			events_table.insert(event_key.as_slice(), event_data.as_slice())?; // Store indexes
+			let mut indexes_table = write_txn.open_multimap_table(INDEXES_TABLE)?;
 			for (index_key, index_value) in indexes {
 				let index_key_bytes = index_key.to_bytes();
 				indexes_table.insert(index_key_bytes.as_slice(), index_value.as_slice())?;
@@ -207,7 +206,6 @@ impl DatabaseStorage for RedbStorage {
 		);
 		Ok(())
 	}
-
 	async fn get_events(&mut self, key: &StorageKey) -> DatabaseResult<Vec<EventRecord>> {
 		let read_txn = self.database.begin_read()?;
 		let mut events = Vec::new();
@@ -224,13 +222,16 @@ impl DatabaseStorage for RedbStorage {
 			}
 			_ => {
 				// Use index to find event IDs, then fetch events
-				let indexes_table = read_txn.open_table(INDEXES_TABLE)?;
+				let indexes_table = read_txn.open_multimap_table(INDEXES_TABLE)?;
 				let events_table = read_txn.open_table(EVENTS_TABLE)?;
 				let index_key = key.to_bytes();
 
-				if let Some(event_id_data) = indexes_table.get(index_key.as_slice())? {
-					let event_id_bytes = event_id_data.value();
-					if let Some(event_data) = events_table.get(event_id_bytes)? {
+				// Get all event IDs for this index key
+				let event_ids = indexes_table.get(index_key.as_slice())?;
+
+				for event_id_entry in event_ids {
+					let event_id_bytes = event_id_entry?;
+					if let Some(event_data) = events_table.get(event_id_bytes.value())? {
 						let event = Self::deserialize_event(event_data.value())?;
 						events.push(event);
 					}

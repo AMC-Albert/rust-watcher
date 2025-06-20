@@ -362,9 +362,7 @@ mod tests {
 		let adapter = DatabaseAdapter::new(config).await.unwrap();
 		let test_path = temp_dir.path().join("test.txt");
 
-		let event = create_test_event(EventType::Create, test_path.clone(), Some(1024));
-
-		// Store event
+		let event = create_test_event(EventType::Create, test_path.clone(), Some(1024)); // Store event
 		adapter.store_event(&event).await.unwrap();
 
 		// Retrieve events
