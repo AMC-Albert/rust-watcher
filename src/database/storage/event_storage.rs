@@ -147,10 +147,21 @@ pub async fn store_event(_database: &Arc<Database>, _record: &EventRecord) -> Da
 
 /// Retrieve events by storage key using the provided database
 pub async fn get_events(
-	_database: &Arc<Database>,
-	_key: &StorageKey,
+	database: &Arc<Database>,
+	key: &StorageKey,
 ) -> DatabaseResult<Vec<EventRecord>> {
-	// TODO: Implement event retrieval
-	// For now, return empty vector - this would be implemented properly in Phase 1.2
-	Ok(Vec::new())
+	// Open a read transaction and the events table
+	let read_txn = database.begin_read()?;
+	let events_table = read_txn.open_table(super::tables::EVENTS_TABLE)?;
+	let key_bytes = key.to_bytes();
+
+	// Attempt to retrieve the value for the given key
+	if let Some(value) = events_table.get(key_bytes.as_slice())? {
+		let record = EventStorageImpl::deserialize_record(value.value())?;
+		// Note: This implementation only supports one event per key (last write wins).
+		// TODO: Support multiple events per path (append-only/event log semantics) if needed.
+		Ok(vec![record])
+	} else {
+		Ok(Vec::new())
+	}
 }

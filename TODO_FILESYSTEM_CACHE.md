@@ -35,27 +35,30 @@
 - [ ] Create integration test framework for multi-watch scenarios
 - [ ] Add stress tests for concurrent cache access patterns
 
-## Phase 1: Core Data Structures and Storage Layer
+## Phase 1: Core Storage and Event Log (Highest Priority)
 
-### 1.1 Extend Database Types
-- [x] ~~Add `FilesystemNode`, `NodeType`, `NodeMetadata`, `CacheInfo`, `ComputedProperties` to `database/types.rs`~~ (implemented with comprehensive test coverage)
-- [x] ~~Add `WatchScopedKey`, `FilesystemKey` enums for multi-watch key management~~ (implemented)
-- [x] ~~Add `SharedNodeInfo`, `WatchMetadata`, `UnifiedNode` structures~~ (implemented)
-- [x] ~~Update `StorageKey` enum with filesystem cache variants~~ (implemented as `ExtendedStorageKey`)
+### 1.1 Event Log Storage Redesign
+- [ ] Redesign event storage to use a multimap table for append-only event log semantics (critical for move/rename tracking and history).
+    - [ ] Update schema/table definitions for multimap event log.
+    - [ ] Implement append-only store logic (multiple events per key/path).
+    - [ ] Implement retrieval logic to return all events for a key/path, ordered by time.
+    - [ ] Add retention/cleanup logic for old events.
+    - [ ] Document edge cases: duplicate events, ordering, retention.
+- [ ] Update all event storage access patterns to match new schema.
+- [ ] Only after the above is stable, revisit and update tests to match new semantics.
 
-### 1.2 Database Schema Extension
-- [ ] Add filesystem cache table definitions to `database/storage.rs` (**next step**)
-- [ ] Implement `MULTI_WATCH_FS_CACHE`, `MULTI_WATCH_HIERARCHY`, `SHARED_NODES` tables
-- [ ] Add `WATCH_REGISTRY`, `PATH_TO_WATCHES` multimap tables
-- [ ] Update database initialization to create new tables
+### 1.2 Filesystem Cache Table and Hierarchy
+- [ ] Add/validate filesystem cache table definitions in `database/storage.rs`.
+- [ ] Implement hierarchy and prefix index tables for fast subtree and move/rename queries.
+- [ ] Ensure cache supports rapid prefix and subtree queries.
 
-### 1.3 Core Storage Operations
-- [ ] Implement `FilesystemNode` serialization/deserialization
-- [ ] Add filesystem cache storage methods to `DatabaseStorage` trait
-- [ ] Implement watch-scoped key generation and path hashing
-- [ ] Add batch insert operations for initial tree caching
+### 1.3 Core Node and Relationship Storage
+- [ ] Implement `FilesystemNode` serialization/deserialization.
+- [ ] Add filesystem cache storage methods to `DatabaseStorage` trait.
+- [ ] Implement watch-scoped key generation and path hashing.
+- [ ] Add batch insert operations for initial tree caching.
 
-## Phase 2: Multi-Watch Database Management
+## Phase 2: Multi-Watch and Relationship Tracking
 
 ### 2.1 Multi-Watch Database Core
 - [ ] Create `MultiWatchDatabase` struct in new `database/multi_watch.rs`

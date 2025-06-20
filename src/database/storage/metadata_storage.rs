@@ -137,20 +137,36 @@ impl MetadataStorage for MetadataStorageImpl {
 
 /// Store metadata record using the provided database
 pub async fn store_metadata(
-	_database: &Arc<Database>,
-	_record: &MetadataRecord,
+	database: &Arc<Database>,
+	record: &MetadataRecord,
 ) -> DatabaseResult<()> {
-	// TODO: Implement metadata storage
-	// For now, return success - this would be implemented properly in Phase 1.2
+	let write_txn = database.begin_write()?;
+	{
+		let mut metadata_table = write_txn.open_table(super::tables::METADATA_TABLE)?;
+		let path_hash = crate::database::types::calculate_path_hash(&record.path);
+		let key_bytes = path_hash.to_le_bytes();
+		let record_bytes = bincode::serialize(record)
+			.map_err(|e| crate::database::error::DatabaseError::Serialization(e.to_string()))?;
+		metadata_table.insert(key_bytes.as_slice(), record_bytes.as_slice())?;
+	}
+	write_txn.commit()?;
 	Ok(())
 }
 
 /// Retrieve metadata by path using the provided database
 pub async fn get_metadata(
-	_database: &Arc<Database>,
-	_path: &Path,
+	database: &Arc<Database>,
+	path: &Path,
 ) -> DatabaseResult<Option<MetadataRecord>> {
-	// TODO: Implement metadata retrieval
-	// For now, return None - this would be implemented properly in Phase 1.2
-	Ok(None)
+	let read_txn = database.begin_read()?;
+	let metadata_table = read_txn.open_table(super::tables::METADATA_TABLE)?;
+	let path_hash = crate::database::types::calculate_path_hash(path);
+	let key_bytes = path_hash.to_le_bytes();
+	if let Some(record_bytes) = metadata_table.get(key_bytes.as_slice())? {
+		let record = bincode::deserialize::<MetadataRecord>(record_bytes.value())
+			.map_err(|e| crate::database::error::DatabaseError::Deserialization(e.to_string()))?;
+		Ok(Some(record))
+	} else {
+		Ok(None)
+	}
 }

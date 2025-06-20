@@ -1,5 +1,15 @@
 # Filesystem Structure Caching Design
 
+## High-Level Design Goals (2025 Revision)
+
+- Efficiently monitor large filesystems for move and rename operations, with minimal latency and overhead.
+- Maintain a fast, scalable, and consistent cache of the entire filesystem hierarchy, supporting instant subtree and prefix queries.
+- Support append-only, event-log style storage for all file events, enabling full history and robust move/rename detection.
+- Design for high write throughput and concurrent access, as real-world filesystems generate large volumes of events.
+- Lay the groundwork for tracking complex, linked relationships between files and dependencies (e.g., symlinks, hard links, application-level references).
+- Prioritize correctness and durability over premature optimization; edge-case features (deep dependency graphs, advanced analytics) should not compromise core reliability.
+- All schema and storage primitives should be designed for extensibility, anticipating future needs for relationship tracking and advanced queries.
+
 ## Objective
 Cache the entire watched filesystem structure in ReDB for maximum performance, enabling instant directory traversal, file lookups, and hierarchical queries without filesystem I/O.
 
@@ -827,15 +837,15 @@ pub struct DatabaseMemoryProfile {
 
 #### Performance Benchmarks (Projected)
 ```
-Operation                    | Single DB  | Multiple DB | Improvement
-----------------------------|------------|-------------|------------
-Watch Registration         | O(log n)   | O(1)        | -
-Path Lookup (Single Watch) | O(log n)   | O(log n)    | Same
-Path Lookup (Cross-Watch)  | O(log n)   | O(k×log n)  | 90%+ faster
-Directory Listing          | O(log n+c) | O(log n+c)  | Same
-Overlap Detection          | O(n²)      | N/A         | New capability
-Memory Usage (Overlapping) | ~60% less  | Baseline    | Significant
-Transaction Coordination   | ACID       | Best-effort | Stronger consistency
+| Operation                  | Single DB  | Multiple DB | Improvement          |
+| -------------------------- | ---------- | ----------- | -------------------- |
+| Watch Registration         | O(log n)   | O(1)        | -                    |
+| Path Lookup (Single Watch) | O(log n)   | O(log n)    | Same                 |
+| Path Lookup (Cross-Watch)  | O(log n)   | O(k×log n)  | 90%+ faster          |
+| Directory Listing          | O(log n+c) | O(log n+c)  | Same                 |
+| Overlap Detection          | O(n²)      | N/A         | New capability       |
+| Memory Usage (Overlapping) | ~60% less  | Baseline    | Significant          |
+| Transaction Coordination   | ACID       | Best-effort | Stronger consistency |
 ```
 
 ## Configuration Strategy
@@ -894,3 +904,12 @@ pub enum DatabaseStrategy {
 6. **ReDB Optimization**: Leverages ReDB's strength in range queries and concurrent reads
 
 This approach provides the best balance of performance, consistency, and operational simplicity while fully leveraging ReDB's advanced features.
+
+## Core Data Model Philosophy
+
+- The event log is strictly append-only. Every filesystem event (move, rename, create, delete, etc.) is recorded as a new entry, preserving a complete, auditable history. No event is ever overwritten or deleted except by explicit retention/cleanup policies.
+- The filesystem cache is dynamic and always reflects the current state of the filesystem. It is updated in-place as events occur: files and directories are added, removed, or modified to match the live system. Old cache entries are overwritten or deleted as needed.
+- This separation ensures:
+    - Fast, accurate lookups and subtree queries for the present state (via the cache).
+    - Reliable, append-only history for analysis, recovery, and advanced features (via the event log).
+- Both layers are required for robust, scalable monitoring and move/rename detection at scale.

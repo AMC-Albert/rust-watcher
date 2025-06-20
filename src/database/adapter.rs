@@ -346,7 +346,7 @@ mod tests {
 	use crate::events::{EventType, FileSystemEvent};
 	use std::path::PathBuf;
 	use tempfile::TempDir;
-	use tokio::test;
+	use tokio;
 	use uuid::Uuid;
 
 	fn create_test_event(
@@ -365,10 +365,10 @@ mod tests {
 		}
 	}
 
-	#[test]
+	#[tokio::test]
 	async fn test_adapter_creation_and_config() {
 		let temp_dir = TempDir::new().unwrap();
-		let db_path = temp_dir.path().join("test.db");
+		let db_path = temp_dir.path().join("test_adapter_creation_and_config.db");
 
 		let config = DatabaseConfig {
 			database_path: db_path.clone(),
@@ -383,10 +383,10 @@ mod tests {
 		assert!(!disabled.is_enabled());
 		assert_eq!(disabled.database_path(), None);
 	}
-	#[test]
+	#[tokio::test]
 	async fn test_event_storage_and_retrieval() {
 		let temp_dir = TempDir::new().unwrap();
-		let db_path = temp_dir.path().join("events.db");
+		let db_path = temp_dir.path().join("test_event_storage_and_retrieval.db");
 
 		let config = DatabaseConfig {
 			database_path: db_path,
@@ -406,10 +406,12 @@ mod tests {
 		assert_eq!(events[0].path, test_path);
 	}
 
-	#[test]
+	#[tokio::test]
 	async fn test_metadata_storage_and_retrieval() {
 		let temp_dir = TempDir::new().unwrap();
-		let db_path = temp_dir.path().join("metadata.db");
+		let db_path = temp_dir
+			.path()
+			.join("test_metadata_storage_and_retrieval.db");
 		let test_file = temp_dir.path().join("test.txt");
 
 		// Create a real file for metadata
@@ -433,10 +435,10 @@ mod tests {
 		assert_eq!(retrieved.size, Some(metadata.len()));
 	}
 
-	#[test]
+	#[tokio::test]
 	async fn test_query_operations() {
 		let temp_dir = TempDir::new().unwrap();
-		let db_path = temp_dir.path().join("query.db");
+		let db_path = temp_dir.path().join("test_query_operations.db");
 
 		let config = DatabaseConfig {
 			database_path: db_path,
@@ -460,7 +462,7 @@ mod tests {
 			.unwrap();
 		assert_eq!(recent_events.len(), 5); // All events should be recent
 	}
-	#[test]
+	#[tokio::test]
 	async fn test_disabled_adapter_operations() {
 		let adapter = DatabaseAdapter::disabled();
 		let test_path = PathBuf::from("/test/path");
@@ -484,7 +486,7 @@ mod tests {
 		assert_eq!(cleaned, 0);
 	}
 
-	#[test]
+	#[tokio::test]
 	async fn test_health_check_and_maintenance() {
 		let temp_dir = TempDir::new().unwrap();
 		let db_path = temp_dir.path().join("health.db");

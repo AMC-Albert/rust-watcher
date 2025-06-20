@@ -231,23 +231,26 @@ mod tests {
 	use std::path::PathBuf;
 	use tempfile::tempdir;
 
-	async fn create_test_storage() -> DatabaseResult<RedbStorage> {
+	async fn create_test_storage(test_name: &str) -> DatabaseResult<RedbStorage> {
 		let temp_dir = tempdir().unwrap();
-		let _db_path = temp_dir.path().join("test.db");
-		let config = DatabaseConfig::for_small_directories();
+		let db_path = temp_dir.path().join(format!("{}.db", test_name));
+		let config = DatabaseConfig {
+			database_path: db_path,
+			..DatabaseConfig::for_small_directories()
+		};
 		RedbStorage::new(config).await
 	}
 
 	#[tokio::test]
 	async fn test_storage_initialization() {
-		let _storage = create_test_storage().await.unwrap();
-		// TODO: Implement a real check for database validity if needed
-		// assert!(storage.database().is_ok());
+		let _storage = create_test_storage("test_storage_initialization")
+			.await
+			.unwrap();
 	}
 
 	#[tokio::test]
 	async fn test_basic_operations() {
-		let mut storage = create_test_storage().await.unwrap();
+		let mut storage = create_test_storage("test_basic_operations").await.unwrap();
 
 		// Test event storage
 		let event_record = EventRecord::new(
