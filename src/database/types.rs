@@ -278,6 +278,10 @@ impl StorageKey {
 }
 
 /// Statistics about database usage
+///
+/// NOTE: For scalable stats, total_events should be loaded from a persistent counter in STATS_TABLE (see EVENT_COUNT_KEY).
+/// This enables O(1) stats queries. All event insert/delete operations must update the counter transactionally.
+/// Edge case: If the counter drifts (e.g., after crash or migration), a full scan and resync is required.
 #[derive(Debug, Clone, Default)]
 pub struct DatabaseStats {
 	/// Total number of events stored

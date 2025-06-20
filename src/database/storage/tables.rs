@@ -102,6 +102,11 @@ pub const ALL_TABLES: &[&str] = &[
 /// Schema version for migration tracking
 pub const SCHEMA_VERSION: u32 = 1;
 
+/// Key for event count in STATS_TABLE (u64, little-endian bytes)
+pub const EVENT_COUNT_KEY: &[u8] = b"event_count";
+// This key is used to store the persistent event count for O(1) stats queries.
+// It must be updated transactionally on every event insert/delete.
+
 /// Initialize all database tables
 pub async fn initialize_tables(database: &Arc<Database>) -> DatabaseResult<()> {
 	let write_txn = database.begin_write()?;

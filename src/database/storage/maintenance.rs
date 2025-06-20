@@ -134,18 +134,42 @@ pub async fn cleanup_expired_events(
 ///
 /// TODO: Replace with a scalable, indexed, and robust stats subsystem. See README and design docs.
 pub async fn get_database_stats(database: &Arc<Database>) -> DatabaseResult<DatabaseStats> {
-	// This implementation iterates all events in the log to count them.
-	// This is not efficient for large databases, but is necessary for correctness until a better index is implemented.
+	// Use persistent event counter for O(1) stats queries. Repair if missing or out-of-sync.
 	let read_txn = database.begin_read()?;
-	let events_log =
-		read_txn.open_multimap_table(crate::database::storage::tables::EVENTS_LOG_TABLE)?;
-	let mut total_events = 0u64;
-	for entry in events_log.iter()? {
-		let (_key_guard, multimap_value) = entry?;
-		for value_result in multimap_value {
-			if value_result.is_ok() {
-				total_events += 1;
+	let stats_table = read_txn.open_table(crate::database::storage::tables::STATS_TABLE)?;
+	let count_bytes = stats_table.get(crate::database::storage::tables::EVENT_COUNT_KEY)?;
+	let mut total_events = count_bytes
+		.map(|v| u64::from_le_bytes(v.value().try_into().unwrap_or([0u8; 8])))
+		.unwrap_or(u64::MAX); // Use u64::MAX as a sentinel for missing/corrupt
+
+	if total_events == u64::MAX {
+		// Counter missing/corrupt: rescan and repair
+		if let Ok(events_log) =
+			read_txn.open_multimap_table(crate::database::storage::tables::EVENTS_LOG_TABLE)
+		{
+			let mut count = 0u64;
+			if let Ok(iter) = events_log.iter() {
+				for (_key_guard, multimap_value) in iter.flatten() {
+					for value_result in multimap_value {
+						if value_result.is_ok() {
+							count += 1;
+						}
+					}
+				}
 			}
+			// Write repaired counter
+			let write_txn = database.begin_write()?;
+			let mut stats_table =
+				write_txn.open_table(crate::database::storage::tables::STATS_TABLE)?;
+			stats_table.insert(
+				crate::database::storage::tables::EVENT_COUNT_KEY,
+				&count.to_le_bytes()[..],
+			)?;
+			drop(stats_table);
+			write_txn.commit()?;
+			total_events = count;
+		} else {
+			total_events = 0;
 		}
 	}
 	// TODO: Count metadata and other stats if needed. For now, only event count is accurate.

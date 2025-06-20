@@ -10,7 +10,7 @@ use crate::database::{
 	types::{DatabaseStats, EventRecord, MetadataRecord, StorageKey},
 };
 use chrono::{DateTime, Utc};
-use redb::{Database, ReadableMultimapTable};
+use redb::{Database, ReadableMultimapTable, ReadableTable};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -257,6 +257,8 @@ impl DatabaseStorage for RedbStorage {
 		let write_txn = self.database.begin_write()?;
 		let mut events_log =
 			write_txn.open_multimap_table(crate::database::storage::tables::EVENTS_LOG_TABLE)?;
+		let mut stats_table =
+			write_txn.open_table(crate::database::storage::tables::STATS_TABLE)?;
 		let mut removed = 0;
 		let mut to_remove = Vec::new();
 		for entry in events_log.iter()? {
@@ -277,11 +279,22 @@ impl DatabaseStorage for RedbStorage {
 				}
 			}
 		}
+		// Decrement persistent event counter for each event removed
+		let count_bytes = stats_table.get(crate::database::storage::tables::EVENT_COUNT_KEY)?;
+		let mut count = count_bytes
+			.map(|v| u64::from_le_bytes(v.value().try_into().unwrap_or([0u8; 8])))
+			.unwrap_or(0);
 		for (key, value) in to_remove {
 			events_log.remove(key.as_slice(), value.as_slice())?;
 			removed += 1;
+			count = count.saturating_sub(1);
 		}
-		drop(events_log); // Ensure table is dropped before committing
+		stats_table.insert(
+			crate::database::storage::tables::EVENT_COUNT_KEY,
+			&count.to_le_bytes()[..],
+		)?;
+		drop(stats_table);
+		drop(events_log); // Ensure tables are dropped before committing
 		write_txn.commit()?;
 		Ok(removed)
 	}

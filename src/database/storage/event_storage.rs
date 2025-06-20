@@ -7,7 +7,7 @@ use crate::database::{
 	error::DatabaseResult,
 	types::{EventRecord, StorageKey},
 };
-use redb::Database;
+use redb::{Database, ReadableTable};
 use std::sync::Arc;
 
 /// Store an event record using the provided database
@@ -15,12 +15,21 @@ pub async fn store_event(database: &Arc<Database>, record: &EventRecord) -> Data
 	let write_txn = database.begin_write()?;
 	{
 		let mut events_log = write_txn.open_multimap_table(super::tables::EVENTS_LOG_TABLE)?;
+		let mut stats_table = write_txn.open_table(super::tables::STATS_TABLE)?;
 		let key = StorageKey::path_hash(&record.path);
 		let key_bytes = key.to_bytes();
 		let record_bytes = bincode::serialize(record)
 			.map_err(|e| crate::database::error::DatabaseError::Serialization(e.to_string()))?;
 
 		events_log.insert(key_bytes.as_slice(), record_bytes.as_slice())?;
+
+		// Increment persistent event counter
+		let count_bytes = stats_table.get(super::tables::EVENT_COUNT_KEY)?;
+		let mut count = count_bytes
+			.map(|v| u64::from_le_bytes(v.value().try_into().unwrap_or([0u8; 8])))
+			.unwrap_or(0);
+		count = count.saturating_add(1);
+		stats_table.insert(super::tables::EVENT_COUNT_KEY, &count.to_le_bytes()[..])?;
 	}
 	write_txn.commit()?;
 	Ok(())
