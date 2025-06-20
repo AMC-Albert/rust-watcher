@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 use uuid::Uuid;
 
 /// A filesystem event record stored in the database
@@ -130,6 +131,73 @@ impl MetadataRecord {
 	}
 }
 
+/// A cached filesystem node with complete metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilesystemNode {
+	/// Canonical absolute path
+	pub path: PathBuf,
+
+	/// Node type and metadata
+	pub node_type: NodeType,
+
+	/// File system metadata
+	pub metadata: NodeMetadata,
+
+	/// Caching metadata
+	pub cache_info: CacheInfo,
+
+	/// Computed properties
+	pub computed: ComputedProperties,
+}
+
+/// Type of filesystem node
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NodeType {
+	File {
+		size: u64,
+		content_hash: Option<String>,
+		mime_type: Option<String>,
+	},
+	Directory {
+		child_count: u32,
+		total_size: u64,
+		max_depth: u16,
+	},
+	Symlink {
+		target: PathBuf,
+		resolved: Option<PathBuf>,
+	},
+}
+
+/// Filesystem metadata from the OS
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeMetadata {
+	pub modified_time: SystemTime,
+	pub created_time: Option<SystemTime>,
+	pub accessed_time: Option<SystemTime>,
+	pub permissions: u32,
+	pub inode: Option<u64>,
+	pub windows_id: Option<u64>,
+}
+
+/// Cache-specific metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheInfo {
+	pub cached_at: DateTime<Utc>,
+	pub last_verified: DateTime<Utc>,
+	pub cache_version: u32,
+	pub needs_refresh: bool,
+}
+
+/// Computed properties for performance
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComputedProperties {
+	pub depth_from_root: u16,
+	pub path_hash: u64,
+	pub parent_hash: Option<u64>,
+	pub canonical_name: String,
+}
+
 /// Storage key types for efficient database indexing
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum StorageKey {
@@ -254,6 +322,175 @@ impl DatabaseStats {
 	}
 }
 
+/// Calculate a consistent hash for a path
+pub fn calculate_path_hash(path: &Path) -> u64 {
+	use std::collections::hash_map::DefaultHasher;
+	use std::hash::{Hash, Hasher};
+
+	let mut hasher = DefaultHasher::new();
+	// Normalize path for consistent hashing across platforms
+	path.to_string_lossy().to_lowercase().hash(&mut hasher);
+	hasher.finish()
+}
+
+/// Update the existing StorageKey enum with filesystem cache variants
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ExtendedStorageKey {
+	/// Original event storage
+	Event(String),
+
+	/// Filesystem cache entries
+	FilesystemNode(FilesystemKey),
+
+	/// Watch metadata
+	WatchMetadata(Uuid),
+
+	/// Hierarchy relationships
+	Hierarchy(u64), // parent hash
+
+	/// Shared node references
+	SharedNode(u64), // path hash
+}
+
+/// Filesystem storage key variants
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum FilesystemKey {
+	/// Direct path lookup (most common)
+	Path(PathBuf),
+
+	/// Hash-based lookup for performance
+	PathHash(u64),
+
+	/// Inode lookup (Unix systems)
+	Inode(u64),
+
+	/// Windows file ID lookup
+	WindowsId(u64),
+
+	/// Parent directory lookup
+	ParentPath(PathBuf),
+
+	/// Prefix lookup for subtree operations
+	PathPrefix(String),
+
+	/// Depth-based lookup for tree traversal
+	DepthLevel(u16),
+}
+
+/// Shared node information across multiple watches
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SharedNodeInfo {
+	pub node: FilesystemNode,
+	pub watching_scopes: Vec<Uuid>,
+	pub reference_count: u32,
+	pub last_shared_update: DateTime<Utc>,
+}
+
+/// Watch metadata for multi-watch management
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WatchMetadata {
+	pub watch_id: Uuid,
+	pub root_path: PathBuf,
+	pub created_at: DateTime<Utc>,
+	pub last_scan: Option<DateTime<Utc>>,
+	pub node_count: u64,
+	pub is_active: bool,
+	pub config_hash: u64,
+}
+
+/// Unified node that can represent shared or watch-specific data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum UnifiedNode {
+	/// Node specific to a single watch
+	WatchSpecific {
+		watch_id: Uuid,
+		node: FilesystemNode,
+	},
+	/// Node shared across multiple watches
+	Shared { shared_info: SharedNodeInfo },
+}
+
+impl FilesystemNode {
+	/// Create a new filesystem node from standard metadata
+	pub fn new(path: PathBuf, metadata: &std::fs::Metadata) -> Self {
+		let now = Utc::now();
+		let path_hash = calculate_path_hash(&path);
+		let parent_hash = path.parent().map(calculate_path_hash);
+
+		let node_type = if metadata.is_dir() {
+			NodeType::Directory {
+				child_count: 0, // Will be populated during scanning
+				total_size: 0,
+				max_depth: 0,
+			}
+		} else if metadata.file_type().is_symlink() {
+			NodeType::Symlink {
+				target: PathBuf::new(), // Will be resolved
+				resolved: None,
+			}
+		} else {
+			NodeType::File {
+				size: metadata.len(),
+				content_hash: None, // Computed on demand
+				mime_type: None,
+			}
+		};
+
+		Self {
+			path: path.clone(),
+			node_type,
+			metadata: NodeMetadata::from_std_metadata(metadata),
+			cache_info: CacheInfo {
+				cached_at: now,
+				last_verified: now,
+				cache_version: 1,
+				needs_refresh: false,
+			},
+			computed: ComputedProperties {
+				depth_from_root: path.components().count() as u16,
+				path_hash,
+				parent_hash,
+				canonical_name: path
+					.file_name()
+					.unwrap_or_default()
+					.to_string_lossy()
+					.to_string(),
+			},
+		}
+	}
+
+	/// Check if the node needs to be refreshed based on timestamp
+	pub fn needs_refresh(&self, max_age: std::time::Duration) -> bool {
+		let age = Utc::now().signed_duration_since(self.cache_info.last_verified);
+		age.to_std().unwrap_or_default() > max_age || self.cache_info.needs_refresh
+	}
+
+	/// Mark the node as needing refresh
+	pub fn mark_stale(&mut self) {
+		self.cache_info.needs_refresh = true;
+	}
+
+	/// Update the verification timestamp
+	pub fn mark_verified(&mut self) {
+		self.cache_info.last_verified = Utc::now();
+		self.cache_info.needs_refresh = false;
+	}
+}
+
+impl NodeMetadata {
+	/// Convert from standard library metadata
+	pub fn from_std_metadata(metadata: &std::fs::Metadata) -> Self {
+		Self {
+			modified_time: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+			created_time: metadata.created().ok(),
+			accessed_time: metadata.accessed().ok(),
+			permissions: 0, // Platform-specific implementation needed
+			inode: None,    // Platform-specific implementation needed
+			windows_id: None,
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -310,5 +547,55 @@ mod tests {
 
 		let efficiency = stats.efficiency_score();
 		assert!(efficiency > 0.0 && efficiency <= 1.0);
+	}
+	#[test]
+	fn test_filesystem_node_creation() {
+		use std::fs;
+		use std::time::Duration;
+		use tempfile::TempDir;
+
+		let temp_dir = TempDir::new().unwrap();
+		let test_file = temp_dir.path().join("test.txt");
+		fs::write(&test_file, "test content").unwrap();
+
+		let metadata = fs::metadata(&test_file).unwrap();
+		let node = FilesystemNode::new(test_file.clone(), &metadata);
+
+		assert_eq!(node.path, test_file);
+		assert!(matches!(node.node_type, NodeType::File { .. }));
+		assert!(!node.needs_refresh(Duration::from_secs(3600)));
+	}
+
+	#[test]
+	fn test_path_hash_consistency() {
+		let path1 = PathBuf::from("/test/path");
+		let path2 = PathBuf::from("/test/path");
+
+		assert_eq!(calculate_path_hash(&path1), calculate_path_hash(&path2));
+	}
+
+	#[test]
+	fn test_node_refresh_logic() {
+		use std::fs;
+		use std::time::Duration;
+		use tempfile::TempDir;
+
+		let temp_dir = TempDir::new().unwrap();
+		let test_file = temp_dir.path().join("test.txt");
+		fs::write(&test_file, "test content").unwrap();
+
+		let metadata = fs::metadata(&test_file).unwrap();
+		let mut node = FilesystemNode::new(test_file, &metadata);
+
+		// Fresh node shouldn't need refresh
+		assert!(!node.needs_refresh(Duration::from_secs(3600)));
+
+		// Mark as stale
+		node.mark_stale();
+		assert!(node.needs_refresh(Duration::from_secs(3600)));
+
+		// Mark as verified
+		node.mark_verified();
+		assert!(!node.needs_refresh(Duration::from_secs(3600)));
 	}
 }

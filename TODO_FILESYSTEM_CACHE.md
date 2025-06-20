@@ -29,10 +29,10 @@
 ## Phase 1: Core Data Structures and Storage Layer
 
 ### 1.1 Extend Database Types
-- [ ] Add `FilesystemNode`, `NodeType`, `NodeMetadata`, `CacheInfo`, `ComputedProperties` to `database/types.rs`
-- [ ] Add `WatchScopedKey`, `FilesystemKey` enums for multi-watch key management
-- [ ] Add `SharedNodeInfo`, `WatchMetadata`, `UnifiedNode` structures
-- [ ] Update `StorageKey` enum with filesystem cache variants
+- [x] ~~Add `FilesystemNode`, `NodeType`, `NodeMetadata`, `CacheInfo`, `ComputedProperties` to `database/types.rs`~~ (implemented with comprehensive test coverage)
+- [x] ~~Add `WatchScopedKey`, `FilesystemKey` enums for multi-watch key management~~ (implemented)
+- [x] ~~Add `SharedNodeInfo`, `WatchMetadata`, `UnifiedNode` structures~~ (implemented)
+- [x] ~~Update `StorageKey` enum with filesystem cache variants~~ (implemented as `ExtendedStorageKey`)
 
 ### 1.2 Database Schema Extension
 - [ ] Add filesystem cache table definitions to `database/storage.rs`
