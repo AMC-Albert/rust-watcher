@@ -11,10 +11,8 @@ pub use watcher::{start, WatcherConfig, WatcherHandle};
 #[cfg(test)]
 mod tests {
 	use super::*;
-
 	#[test]
 	fn test_basic_types_exist() {
-		// Test that basic types can be instantiated without OOM
 		let _event_type = EventType::Create;
 		let _method = MoveDetectionMethod::FileSystemEvent;
 		println!("Basic types test passed");
