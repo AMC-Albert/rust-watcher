@@ -322,6 +322,8 @@ impl DatabaseStorage for RedbStorage {
 		let write_txn = self.database.begin_write()?;
 		let mut events_log =
 			write_txn.open_multimap_table(crate::database::storage::tables::EVENTS_LOG_TABLE)?;
+		let mut stats_table =
+			write_txn.open_table(crate::database::storage::tables::STATS_TABLE)?;
 		let mut all_events = Vec::new();
 		for entry in events_log.iter()? {
 			let (key_guard, multimap_value) = entry?;
@@ -341,10 +343,21 @@ impl DatabaseStorage for RedbStorage {
 		}
 		all_events.sort_by_key(|(ts, _, _)| *ts);
 		let mut removed = 0;
+		// Decrement persistent event counter for each event removed
+		let count_bytes = stats_table.get(crate::database::storage::tables::EVENT_COUNT_KEY)?;
+		let mut count = count_bytes
+			.map(|v| u64::from_le_bytes(v.value().try_into().unwrap_or([0u8; 8])))
+			.unwrap_or(0);
 		for (_ts, key, value) in all_events.into_iter().take(n) {
 			events_log.remove(key.as_slice(), value.as_slice())?;
 			removed += 1;
+			count = count.saturating_sub(1);
 		}
+		stats_table.insert(
+			crate::database::storage::tables::EVENT_COUNT_KEY,
+			&count.to_le_bytes()[..],
+		)?;
+		drop(stats_table);
 		drop(events_log); // Ensure table is dropped before committing
 		write_txn.commit()?;
 		Ok(removed)
