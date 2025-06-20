@@ -290,12 +290,32 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			let watch_key = &watch_id.as_bytes()[..];
 			watch_table.remove(watch_key)?;
 
-			// Remove all nodes and hierarchy entries for this watch
-			// This is a complex operation that requires iterating through all entries
-			// In practice, this might be optimized with additional indexing
+			// Remove all nodes for this watch
+			let mut fs_cache_table = write_txn.open_table(MULTI_WATCH_FS_CACHE)?;
+			let mut to_remove = Vec::new();
+			for entry in fs_cache_table.iter()? {
+				let (key, _) = entry?;
+				let scoped_key: WatchScopedKey = Self::deserialize(key.value())?;
+				if scoped_key.watch_id == *watch_id {
+					to_remove.push(key.value().to_vec());
+				}
+			}
+			for key in &to_remove {
+				fs_cache_table.remove(&key[..])?;
+			}
 
-			// For now, we'll mark this as a TODO for a more efficient implementation
-			// TODO: Implement efficient watch removal with proper indexing
+			// Remove all hierarchy and path-to-watches entries for this watch
+			// Limitation: MultimapTable does not support full iteration; we must scan known keys.
+			let mut hierarchy_table = write_txn.open_multimap_table(MULTI_WATCH_HIERARCHY)?;
+			let mut path_watches_table = write_txn.open_multimap_table(PATH_TO_WATCHES)?;
+			for key in &to_remove {
+				// Remove all hierarchy entries for this node
+				hierarchy_table.remove_all(&key[..])?;
+				// Remove all path-to-watches entries for this node
+				path_watches_table.remove_all(&key[..])?;
+			}
+			// NOTE: This will not remove orphaned entries if the tables are out of sync.
+			// For full correctness, a separate index or a full scan of all possible keys is required.
 		}
 		write_txn.commit()?;
 		Ok(())

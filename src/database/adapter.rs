@@ -236,6 +236,52 @@ impl DatabaseStorage for NoOpStorage {
 	async fn close(self) -> DatabaseResult<()> {
 		Ok(())
 	}
+
+	async fn store_filesystem_node(
+		&mut self,
+		_watch_id: &uuid::Uuid,
+		_node: &crate::database::types::FilesystemNode,
+	) -> crate::database::error::DatabaseResult<()> {
+		Ok(())
+	}
+
+	async fn get_filesystem_node(
+		&mut self,
+		_watch_id: &uuid::Uuid,
+		_path: &std::path::Path,
+	) -> crate::database::error::DatabaseResult<Option<crate::database::types::FilesystemNode>> {
+		Ok(None)
+	}
+
+	async fn list_directory_for_watch(
+		&mut self,
+		_watch_id: &uuid::Uuid,
+		_parent_path: &std::path::Path,
+	) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>> {
+		Ok(vec![])
+	}
+
+	async fn batch_store_filesystem_nodes(
+		&mut self,
+		_watch_id: &uuid::Uuid,
+		_nodes: &[crate::database::types::FilesystemNode],
+	) -> crate::database::error::DatabaseResult<()> {
+		Ok(())
+	}
+
+	async fn store_watch_metadata(
+		&mut self,
+		_metadata: &crate::database::types::WatchMetadata,
+	) -> crate::database::error::DatabaseResult<()> {
+		Ok(())
+	}
+
+	async fn get_watch_metadata(
+		&mut self,
+		_watch_id: &uuid::Uuid,
+	) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>> {
+		Ok(None)
+	}
 }
 
 /// Extension trait to convert events to database records

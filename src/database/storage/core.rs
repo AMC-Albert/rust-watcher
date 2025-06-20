@@ -3,6 +3,7 @@
 //! This module defines the main storage traits and provides the primary
 //! RedbStorage implementation that coordinates all storage operations.
 
+use super::filesystem_cache::{FilesystemCacheStorage, RedbFilesystemCache};
 use crate::database::{
 	config::DatabaseConfig,
 	error::DatabaseResult,
@@ -50,6 +51,41 @@ pub trait DatabaseStorage: Send + Sync {
 
 	/// Close the database
 	async fn close(self) -> DatabaseResult<()>;
+
+	/// --- Filesystem cache methods ---
+	async fn store_filesystem_node(
+		&mut self,
+		watch_id: &uuid::Uuid,
+		node: &crate::database::types::FilesystemNode,
+	) -> crate::database::error::DatabaseResult<()>;
+
+	async fn get_filesystem_node(
+		&mut self,
+		watch_id: &uuid::Uuid,
+		path: &std::path::Path,
+	) -> crate::database::error::DatabaseResult<Option<crate::database::types::FilesystemNode>>;
+
+	async fn list_directory_for_watch(
+		&mut self,
+		watch_id: &uuid::Uuid,
+		parent_path: &std::path::Path,
+	) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>;
+
+	async fn batch_store_filesystem_nodes(
+		&mut self,
+		watch_id: &uuid::Uuid,
+		nodes: &[crate::database::types::FilesystemNode],
+	) -> crate::database::error::DatabaseResult<()>;
+
+	async fn store_watch_metadata(
+		&mut self,
+		metadata: &crate::database::types::WatchMetadata,
+	) -> crate::database::error::DatabaseResult<()>;
+
+	async fn get_watch_metadata(
+		&mut self,
+		watch_id: &uuid::Uuid,
+	) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>>;
 }
 
 /// Primary ReDB implementation that coordinates all storage modules
@@ -77,6 +113,10 @@ impl RedbStorage {
 	/// Get reference to the configuration
 	pub fn config(&self) -> &DatabaseConfig {
 		&self.config
+	}
+
+	fn cache(&self) -> RedbFilesystemCache {
+		RedbFilesystemCache::new(self.database.clone())
 	}
 }
 
@@ -127,6 +167,58 @@ impl DatabaseStorage for RedbStorage {
 	async fn close(self) -> DatabaseResult<()> {
 		// ReDB handles closing automatically when dropped
 		Ok(())
+	}
+
+	async fn store_filesystem_node(
+		&mut self,
+		watch_id: &uuid::Uuid,
+		node: &crate::database::types::FilesystemNode,
+	) -> crate::database::error::DatabaseResult<()> {
+		let mut cache = self.cache();
+		cache.store_filesystem_node(watch_id, node).await
+	}
+
+	async fn get_filesystem_node(
+		&mut self,
+		watch_id: &uuid::Uuid,
+		path: &std::path::Path,
+	) -> crate::database::error::DatabaseResult<Option<crate::database::types::FilesystemNode>> {
+		let mut cache = self.cache();
+		cache.get_filesystem_node(watch_id, path).await
+	}
+
+	async fn list_directory_for_watch(
+		&mut self,
+		watch_id: &uuid::Uuid,
+		parent_path: &std::path::Path,
+	) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>> {
+		let mut cache = self.cache();
+		cache.list_directory_for_watch(watch_id, parent_path).await
+	}
+
+	async fn batch_store_filesystem_nodes(
+		&mut self,
+		watch_id: &uuid::Uuid,
+		nodes: &[crate::database::types::FilesystemNode],
+	) -> crate::database::error::DatabaseResult<()> {
+		let mut cache = self.cache();
+		cache.batch_store_filesystem_nodes(watch_id, nodes).await
+	}
+
+	async fn store_watch_metadata(
+		&mut self,
+		metadata: &crate::database::types::WatchMetadata,
+	) -> crate::database::error::DatabaseResult<()> {
+		let mut cache = self.cache();
+		cache.store_watch_metadata(metadata).await
+	}
+
+	async fn get_watch_metadata(
+		&mut self,
+		watch_id: &uuid::Uuid,
+	) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>> {
+		let mut cache = self.cache();
+		cache.get_watch_metadata(watch_id).await
 	}
 }
 
