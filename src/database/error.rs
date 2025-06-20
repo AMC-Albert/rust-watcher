@@ -41,19 +41,19 @@ pub enum DatabaseError {
 	StorageError(String),
 
 	#[error("redb database error: {0}")]
-	RedbError(#[from] redb::Error),
+	RedbError(#[from] Box<redb::Error>),
 
 	#[error("redb transaction error: {0}")]
-	RedbTransactionError(#[from] redb::TransactionError),
+	RedbTransactionError(#[from] Box<redb::TransactionError>),
 
 	#[error("redb commit error: {0}")]
-	RedbCommitError(#[from] redb::CommitError),
+	RedbCommitError(#[from] Box<redb::CommitError>),
 
 	#[error("redb table error: {0}")]
-	RedbTableError(#[from] redb::TableError),
+	RedbTableError(#[from] Box<redb::TableError>),
 
 	#[error("redb storage error: {0}")]
-	RedbStorageError(#[from] redb::StorageError),
+	RedbStorageError(#[from] Box<redb::StorageError>),
 
 	#[error("Invalid configuration: {0}")]
 	InvalidConfiguration(String),
@@ -86,7 +86,31 @@ impl DatabaseError {
 
 impl From<redb::DatabaseError> for DatabaseError {
 	fn from(e: redb::DatabaseError) -> Self {
-		DatabaseError::RedbError(redb::Error::from(e))
+		DatabaseError::RedbError(Box::new(redb::Error::from(e)))
+	}
+}
+
+impl From<redb::TransactionError> for DatabaseError {
+	fn from(e: redb::TransactionError) -> Self {
+		DatabaseError::RedbTransactionError(Box::new(e))
+	}
+}
+
+impl From<redb::TableError> for DatabaseError {
+	fn from(e: redb::TableError) -> Self {
+		DatabaseError::RedbTableError(Box::new(e))
+	}
+}
+
+impl From<redb::CommitError> for DatabaseError {
+	fn from(e: redb::CommitError) -> Self {
+		DatabaseError::RedbCommitError(Box::new(e))
+	}
+}
+
+impl From<redb::StorageError> for DatabaseError {
+	fn from(e: redb::StorageError) -> Self {
+		DatabaseError::RedbStorageError(Box::new(e))
 	}
 }
 

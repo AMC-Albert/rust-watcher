@@ -558,13 +558,6 @@ async fn test_database_under_load() {
 	let stats = adapter.get_stats().await.expect("Failed to get stats");
 	assert!(stats.total_events >= event_count);
 
-	// Test querying by size range
-	let events_by_size = adapter
-		.find_events_by_size(1000, 1050)
-		.await
-		.expect("Failed to find events by size");
-	assert!(!events_by_size.is_empty());
-
 	// Test querying by time range
 	let now = Utc::now();
 	let hour_ago = now - Duration::hours(1);

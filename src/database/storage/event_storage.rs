@@ -120,10 +120,9 @@ impl EventStorage for EventStorageImpl {
 		let events_table = read_txn.open_table(super::tables::EVENTS_TABLE)?;
 
 		let mut events = Vec::new();
-		let mut iter = events_table.iter()?;
-		let mut count = 0;
+		let iter = events_table.iter()?;
 
-		while let Some(item) = iter.next() {
+		for (count, item) in iter.enumerate() {
 			if let Some(max_limit) = limit {
 				if count >= max_limit {
 					break;
@@ -133,7 +132,6 @@ impl EventStorage for EventStorageImpl {
 			let (_, value) = item?;
 			let record = Self::deserialize_record(value.value())?;
 			events.push(record);
-			count += 1;
 		}
 
 		Ok(events)
@@ -141,7 +139,7 @@ impl EventStorage for EventStorageImpl {
 }
 
 /// Store an event record using the provided database
-pub async fn store_event(database: &Arc<Database>, record: &EventRecord) -> DatabaseResult<()> {
+pub async fn store_event(_database: &Arc<Database>, _record: &EventRecord) -> DatabaseResult<()> {
 	// TODO: Implement event storage
 	// For now, return success - this would be implemented properly in Phase 1.2
 	Ok(())
@@ -149,8 +147,8 @@ pub async fn store_event(database: &Arc<Database>, record: &EventRecord) -> Data
 
 /// Retrieve events by storage key using the provided database
 pub async fn get_events(
-	database: &Arc<Database>,
-	key: &StorageKey,
+	_database: &Arc<Database>,
+	_key: &StorageKey,
 ) -> DatabaseResult<Vec<EventRecord>> {
 	// TODO: Implement event retrieval
 	// For now, return empty vector - this would be implemented properly in Phase 1.2

@@ -24,6 +24,7 @@ pub trait MaintenanceStorage: Send + Sync {
 }
 
 /// Implementation of maintenance storage using ReDB
+#[allow(dead_code)]
 pub struct MaintenanceImpl {
 	database: Arc<Database>,
 	config: DatabaseConfig,
@@ -53,8 +54,8 @@ impl MaintenanceStorage for MaintenanceImpl {
 		let read_txn = self.database.begin_read()?;
 
 		// Count records in basic tables
-		let events_table = read_txn.open_table(super::tables::EVENTS_TABLE)?;
-		let metadata_table = read_txn.open_table(super::tables::METADATA_TABLE)?;
+		let _events_table = read_txn.open_table(super::tables::EVENTS_TABLE)?;
+		let _metadata_table = read_txn.open_table(super::tables::METADATA_TABLE)?;
 
 		// Note: ReDB doesn't have a direct len() method, so we'll estimate or iterate
 		// For now, return basic stats structure
@@ -99,8 +100,8 @@ impl MaintenanceStorage for MaintenanceImpl {
 
 /// Clean up expired events using the provided database
 pub async fn cleanup_expired_events(
-	database: &Arc<Database>,
-	before: std::time::SystemTime,
+	_database: &Arc<Database>,
+	_before: std::time::SystemTime,
 ) -> DatabaseResult<usize> {
 	// TODO: Implement cleanup
 	// For now, return 0 - this would be implemented properly in Phase 1.2
@@ -108,14 +109,14 @@ pub async fn cleanup_expired_events(
 }
 
 /// Get database statistics using the provided database
-pub async fn get_database_stats(database: &Arc<Database>) -> DatabaseResult<DatabaseStats> {
+pub async fn get_database_stats(_database: &Arc<Database>) -> DatabaseResult<DatabaseStats> {
 	// TODO: Implement stats collection
 	// For now, return default stats - this would be implemented properly in Phase 1.2
 	Ok(DatabaseStats::default())
 }
 
 /// Compact database using the provided database
-pub async fn compact_database(database: &Arc<Database>) -> DatabaseResult<()> {
+pub async fn compact_database(_database: &Arc<Database>) -> DatabaseResult<()> {
 	// TODO: Implement database compaction
 	// For now, return success - this would be implemented properly in Phase 1.2
 	Ok(())

@@ -3,7 +3,7 @@
 //! This module contains all table definitions used across the storage implementation.
 //! Centralizing table definitions here ensures consistency and makes schema evolution easier.
 
-use crate::database::error::{DatabaseError, DatabaseResult};
+use crate::database::error::DatabaseResult;
 use redb::{Database, MultimapTableDefinition, TableDefinition};
 use std::sync::Arc;
 

@@ -115,9 +115,9 @@ impl MetadataStorage for MetadataStorageImpl {
 		let metadata_table = read_txn.open_table(super::tables::METADATA_TABLE)?;
 
 		let mut metadata_records = Vec::new();
-		let mut iter = metadata_table.iter()?;
+		let iter = metadata_table.iter()?;
 
-		while let Some(item) = iter.next() {
+		for item in iter {
 			let (_, value) = item?;
 			let record = Self::deserialize_record(value.value())?;
 
@@ -137,8 +137,8 @@ impl MetadataStorage for MetadataStorageImpl {
 
 /// Store metadata record using the provided database
 pub async fn store_metadata(
-	database: &Arc<Database>,
-	record: &MetadataRecord,
+	_database: &Arc<Database>,
+	_record: &MetadataRecord,
 ) -> DatabaseResult<()> {
 	// TODO: Implement metadata storage
 	// For now, return success - this would be implemented properly in Phase 1.2
@@ -147,8 +147,8 @@ pub async fn store_metadata(
 
 /// Retrieve metadata by path using the provided database
 pub async fn get_metadata(
-	database: &Arc<Database>,
-	path: &Path,
+	_database: &Arc<Database>,
+	_path: &Path,
 ) -> DatabaseResult<Option<MetadataRecord>> {
 	// TODO: Implement metadata retrieval
 	// For now, return None - this would be implemented properly in Phase 1.2
