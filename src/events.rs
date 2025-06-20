@@ -111,3 +111,104 @@ impl FileSystemEvent {
 		serde_json::to_string_pretty(self)
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::path::PathBuf;
+
+	#[test]
+	fn test_event_type_from_notify() {
+		// Test conversion from notify events
+		let create_kind = notify::EventKind::Create(notify::event::CreateKind::File);
+		let event_type = EventType::from(create_kind);
+		assert_eq!(event_type, EventType::Create);
+	}
+
+	#[test]
+	fn test_move_detection_method_variants() {
+		// Test that all MoveDetectionMethod variants can be created
+		let methods = vec![
+			MoveDetectionMethod::FileSystemEvent,
+			MoveDetectionMethod::Inode,
+			MoveDetectionMethod::InodeMatching,
+			MoveDetectionMethod::WindowsId,
+			MoveDetectionMethod::ContentHash,
+			MoveDetectionMethod::NameAndTiming,
+		];
+
+		for method in methods {
+			// Just test that they can be created and serialized
+			let json = serde_json::to_string(&method).unwrap();
+			assert!(!json.is_empty());
+		}
+	}
+
+	#[test]
+	fn test_filesystem_event_creation() {
+		let event = FileSystemEvent {
+			id: uuid::Uuid::new_v4(),
+			event_type: EventType::Create,
+			path: PathBuf::from("/test/file.txt"),
+			timestamp: chrono::Utc::now(),
+			is_directory: false,
+			size: Some(100),
+			move_data: None,
+		};
+
+		assert_eq!(event.event_type, EventType::Create);
+		assert_eq!(event.path, PathBuf::from("/test/file.txt"));
+		assert!(!event.is_directory);
+		assert_eq!(event.size, Some(100));
+		assert!(!event.is_move());
+	}
+
+	#[test]
+	fn test_filesystem_event_with_move_data() {
+		let move_event = MoveEvent {
+			source_path: PathBuf::from("/source.txt"),
+			destination_path: PathBuf::from("/dest.txt"),
+			confidence: 0.95,
+			detection_method: MoveDetectionMethod::FileSystemEvent,
+		};
+
+		let mut event = FileSystemEvent {
+			id: uuid::Uuid::new_v4(),
+			event_type: EventType::Create,
+			path: PathBuf::from("/dest.txt"),
+			timestamp: chrono::Utc::now(),
+			is_directory: false,
+			size: Some(100),
+			move_data: None,
+		};
+
+		event = event.with_move_data(move_event);
+
+		assert!(event.is_move());
+		assert_eq!(event.event_type, EventType::Move);
+		assert!(event.move_data.is_some());
+
+		let move_data = event.move_data.unwrap();
+		assert_eq!(move_data.source_path, PathBuf::from("/source.txt"));
+		assert_eq!(move_data.destination_path, PathBuf::from("/dest.txt"));
+		assert_eq!(move_data.confidence, 0.95);
+	}
+
+	#[test]
+	fn test_event_serialization() {
+		let event = FileSystemEvent {
+			id: uuid::Uuid::new_v4(),
+			event_type: EventType::Write,
+			path: PathBuf::from("/test.txt"),
+			timestamp: chrono::Utc::now(),
+			is_directory: false,
+			size: Some(50),
+			move_data: None,
+		};
+
+		let json = event.to_json().unwrap();
+		assert!(json.contains("Write"));
+		assert!(json.contains("test.txt"));
+		assert!(json.contains("50"));
+	}
+}

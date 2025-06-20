@@ -27,6 +27,20 @@ tempfile = "3.0"
 tokio-test = "0.4"
 criterion = "0.5"
 serial_test = "3.0"
+once_cell = "1.19" # For safe static initialization in tests
+
+# Memory optimization profiles to prevent OOM crashes
+[profile.test]
+opt-level = 1        # Slight optimization to reduce memory usage
+debug = 1           # Reduced debug info to save memory
+incremental = false # Disable incremental compilation to reduce memory
+codegen-units = 2   # Limited codegen units to balance speed vs memory
+
+[profile.dev]
+opt-level = 0
+debug = 1           # Reduced debug symbols
+incremental = false # Disable to prevent memory issues
+split-debuginfo = "off"  # Disable debug info splitting on Windows
 
 # Separate test profiles for different types of tests
 [[bin]]
@@ -37,13 +51,6 @@ path = "src/main.rs"
 name = "advanced_monitor"
 path = "examples/advanced_monitor.rs"
 
-# Unit and integration tests
-[[test]]
-name = "unit_tests"
-path = "testing/unit/mod.rs"
-
-# Benchmark tests
-[[bench]]
-name = "performance"
-path = "testing/benchmarks/performance.rs"
-harness = false
+# Remove problematic test targets - use standard Rust test conventions instead
+# Unit tests will be in src/ files with #[cfg(test)]
+# Integration tests will be in tests/ directory

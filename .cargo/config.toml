@@ -1,0 +1,25 @@
+# OOM Prevention Configuration for Cargo
+[build]
+# Limit parallel jobs to prevent memory exhaustion
+jobs = 1
+
+[test]
+# Run tests sequentially to prevent memory issues
+jobs = 1
+
+# Reduce memory usage during compilation
+[env]
+# Limit rust-analyzer memory usage (if using VS Code)
+RUST_ANALYZER_SERVER_EXTRA_ENV = "RA_RUST_ANALYZER_MEMORY_USAGE_THRESHOLD=2000"
+
+# Cargo test environment
+RUST_TEST_THREADS = "1"
+RUST_BACKTRACE = "0"  # Disable backtraces to save memory
+
+[target.x86_64-pc-windows-msvc]
+# Windows-specific optimizations to prevent memory fragmentation
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "codegen-units=1",
+    "-C", "opt-level=1"
+]

@@ -217,3 +217,103 @@ pub fn calculate_name_similarity(path1: &Path, path2: &Path) -> f32 {
 		1.0 - (distance as f32 / max_len as f32)
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::path::PathBuf;
+
+	#[test]
+	fn test_path_type_heuristics_creation() {
+		let heuristics = PathTypeHeuristics::new();
+		assert!(!heuristics.has_cached_metadata);
+		assert!(!heuristics.cached_had_size);
+		assert!(!heuristics.has_children_in_pending);
+		assert!(!heuristics.has_children_in_cache);
+		assert!(!heuristics.has_extension);
+		assert_eq!(heuristics.extension, None);
+		assert_eq!(heuristics.confidence, 0.0);
+	}
+
+	#[test]
+	fn test_is_likely_directory_low_confidence() {
+		let heuristics = PathTypeHeuristics {
+			confidence: 0.2,
+			..PathTypeHeuristics::new()
+		};
+
+		assert_eq!(heuristics.is_likely_directory(), None);
+	}
+
+	#[test]
+	fn test_is_likely_directory_with_children() {
+		let heuristics = PathTypeHeuristics {
+			confidence: 0.8,
+			has_children_in_pending: true,
+			..PathTypeHeuristics::new()
+		};
+
+		assert_eq!(heuristics.is_likely_directory(), Some(true));
+	}
+
+	#[test]
+	fn test_is_likely_file_with_size() {
+		let heuristics = PathTypeHeuristics {
+			confidence: 0.8,
+			has_cached_metadata: true,
+			cached_had_size: true,
+			..PathTypeHeuristics::new()
+		};
+
+		assert_eq!(heuristics.is_likely_directory(), Some(false));
+	}
+
+	#[test]
+	fn test_is_likely_file_with_extension() {
+		let heuristics = PathTypeHeuristics {
+			confidence: 0.8,
+			has_extension: true,
+			extension: Some("txt".to_string()),
+			..PathTypeHeuristics::new()
+		};
+
+		assert_eq!(heuristics.is_likely_directory(), Some(false));
+	}
+
+	#[test]
+	fn test_calculate_name_similarity_identical() {
+		let path1 = PathBuf::from("test.txt");
+		let path2 = PathBuf::from("test.txt");
+
+		let similarity = calculate_name_similarity(&path1, &path2);
+		assert_eq!(similarity, 1.0);
+	}
+
+	#[test]
+	fn test_calculate_name_similarity_different() {
+		let path1 = PathBuf::from("file1.txt");
+		let path2 = PathBuf::from("file2.txt");
+
+		let similarity = calculate_name_similarity(&path1, &path2);
+		assert!(similarity > 0.5); // Should be somewhat similar
+		assert!(similarity < 1.0);
+	}
+
+	#[test]
+	fn test_calculate_name_similarity_empty() {
+		let path1 = PathBuf::from("");
+		let path2 = PathBuf::from("test.txt");
+
+		let similarity = calculate_name_similarity(&path1, &path2);
+		assert_eq!(similarity, 0.0);
+	}
+
+	#[test]
+	fn test_calculate_name_similarity_completely_different() {
+		let path1 = PathBuf::from("abc.txt");
+		let path2 = PathBuf::from("xyz.doc");
+
+		let similarity = calculate_name_similarity(&path1, &path2);
+		assert!(similarity < 0.5); // Should be low similarity
+	}
+}

@@ -152,3 +152,68 @@ fn convert_notify_event(
 
 	FileSystemEvent::new(event_type, path, is_directory, size)
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::path::PathBuf;
+	use tempfile::TempDir;
+
+	#[test]
+	fn test_watcher_config_creation() {
+		let temp_dir = TempDir::new().unwrap();
+		let config = WatcherConfig {
+			path: temp_dir.path().to_path_buf(),
+			recursive: true,
+			move_detector_config: None,
+		};
+
+		assert_eq!(config.path, temp_dir.path());
+		assert!(config.recursive);
+		assert!(config.move_detector_config.is_none());
+	}
+
+	#[test]
+	fn test_watcher_config_with_move_detector() {
+		let temp_dir = TempDir::new().unwrap();
+		let move_config = MoveDetectorConfig::default();
+		let config = WatcherConfig {
+			path: temp_dir.path().to_path_buf(),
+			recursive: false,
+			move_detector_config: Some(move_config),
+		};
+
+		assert!(!config.recursive);
+		assert!(config.move_detector_config.is_some());
+	}
+
+	#[test]
+	fn test_start_with_invalid_path() {
+		let config = WatcherConfig {
+			path: PathBuf::from("/nonexistent/path/that/should/not/exist"),
+			recursive: true,
+			move_detector_config: None,
+		};
+
+		let result = start(config);
+		assert!(result.is_err());
+
+		match result.unwrap_err() {
+			WatcherError::InvalidPath { path } => {
+				assert!(path.contains("nonexistent"));
+			}
+			other => panic!("Expected InvalidPath error, got: {:?}", other),
+		}
+	}
+
+	#[test]
+	fn test_watcher_handle_creation() {
+		// Test that WatcherHandle can be created (unit test for the struct)
+		let (tx, _rx) = oneshot::channel();
+		let handle = WatcherHandle { stop_sender: tx };
+
+		// Test that handle exists and has expected structure
+		// We can't easily test the stop functionality without async runtime
+		assert!(std::mem::size_of_val(&handle) > 0);
+	}
+}

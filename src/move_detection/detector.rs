@@ -309,3 +309,69 @@ impl MoveDetector {
 		self.metadata_cache.cleanup_old_entries(timeout * 2); // Keep metadata longer than events
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::path::PathBuf;
+	use std::time::Duration;
+
+	#[test]
+	fn test_move_detector_creation() {
+		let config = MoveDetectorConfig::default();
+		let detector = MoveDetector::new(config);
+
+		// Test that detector is properly initialized
+		assert!(detector.pending_events.pending_rename_from.is_none());
+		assert!(detector.pending_events.removes_by_size.is_empty());
+		assert!(detector.pending_events.removes_no_size.is_empty());
+		assert!(detector.pending_events.creates_by_size.is_empty());
+		assert!(detector.pending_events.creates_no_size.is_empty());
+	}
+
+	#[test]
+	fn test_move_detector_with_timeout() {
+		let detector = MoveDetector::with_timeout(5000);
+
+		// Test that detector is created with custom timeout
+		assert_eq!(detector.config.timeout, Duration::from_millis(5000));
+	}
+	#[test]
+	fn test_infer_path_type() {
+		let config = MoveDetectorConfig::default();
+		let detector = MoveDetector::new(config);
+
+		// Test path type inference - since there's no metadata or pending events,
+		// the function will fall back to basic heuristics
+		// Files with extensions should be detected as files
+		let file_result = detector.infer_path_type(&PathBuf::from("file.txt"));
+		if let Some(is_dir) = file_result {
+			assert!(!is_dir);
+		}
+
+		// Paths without extensions might not be determinable without context
+		let folder_result = detector.infer_path_type(&PathBuf::from("folder"));
+		// This might return None if there's insufficient information
+		println!("Folder inference result: {:?}", folder_result);
+	}
+	#[test]
+	fn test_get_pending_events_summary() {
+		let config = MoveDetectorConfig::default();
+		let detector = MoveDetector::new(config);
+
+		let summary = detector.get_pending_events_summary();
+		assert_eq!(summary.removes_by_size_buckets, 0);
+		assert_eq!(summary.removes_no_size, 0);
+		assert!(!summary.has_pending_rename_from);
+	}
+
+	#[test]
+	fn test_get_resource_stats() {
+		let config = MoveDetectorConfig::default();
+		let mut detector = MoveDetector::new(config);
+
+		// Get resource stats should not panic on empty detector
+		let stats = detector.get_resource_stats();
+		assert_eq!(stats.total_events_processed, 0);
+	}
+}
