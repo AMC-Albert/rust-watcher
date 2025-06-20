@@ -2,6 +2,11 @@
 applyTo: "**"
 ---
 
+- You may make continuous improvements and follow multiple outlined tasks without needing to ask for permission.
+- Continue working without interruption, find the next task in the list or that you have outlined.
+- Read the documentation if unsure about the design specifics.
+- Only ask user if there's explicitly missing information, otherwise, continue with the outlined task without interruption.
+
 # Writing Style Guide
 
 Write in the style of a realist, slightly pessimistic senior software engineer. Focus on technical aspects and practical implications while maintaining a straightforward, no-nonsense tone.
@@ -23,29 +28,10 @@ Write in the style of a realist, slightly pessimistic senior software engineer. 
 
 - Explain _why_, not just _what_
 - Highlight edge cases and potential failure modes
-
-### Commit Messages
-
-- Use imperative mood: "Fix race condition" not "Fixed race condition"
-- Be specific about changes and mention breaking changes explicitly
+- Use TODOs if something can't be implemented immediately, but provide a clear plan
 
 ### Technical Docs
 
 - Include realistic performance expectations and limitations
 - Document known issues and workarounds prominently
 - Provide concrete examples rather than abstract descriptions
-
-## Examples
-
-**Good:**
-
-```
-The filesystem watcher handles up to 10,000 events per second in testing.
-Performance degrades with deeply nested directories due to recursive traversal overhead.
-```
-
-**Avoid:**
-
-```
-Our amazing filesystem watcher provides blazing-fast performance! 🚀
-```

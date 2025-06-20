@@ -1,5 +1,16 @@
 # Storage Module Refactoring Plan
 
+## Status Update (June 2025)
+- Directory/module structure is in place (`src/database/storage/` with submodules).
+- Table definitions have been extracted to `tables.rs`.
+- Event and metadata storage are modularized and validated.
+- Core trait design is in use, but full trait composition (splitting `DatabaseStorage`) is still pending.
+- Maintenance/cleanup logic (event retention) is implemented and tested.
+- Migration is ongoing; backward compatibility is maintained.
+- Multi-watch, advanced indexing, and transaction modules are not yet implemented.
+- Filesystem cache is partially implemented; multi-watch and advanced cache features are still pending.
+- Adapter integration and comprehensive module-level testing are still to be completed.
+
 ## Problem Statement
 The current `storage.rs` file is becoming monolithic and will become unmaintainable as we implement the full filesystem cache design. We need a modular, scalable architecture.
 
@@ -79,29 +90,37 @@ pub struct RedbStorage {
 
 ## Implementation Phases
 
-### Phase 1: Foundation Setup (Current Priority)
-1. **Create module structure** - Set up the directory and mod.rs
-2. **Extract table definitions** - Move all const TABLE definitions to tables.rs
-3. **Create core traits** - Define the smaller, focused traits
-4. **Transaction utilities** - Common transaction patterns and error handling
+### Phase 1: Foundation Setup (**Complete**)
+1. **Create module structure** - Set up the directory and mod.rs (**Done**)
+2. **Extract table definitions** - Move all const TABLE definitions to tables.rs (**Done**)
+3. **Create core traits** - Define the smaller, focused traits (**Partial: monolithic trait still present**)
+4. **Transaction utilities** - Common transaction patterns and error handling (**Done**)
 
-### Phase 2: Extract Existing Functionality
-1. **Event storage module** - Move existing event operations
-2. **Metadata storage module** - Move existing metadata operations
-3. **Basic indexing** - Extract size and time range queries
-4. **Maintenance operations** - Extract cleanup and stats
+### Phase 2: Extract Existing Functionality (**Mostly Complete**)
+1. **Event storage module** - Move existing event operations (**Done**)
+2. **Metadata storage module** - Move existing metadata operations (**Done**)
+3. **Basic indexing** - Extract size and time range queries (**Partial: advanced indexing not started**)
+4. **Maintenance operations** - Extract cleanup and stats (**Done**)
 
-### Phase 3: Filesystem Cache Implementation
-1. **Filesystem cache storage** - Implement the full cache as designed
-2. **Multi-watch management** - Cross-watch coordination
-3. **Advanced indexing** - Hierarchical and prefix-based queries
-4. **Performance optimization** - Batch operations and caching
+### Phase 3: Filesystem Cache Implementation (**In Progress**)
+1. **Filesystem cache storage** - Implement the full cache as designed (**Partial**)
+2. **Multi-watch management** - Cross-watch coordination (**Not started**)
+3. **Advanced indexing** - Hierarchical and prefix-based queries (**Not started**)
+4. **Performance optimization** - Batch operations and caching (**Not started**)
 
-### Phase 4: Integration and Testing
+### Phase 4: Integration and Testing (**Not started**)
 1. **Adapter integration** - Update DatabaseAdapter to use new traits
 2. **Comprehensive testing** - Test each module independently
 3. **Performance validation** - Ensure no regressions
 4. **Documentation** - Document the modular architecture
+
+## Next Steps
+
+- Complete trait composition: split `DatabaseStorage` into focused traits as outlined.
+- Begin multi-watch and advanced indexing modules.
+- Integrate new traits into the adapter and update tests.
+- Continue migration module by module, maintaining backward compatibility.
+- Document edge cases and architectural decisions as features are completed.
 
 ## Benefits of This Approach
 

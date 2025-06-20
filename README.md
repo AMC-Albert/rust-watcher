@@ -16,6 +16,17 @@ A comprehensive filesystem watcher in Rust that monitors file and directory oper
 - **Recursive directory watching**
 - **Structured event logging** with JSON output
 - **Comprehensive test suite**
+- **Event log retention/cleanup** with configurable time- and count-based policies (see below)
+
+## Event Log Retention and Cleanup
+
+The event log is stored in an append-only, multimap table for efficient history and move/rename tracking. Old events are pruned using a robust, configurable retention system:
+
+- **Time-based retention**: Remove events older than a specified duration (default: 30 days)
+- **Count-based retention**: Limit the total number of events, removing the oldest when the limit is exceeded
+- **Combined policy**: Both policies can be used together
+- **API**: Retention/cleanup is exposed via the database adapter and can be triggered manually or scheduled
+- **Limitations**: Cleanup is best-effort; concurrent inserts/deletes may cause temporary inconsistencies. See `src/database/storage/event_retention.rs` for details and edge cases.
 
 ## Usage
 

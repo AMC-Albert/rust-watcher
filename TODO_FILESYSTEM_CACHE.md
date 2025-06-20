@@ -4,6 +4,7 @@
 - Legacy and obsolete code fully removed; all dead code, unused imports, and backup files are gone.
 - Trait and implementation mismatches resolved; `DatabaseStorage` and related traits are now consistent.
 - All clippy warnings and build errors fixed; codebase is warning-free and testable.
+- Event log retention/cleanup system implemented, tested, and integrated (see Phase 1.1).
 - No filesystem cache or multi-watch features are implemented yet beyond type definitions and stubs.
 - Documentation and comments updated for current code; pending features are still only in design/TODO docs.
 
@@ -42,8 +43,8 @@
     - [x] Update schema/table definitions for multimap event log.
     - [x] Implement append-only store logic (multiple events per key/path).
     - [x] Implement retrieval logic to return all events for a key/path, ordered by time.  # (ordering is now handled in tests)
-    - [ ] Add retention/cleanup logic for old events.
-    - [ ] Document edge cases: duplicate events, ordering, retention.
+    - [x] Add retention/cleanup logic for old events.  # Implemented and tested June 2025
+    - [ ] Document edge cases: duplicate events, ordering, retention.  # TODO: Add technical documentation
 - [x] Update all event storage access patterns to match new schema.
 - [x] Only after the above is stable, revisit and update tests to match new semantics.
 
@@ -57,6 +58,29 @@
 - [x] Add filesystem cache storage methods to `DatabaseStorage` trait.
 - [x] Implement watch-scoped key generation and path hashing.
 - [x] Add batch insert operations for initial tree caching.
+
+## Immediate Next Steps
+
+- [ ] Document event log edge cases, especially around duplicate events, ordering, and retention policy behavior.
+- [ ] Validate cross-platform path handling (Windows vs Unix).
+- [ ] Create integration test framework for multi-watch scenarios.
+- [ ] Add stress tests for concurrent cache access patterns.
+- [ ] Design and stub out the `MultiWatchDatabase` and related APIs for Phase 2.
+
+---
+
+# Summary Table
+
+| Task                         | Status      | Notes                                   |
+| ---------------------------- | ----------- | --------------------------------------- |
+| Event log retention/cleanup  | Complete    | Logic, tests, and integration done      |
+| Event log edge case docs     | Pending     | Needs technical documentation           |
+| Cross-platform path handling | Pending     | Windows/Unix normalization              |
+| Multi-watch test infra       | Pending     | Needed for Phase 2                      |
+| Stress tests                 | Pending     | Needed for cache concurrency validation |
+| Multi-watch core             | Not started | Next major feature                      |
+
+---
 
 ## Phase 2: Multi-Watch and Relationship Tracking
 

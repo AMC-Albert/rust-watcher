@@ -5,6 +5,8 @@
 // - Cleanup is best-effort; failures may leave stale data until the next run.
 // - Performance depends on underlying database and event volume.
 // - Retention policy is configurable but not dynamic at runtime (requires reconfiguration).
+// - No transactional guarantee: concurrent inserts/deletes may cause temporary inconsistencies.
+// - Edge cases: duplicate events are not deduplicated; ordering is by insertion timestamp only.
 //
 // Exposes both explicit cleanup API and optional background task integration.
 
@@ -59,3 +61,4 @@ pub async fn cleanup_old_events<S: DatabaseStorage>(
 // - If storage backend does not support efficient range deletes, cleanup may be slow.
 // - If background task panics or fails, events may accumulate until next run.
 // - No transactional guarantee: concurrent inserts/deletes may cause temporary inconsistencies.
+// - Duplicate events are not deduplicated; ordering is by insertion timestamp only.
