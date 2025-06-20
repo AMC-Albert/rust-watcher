@@ -15,7 +15,6 @@ pub use core::{CoreTest, DatabaseStorage, RedbStorage};
 pub use tables::*;
 
 // Re-export specific trait capabilities for focused usage
-pub use event_storage::EventStorage;
 pub use filesystem_cache::FilesystemCacheStorage;
 pub use indexing::IndexingStorage;
 pub use maintenance::MaintenanceStorage;

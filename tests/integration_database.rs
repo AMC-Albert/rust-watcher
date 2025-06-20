@@ -609,3 +609,74 @@ async fn test_database_error_handling() {
 		assert!(events.is_empty());
 	}
 }
+
+/// Test multi-event append-only log semantics for a single path
+#[test]
+async fn test_multi_event_append_only_log() {
+	let temp_dir = TempDir::new().expect("Failed to create temp directory");
+	let db_path = temp_dir.path().join("multi_event_test.db");
+	let test_file = temp_dir.path().join("test_file.txt");
+
+	let config = DatabaseConfig {
+		database_path: db_path.clone(),
+		..Default::default()
+	};
+
+	let adapter = DatabaseAdapter::new(config)
+		.await
+		.expect("Failed to create adapter");
+
+	// Store multiple events for the same path
+	let mut events = Vec::new();
+	for i in 0..3 {
+		let event = create_test_event(EventType::Write, test_file.clone(), Some(100 + i));
+		adapter
+			.store_event(&event)
+			.await
+			.expect("Failed to store event");
+		events.push(event);
+	}
+
+	// Retrieve all events for the path
+	let retrieved_events = adapter
+		.get_events_for_path(&test_file)
+		.await
+		.expect("Failed to retrieve events");
+
+	// Should retrieve all events in insertion order (append-only)
+	assert_eq!(
+		retrieved_events.len(),
+		events.len(),
+		"Should retrieve all appended events"
+	);
+	for (expected, actual) in events.iter().zip(retrieved_events.iter()) {
+		assert_eq!(
+			format!("{:?}", expected.event_type),
+			actual.event_type,
+			"Event type mismatch"
+		);
+		assert_eq!(expected.path, actual.path, "Path mismatch");
+		assert_eq!(expected.size, actual.size, "Size mismatch");
+	}
+
+	// Store a duplicate event and verify it is appended
+	let duplicate_event = events[1].clone();
+	adapter
+		.store_event(&duplicate_event)
+		.await
+		.expect("Failed to store duplicate event");
+	let retrieved_events = adapter
+		.get_events_for_path(&test_file)
+		.await
+		.expect("Failed to retrieve events after duplicate");
+	assert_eq!(
+		retrieved_events.len(),
+		events.len() + 1,
+		"Duplicate event should be appended"
+	);
+	assert_eq!(
+		retrieved_events.last().unwrap().event_id,
+		duplicate_event.id,
+		"Last event should be the duplicate"
+	);
+}

@@ -110,6 +110,8 @@ pub async fn initialize_tables(database: &Arc<Database>) -> DatabaseResult<()> {
 		let _events_table = write_txn.open_table(EVENTS_TABLE)?;
 		let _metadata_table = write_txn.open_table(METADATA_TABLE)?;
 		let _indexes_table = write_txn.open_multimap_table(INDEXES_TABLE)?;
+		// Initialize append-only event log table (multimap)
+		let _events_log_table = write_txn.open_multimap_table(EVENTS_LOG_TABLE)?;
 
 		// Initialize filesystem cache tables
 		let _fs_cache_table = write_txn.open_table(FS_CACHE_TABLE)?;

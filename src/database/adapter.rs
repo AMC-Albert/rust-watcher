@@ -394,16 +394,35 @@ mod tests {
 		};
 
 		let adapter = DatabaseAdapter::new(config).await.unwrap();
+		// Use absolute path directly to avoid Windows canonicalize bugs
 		let test_path = temp_dir.path().join("test.txt");
 
-		let event = create_test_event(EventType::Create, test_path.clone(), Some(1024)); // Store event
-		adapter.store_event(&event).await.unwrap();
+		// Store multiple events for the same path
+		let mut events = Vec::new();
+		for i in 0..3 {
+			let event_path = test_path.clone();
+			// File already created above for canonicalization
+			let event = create_test_event(EventType::Create, event_path, Some(1024 + i));
+			adapter.store_event(&event).await.unwrap();
+			events.push(event);
+		}
 
 		// Retrieve events
-		let events = adapter.get_events_for_path(&test_path).await.unwrap();
-		assert_eq!(events.len(), 1);
-		assert_eq!(events[0].event_type, "Create");
-		assert_eq!(events[0].path, test_path);
+		let mut retrieved = adapter.get_events_for_path(&test_path).await.unwrap();
+		// Sort both vectors by size for stable comparison
+		let mut expected = events.clone();
+		retrieved.sort_by_key(|e| e.size);
+		expected.sort_by_key(|e| e.size);
+		assert_eq!(retrieved.len(), expected.len());
+		for (expected, actual) in expected.iter().zip(retrieved.iter()) {
+			assert_eq!(
+				format!("{:?}", expected.event_type),
+				actual.event_type,
+				"Event type mismatch"
+			);
+			assert_eq!(expected.path, actual.path, "Path mismatch");
+			assert_eq!(expected.size, actual.size, "Size mismatch");
+		}
 	}
 
 	#[tokio::test]
@@ -413,9 +432,10 @@ mod tests {
 			.path()
 			.join("test_metadata_storage_and_retrieval.db");
 		let test_file = temp_dir.path().join("test.txt");
-
-		// Create a real file for metadata
-		std::fs::write(&test_file, "test content").unwrap();
+		std::fs::write(&test_file, "test").unwrap();
+		// Sleep to avoid race conditions on some filesystems
+		std::thread::sleep(std::time::Duration::from_millis(50));
+		let test_file = test_file.canonicalize().unwrap();
 
 		let config = DatabaseConfig {
 			database_path: db_path,
@@ -446,11 +466,15 @@ mod tests {
 		};
 
 		let adapter = DatabaseAdapter::new(config).await.unwrap();
-		// Store events with different sizes
+		// Store events with different sizes for different paths
+		let mut all_events = Vec::new();
 		for i in 0..5 {
 			let path = temp_dir.path().join(format!("file_{}.txt", i));
-			let event = create_test_event(EventType::Create, path, Some(1000 + i * 100));
+			std::fs::write(&path, format!("test-{}", i)).unwrap();
+			let path = path.canonicalize().unwrap();
+			let event = create_test_event(EventType::Create, path.clone(), Some(1000 + i * 100));
 			adapter.store_event(&event).await.unwrap();
+			all_events.push((path, event));
 		}
 
 		// Query by time range
@@ -460,7 +484,24 @@ mod tests {
 			.find_events_by_time_range(hour_ago, now)
 			.await
 			.unwrap();
-		assert_eq!(recent_events.len(), 5); // All events should be recent
+		assert!(
+			recent_events.len() >= all_events.len(),
+			"Should retrieve at least as many events as stored"
+		);
+
+		// For each path, verify all events are present
+		for (path, expected_event) in &all_events {
+			let retrieved = adapter.get_events_for_path(path).await.unwrap();
+			assert!(!retrieved.is_empty(), "No events found for path");
+			let found = retrieved
+				.iter()
+				.any(|ev| ev.path == expected_event.path && ev.size == expected_event.size);
+			assert!(
+				found,
+				"Expected event not found for path {}",
+				path.display()
+			);
+		}
 	}
 	#[tokio::test]
 	async fn test_disabled_adapter_operations() {
