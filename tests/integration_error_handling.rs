@@ -13,6 +13,7 @@ async fn test_watcher_invalid_path() {
 		recursive: true,
 		move_detector_config: None,
 		error_recovery_config: None,
+		database_config: None,
 	};
 
 	let result = start(config);
@@ -34,6 +35,7 @@ async fn test_watcher_stop_after_start() {
 		recursive: true,
 		move_detector_config: None,
 		error_recovery_config: None,
+		database_config: None,
 	};
 
 	let (handle, _receiver) = start(config).unwrap();
@@ -52,6 +54,7 @@ async fn test_watcher_multiple_start_stop() {
 			recursive: true,
 			move_detector_config: None,
 			error_recovery_config: None,
+			database_config: None,
 		};
 
 		let (handle, _receiver) = start(config)

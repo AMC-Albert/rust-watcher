@@ -48,6 +48,7 @@ async fn main() -> anyhow::Result<()> {
 		recursive: cli.recursive,
 		move_detector_config: Some(move_config),
 		error_recovery_config: None,
+		database_config: None,
 	};
 
 	// Start watching and get the event receiver

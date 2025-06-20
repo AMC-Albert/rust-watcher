@@ -4,16 +4,30 @@
 //! directory monitoring scenarios, focusing on the actual implemented API.
 
 use chrono::{Duration, Utc};
-use rust_watcher::database::{DatabaseConfig, DatabaseStorage, RedbStorage};
+use rust_watcher::database::{DatabaseAdapter, DatabaseConfig, DatabaseStorage, RedbStorage};
 use rust_watcher::database::{EventRecord, MetadataRecord};
+use rust_watcher::{start, EventType, FileSystemEvent, WatcherConfig};
 use std::path::PathBuf;
 use tempfile::TempDir;
 use tokio::test;
+use tokio::time::{sleep, Duration as TokioDuration};
 use uuid::Uuid;
 
 mod common;
 
-/// Test basic database initialization and configuration
+fn create_test_event(event_type: EventType, path: PathBuf, size: Option<u64>) -> FileSystemEvent {
+	FileSystemEvent {
+		id: Uuid::new_v4(),
+		event_type,
+		path,
+		timestamp: chrono::Utc::now(),
+		is_directory: false,
+		size,
+		move_data: None,
+	}
+}
+
+/// Test database initialization and configuration
 #[test]
 async fn test_database_initialization() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
@@ -337,5 +351,268 @@ async fn test_storage_transition_readiness() {
 	for metadata in &test_metadata {
 		assert!(!metadata.cached_at.to_string().is_empty());
 		assert!(!metadata.is_stale(Duration::hours(1)));
+	}
+}
+
+/// Test database adapter initialization and basic operations
+#[test]
+async fn test_database_adapter_basic_operations() {
+	let temp_dir = TempDir::new().expect("Failed to create temp directory");
+	let db_path = temp_dir.path().join("test_adapter.db");
+
+	let config = DatabaseConfig {
+		database_path: db_path.clone(),
+		..Default::default()
+	};
+
+	// Test adapter creation
+	let adapter = DatabaseAdapter::new(config)
+		.await
+		.expect("Failed to create adapter");
+	assert!(adapter.is_enabled());
+	assert_eq!(adapter.database_path(), Some(db_path.as_path()));
+
+	// Test disabled adapter
+	let disabled_adapter = DatabaseAdapter::disabled();
+	assert!(!disabled_adapter.is_enabled());
+	assert_eq!(disabled_adapter.database_path(), None);
+
+	// Test health check
+	let health = adapter.health_check().await.expect("Health check failed");
+	assert!(health);
+}
+
+/// Test watcher integration with database
+#[test]
+async fn test_watcher_with_database_integration() {
+	let temp_dir = TempDir::new().expect("Failed to create temp directory");
+	let watch_dir = temp_dir.path().join("watch");
+	std::fs::create_dir_all(&watch_dir).expect("Failed to create watch directory");
+
+	let db_path = temp_dir.path().join("watcher.db");
+	let db_config = DatabaseConfig {
+		database_path: db_path.clone(),
+		memory_buffer_size: 1000,
+		..Default::default()
+	};
+
+	let config = WatcherConfig {
+		path: watch_dir.clone(),
+		recursive: true,
+		move_detector_config: None,
+		error_recovery_config: None,
+		database_config: Some(db_config),
+	};
+
+	// Start the watcher with database
+	let (handle, mut event_rx) = start(config).expect("Failed to start watcher");
+
+	// Give the watcher time to initialize
+	sleep(TokioDuration::from_millis(100)).await;
+
+	// Create a test file
+	let test_file = watch_dir.join("test_file.txt");
+	std::fs::write(&test_file, "test content").expect("Failed to write test file");
+
+	// Wait for and verify we get events
+	let event = tokio::time::timeout(TokioDuration::from_secs(2), event_rx.recv())
+		.await
+		.expect("Timeout waiting for event")
+		.expect("Event channel closed");
+
+	assert_eq!(event.path, test_file);
+
+	// Verify database file was created
+	assert!(db_path.exists(), "Database file should be created");
+
+	// Clean shutdown
+	handle.stop().await.expect("Failed to stop watcher");
+}
+
+/// Test database persistence and retrieval
+#[test]
+async fn test_database_persistence_and_retrieval() {
+	let temp_dir = TempDir::new().expect("Failed to create temp directory");
+	let db_path = temp_dir.path().join("persistence_test.db");
+	let test_file = temp_dir.path().join("test_file.txt");
+
+	let config = DatabaseConfig {
+		database_path: db_path.clone(),
+		..Default::default()
+	};
+
+	let adapter = DatabaseAdapter::new(config)
+		.await
+		.expect("Failed to create adapter");
+	// Create a mock event
+	let event = create_test_event(EventType::Create, test_file.clone(), Some(1024));
+
+	// Store the event
+	adapter
+		.store_event(&event)
+		.await
+		.expect("Failed to store event");
+
+	// Store metadata
+	let mock_metadata = std::fs::File::create(&test_file)
+		.and_then(|_| std::fs::metadata(&test_file))
+		.expect("Failed to create test file for metadata");
+
+	adapter
+		.store_metadata(&test_file, &mock_metadata)
+		.await
+		.expect("Failed to store metadata");
+
+	// Retrieve events
+	let retrieved_events = adapter
+		.get_events_for_path(&test_file)
+		.await
+		.expect("Failed to retrieve events");
+	assert!(!retrieved_events.is_empty());
+
+	// Retrieve metadata
+	let retrieved_metadata = adapter
+		.get_metadata(&test_file)
+		.await
+		.expect("Failed to retrieve metadata");
+	assert!(retrieved_metadata.is_some());
+
+	// Test database stats
+	let stats = adapter.get_stats().await.expect("Failed to get stats");
+	assert!(stats.total_events > 0);
+	assert!(stats.total_metadata > 0);
+}
+
+/// Test database cleanup and maintenance
+#[test]
+async fn test_database_cleanup_and_maintenance() {
+	let temp_dir = TempDir::new().expect("Failed to create temp directory");
+	let db_path = temp_dir.path().join("cleanup_test.db");
+
+	let config = DatabaseConfig {
+		database_path: db_path.clone(),
+		event_retention: Duration::milliseconds(100).to_std().unwrap(), // Very short retention for testing
+		..Default::default()
+	};
+
+	let adapter = DatabaseAdapter::new(config)
+		.await
+		.expect("Failed to create adapter");
+
+	// Store some events
+	for i in 0..5 {
+		let test_path = temp_dir.path().join(format!("file_{}.txt", i));
+		let event = FileSystemEvent::new(EventType::Create, test_path, false, Some(1024));
+		adapter
+			.store_event(&event)
+			.await
+			.expect("Failed to store event");
+	}
+
+	// Wait for events to expire
+	sleep(TokioDuration::from_millis(200)).await;
+
+	// Run cleanup
+	let cleaned = adapter
+		.cleanup_old_events()
+		.await
+		.expect("Failed to cleanup");
+	assert!(cleaned > 0, "Should have cleaned up some events");
+
+	// Test compaction
+	adapter.compact().await.expect("Failed to compact database");
+
+	// Verify health check after maintenance
+	let health = adapter.health_check().await.expect("Health check failed");
+	assert!(health);
+}
+
+/// Test database operations under load
+#[test]
+async fn test_database_under_load() {
+	let temp_dir = TempDir::new().expect("Failed to create temp directory");
+	let db_path = temp_dir.path().join("load_test.db");
+
+	let config = DatabaseConfig {
+		database_path: db_path.clone(),
+		memory_buffer_size: 5000,
+		..Default::default()
+	};
+
+	let adapter = DatabaseAdapter::new(config)
+		.await
+		.expect("Failed to create adapter");
+
+	// Store many events quickly
+	let event_count = 100;
+	for i in 0..event_count {
+		let test_path = temp_dir.path().join(format!("load_file_{}.txt", i));
+		let event = FileSystemEvent::new(EventType::Create, test_path, false, Some(1024 + i));
+		adapter
+			.store_event(&event)
+			.await
+			.expect("Failed to store event");
+	}
+
+	// Verify all events were stored
+	let stats = adapter.get_stats().await.expect("Failed to get stats");
+	assert!(stats.total_events >= event_count);
+
+	// Test querying by size range
+	let events_by_size = adapter
+		.find_events_by_size(1000, 1050)
+		.await
+		.expect("Failed to find events by size");
+	assert!(!events_by_size.is_empty());
+
+	// Test querying by time range
+	let now = Utc::now();
+	let hour_ago = now - Duration::hours(1);
+	let events_by_time = adapter
+		.find_events_by_time_range(hour_ago, now)
+		.await
+		.expect("Failed to find events by time");
+	assert!(!events_by_time.is_empty());
+}
+
+/// Test error handling in database operations
+#[test]
+async fn test_database_error_handling() {
+	let temp_dir = TempDir::new().expect("Failed to create temp directory");
+
+	// Test with invalid database path
+	let invalid_config = DatabaseConfig {
+		database_path: PathBuf::from("/invalid/path/that/should/not/exist/test.db"),
+		..Default::default()
+	};
+
+	// This should either fail gracefully or create directories as needed
+	let result = DatabaseAdapter::new(invalid_config).await;
+
+	// If it fails, the adapter should fall back to disabled mode in production
+	// For testing, we just verify the error handling exists
+	if result.is_err() {
+		// Verify we can create a disabled adapter as fallback
+		let disabled = DatabaseAdapter::disabled();
+		assert!(!disabled.is_enabled());
+
+		// All operations should succeed as no-ops
+		let fake_event = FileSystemEvent::new(
+			EventType::Create,
+			temp_dir.path().join("fake.txt"),
+			false,
+			None,
+		);
+
+		// These should not error even with disabled adapter
+		disabled
+			.store_event(&fake_event)
+			.await
+			.expect("Disabled store_event should not fail");
+		let events = disabled
+			.get_events_for_path(&fake_event.path)
+			.await
+			.expect("Disabled get_events should not fail");
+		assert!(events.is_empty());
 	}
 }
