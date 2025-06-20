@@ -12,6 +12,9 @@ pub struct EventRecord {
 	/// Unique identifier for this event
 	pub event_id: Uuid,
 
+	/// Strictly increasing sequence number for append order
+	pub sequence_number: u64,
+
 	/// Type of filesystem event
 	pub event_type: String,
 
@@ -53,10 +56,12 @@ impl EventRecord {
 		path: PathBuf,
 		is_directory: bool,
 		retention_duration: chrono::Duration,
+		sequence_number: u64,
 	) -> Self {
 		let now = Utc::now();
 		Self {
 			event_id: Uuid::new_v4(),
+			sequence_number,
 			event_type,
 			path,
 			timestamp: now,
@@ -504,7 +509,7 @@ mod tests {
 	fn test_event_record_creation() {
 		let path = PathBuf::from("/test/file.txt");
 		let retention = Duration::hours(1);
-		let record = EventRecord::new("Create".to_string(), path.clone(), false, retention);
+		let record = EventRecord::new("Create".to_string(), path.clone(), false, retention, 1);
 
 		assert_eq!(record.event_type, "Create");
 		assert_eq!(record.path, path);

@@ -97,11 +97,13 @@ pub mod database {
 		inode: Option<u64>,
 		windows_id: Option<u64>,
 	) -> EventRecord {
+		// Use sequence_number=0 for test events unless a specific value is required by the test logic.
 		let mut record = EventRecord::new(
 			event_type.to_string(),
 			path,
 			is_directory,
 			chrono::Duration::minutes(10),
+			0,
 		);
 		record.size = size;
 		record.inode = inode;

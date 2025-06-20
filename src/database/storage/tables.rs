@@ -112,6 +112,11 @@ pub const METADATA_COUNT_KEY: &[u8] = b"metadata_count";
 // This key is used to store the persistent metadata count for O(1) stats queries.
 // It must be updated transactionally on every metadata insert/delete.
 
+/// Key for event sequence number in STATS_TABLE (u64, little-endian bytes)
+pub const EVENT_SEQUENCE_KEY: &[u8] = b"event_sequence";
+// This key is used to store the next event sequence number for strict append order.
+// It must be incremented transactionally on every event insert.
+
 /// Initialize all database tables
 pub async fn initialize_tables(database: &Arc<Database>) -> DatabaseResult<()> {
 	let write_txn = database.begin_write()?;

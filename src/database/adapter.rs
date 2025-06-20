@@ -327,15 +327,15 @@ impl EventRecord {
 		event: &FileSystemEvent,
 		retention: std::time::Duration,
 	) -> DatabaseResult<Self> {
-		use uuid::Uuid;
+		use chrono::Duration;
 
 		let expires_at = Utc::now()
-			+ chrono::Duration::from_std(retention).map_err(|e| {
+			+ Duration::from_std(retention).map_err(|e| {
 				DatabaseError::InitializationFailed(format!("Invalid retention duration: {}", e))
 			})?;
 
 		Ok(EventRecord {
-			event_id: Uuid::new_v4(),
+			event_id: event.id, // Preserve the original event id for append-only and deduplication semantics
 			event_type: format!("{:?}", event.event_type),
 			path: event.path.clone(),
 			timestamp: event.timestamp,
@@ -347,6 +347,7 @@ impl EventRecord {
 			confidence: None,       // Only set for move events
 			detection_method: None, // Only set for move events
 			expires_at,
+			sequence_number: 0, // Placeholder; will be set transactionally by event storage logic. This avoids accidental reuse and enforces append-only semantics.
 		})
 	}
 }

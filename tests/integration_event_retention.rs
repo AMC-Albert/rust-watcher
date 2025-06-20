@@ -29,12 +29,14 @@ async fn test_event_retention_cleanup_storage() {
 		PathBuf::from("/old/file.txt"),
 		false,
 		Duration::seconds(-120), // Expired
+		0,
 	);
 	let recent_event = EventRecord::new(
 		"Create".to_string(),
 		PathBuf::from("/recent/file.txt"),
 		false,
 		Duration::seconds(120), // Not expired
+		0,
 	);
 	storage
 		.store_event(&old_event)
@@ -65,6 +67,7 @@ async fn test_event_retention_cleanup_storage() {
 			PathBuf::from(format!("/file_{}.txt", i)),
 			false,
 			Duration::seconds(120),
+			0,
 		);
 		storage
 			.store_event(&event)

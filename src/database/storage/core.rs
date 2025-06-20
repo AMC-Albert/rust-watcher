@@ -400,6 +400,7 @@ mod tests {
 			PathBuf::from("/test/file.txt"),
 			false,
 			chrono::Duration::hours(24),
+			0, // sequence_number (dummy, will be overwritten by storage)
 		);
 
 		storage.store_event(&event_record).await.unwrap();

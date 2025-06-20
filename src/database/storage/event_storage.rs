@@ -18,7 +18,22 @@ pub async fn store_event(database: &Arc<Database>, record: &EventRecord) -> Data
 		let mut stats_table = write_txn.open_table(super::tables::STATS_TABLE)?;
 		let key = StorageKey::path_hash(&record.path);
 		let key_bytes = key.to_bytes();
-		let record_bytes = bincode::serialize(record)
+
+		// Assign sequence number
+		let seq_bytes = stats_table.get(super::tables::EVENT_SEQUENCE_KEY)?;
+		let mut sequence_number = seq_bytes
+			.map(|v| u64::from_le_bytes(v.value().try_into().unwrap_or([0u8; 8])))
+			.unwrap_or(0);
+
+		let mut record = record.clone();
+		record.sequence_number = sequence_number;
+		sequence_number = sequence_number.saturating_add(1);
+		stats_table.insert(
+			super::tables::EVENT_SEQUENCE_KEY,
+			&sequence_number.to_le_bytes()[..],
+		)?;
+
+		let record_bytes = bincode::serialize(&record)
 			.map_err(|e| crate::database::error::DatabaseError::Serialization(e.to_string()))?;
 
 		events_log.insert(key_bytes.as_slice(), record_bytes.as_slice())?;
@@ -51,6 +66,7 @@ pub async fn get_events(
 			.map_err(|e| crate::database::error::DatabaseError::Deserialization(e.to_string()))?;
 		events.push(record);
 	}
-	// TODO: Consider sorting by timestamp if order is not guaranteed by storage
+	// Enforce append order: sort by sequence_number (ascending)
+	events.sort_by_key(|e| e.sequence_number);
 	Ok(events)
 }
