@@ -4,7 +4,8 @@
 //! including nodes, hierarchy relationships, and shared node management.
 
 use crate::database::storage::tables::{
-	MULTI_WATCH_FS_CACHE, MULTI_WATCH_HIERARCHY, PATH_TO_WATCHES, SHARED_NODES, WATCH_REGISTRY,
+	MULTI_WATCH_FS_CACHE, MULTI_WATCH_HIERARCHY, PATH_PREFIX_TABLE, PATH_TO_WATCHES, SHARED_NODES,
+	WATCH_REGISTRY,
 };
 use crate::database::{
 	error::DatabaseResult,
@@ -166,6 +167,27 @@ impl RedbFilesystemCache {
 	fn key_to_bytes(key: &WatchScopedKey) -> Vec<u8> {
 		Self::serialize(key).unwrap_or_default()
 	}
+
+	/// Helper: insert all path prefixes for a node into PATH_PREFIX_TABLE
+	fn index_path_prefixes(
+		write_txn: &redb::WriteTransaction,
+		node: &FilesystemNode,
+		watch_id: &Uuid,
+	) -> DatabaseResult<()> {
+		let mut prefix_table = write_txn.open_multimap_table(PATH_PREFIX_TABLE)?;
+		let path = &node.path;
+		let path_hash = calculate_path_hash(path);
+		let scoped_key = Self::create_scoped_key(watch_id, path_hash);
+		let key_bytes = Self::key_to_bytes(&scoped_key);
+		// Insert all parent prefixes (e.g., /a, /a/b, /a/b/c)
+		let mut prefix = Path::new("").to_path_buf();
+		for component in path.components() {
+			prefix.push(component);
+			let prefix_str = prefix.to_string_lossy();
+			prefix_table.insert(prefix_str.as_bytes(), key_bytes.as_slice())?;
+		}
+		Ok(())
+	}
 }
 
 #[async_trait::async_trait]
@@ -199,6 +221,9 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			let watch_bytes = &watch_id.as_bytes()[..];
 			let mut path_watches_table = write_txn.open_multimap_table(PATH_TO_WATCHES)?;
 			path_watches_table.insert(path_key.as_slice(), watch_bytes)?;
+
+			// Update path prefix index
+			Self::index_path_prefixes(&write_txn, node, watch_id)?;
 		}
 		write_txn.commit()?;
 		Ok(())
@@ -379,6 +404,9 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 				let watch_bytes = &watch_id.as_bytes()[..];
 				let mut path_watches_table = write_txn.open_multimap_table(PATH_TO_WATCHES)?;
 				path_watches_table.insert(path_key.as_slice(), watch_bytes)?;
+
+				// Update path prefix index
+				Self::index_path_prefixes(&write_txn, node, watch_id)?;
 			}
 		}
 		write_txn.commit()?;
@@ -390,31 +418,24 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		watch_id: &Uuid,
 		prefix: &Path,
 	) -> DatabaseResult<Vec<FilesystemNode>> {
-		// This is a complex operation that would benefit from prefix indexing
-		// For now, we'll implement a basic version that scans all nodes
-		// TODO: Implement efficient prefix indexing for better performance
-
 		let read_txn = self.database.begin_read()?;
+		let prefix_table = read_txn.open_multimap_table(PATH_PREFIX_TABLE)?;
 		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
-
-		let mut matching_nodes = Vec::new();
 		let prefix_str = prefix.to_string_lossy();
-
-		let iter = fs_cache_table.iter()?;
-		for entry_result in iter {
-			let (key, value) = entry_result?;
-			let scoped_key: WatchScopedKey = Self::deserialize(key.value())?;
-
-			// Check if this key belongs to our watch
-			if scoped_key.watch_id == *watch_id {
-				let node: FilesystemNode = Self::deserialize(value.value())?;
-				if node.path.to_string_lossy().starts_with(&*prefix_str) {
-					matching_nodes.push(node);
+		let mut nodes = Vec::new();
+		if let Ok(child_iter) = prefix_table.get(prefix_str.as_bytes()) {
+			for child_key in child_iter {
+				let child_key = child_key?;
+				let scoped_key: WatchScopedKey = Self::deserialize(child_key.value())?;
+				if scoped_key.watch_id == *watch_id {
+					if let Some(node_bytes) = fs_cache_table.get(child_key.value())? {
+						let node: FilesystemNode = Self::deserialize(node_bytes.value())?;
+						nodes.push(node);
+					}
 				}
 			}
 		}
-
-		Ok(matching_nodes)
+		Ok(nodes)
 	}
 
 	async fn get_cache_stats(&mut self, watch_id: &Uuid) -> DatabaseResult<CacheStats> {
@@ -538,6 +559,39 @@ mod tests {
 		let bad_bytes = vec![0, 1, 2, 3, 4, 5];
 		let result: Result<FilesystemNode, _> = RedbFilesystemCache::deserialize(&bad_bytes);
 		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_prefix_indexing() {
+		let dir = tempdir().unwrap();
+		let file_a = dir.path().join("a.txt");
+		let file_b = dir.path().join("subdir/b.txt");
+		let file_c = dir.path().join("subdir/c.txt");
+		fs::write(&file_a, b"A").unwrap();
+		fs::create_dir_all(file_b.parent().unwrap()).unwrap();
+		fs::write(&file_b, b"B").unwrap();
+		fs::write(&file_c, b"C").unwrap();
+		let meta_a = fs::metadata(&file_a).unwrap();
+		let meta_b = fs::metadata(&file_b).unwrap();
+		let meta_c = fs::metadata(&file_c).unwrap();
+		let node_a = FilesystemNode::new(file_a.clone(), &meta_a);
+		let node_b = FilesystemNode::new(file_b.clone(), &meta_b);
+		let node_c = FilesystemNode::new(file_c.clone(), &meta_c);
+		let db = Database::create(dir.path().join("test.db")).unwrap();
+		let db = Arc::new(db);
+		let mut cache = RedbFilesystemCache::new(db.clone());
+		let watch_id = Uuid::new_v4();
+		futures::executor::block_on(cache.store_filesystem_node(&watch_id, &node_a)).unwrap();
+		futures::executor::block_on(cache.store_filesystem_node(&watch_id, &node_b)).unwrap();
+		futures::executor::block_on(cache.store_filesystem_node(&watch_id, &node_c)).unwrap();
+		// Query for prefix "subdir"
+		let prefix = dir.path().join("subdir");
+		let found =
+			futures::executor::block_on(cache.find_nodes_by_prefix(&watch_id, &prefix)).unwrap();
+		let found_paths: Vec<_> = found.iter().map(|n| n.path.clone()).collect();
+		assert!(found_paths.contains(&file_b));
+		assert!(found_paths.contains(&file_c));
+		assert!(!found_paths.contains(&file_a));
 	}
 
 	// #[tokio::test]
