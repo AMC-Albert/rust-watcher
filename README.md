@@ -154,18 +154,29 @@ The project includes VS Code configuration for optimal development:
 
 ## Testing
 
-Run the comprehensive test suite:
+The test suite follows Rust conventions with categorized naming:
 
 ```bash
 # Run all tests
 cargo test
 
-# Run tests with output
-cargo test -- --nocapture
+# Run integration tests only
+cargo test integration_
 
-# Run specific test
-cargo test test_file_move_detection
+# Run infrastructure tests only  
+cargo test infra_
+
+# Run benchmarks
+cargo bench
 ```
+
+### Test Organization
+
+- **`integration_*.rs`**: End-to-end functionality tests using public APIs
+- **`infra_*.rs`**: Database, concurrency, and platform-specific tests  
+- **`benches/`**: Criterion benchmarks for performance measurement
+- **`tests/common/`**: Shared test utilities and helpers
+- **Unit tests**: Embedded in source files following Rust conventions
 
 ### Test Coverage
 
@@ -174,9 +185,10 @@ The test suite covers:
 - Move detection accuracy
 - Multiple rapid operations
 - Complex directory structures
+- Database persistence and recovery
+- Concurrent access patterns
+- Cross-platform compatibility
 - Edge cases and error conditions
-- Configuration validation
-- Event serialization
 
 ## Platform Support
 
@@ -199,6 +211,19 @@ The test suite covers:
 - `uuid`: Event identification
 - `chrono`: Timestamp handling
 - `tracing`: Structured logging
+- `redb`: Embedded database for event persistence
+- `walkdir`: Efficient directory traversal
+- `criterion`: Benchmark framework
+
+## Development Status
+
+Currently in active development focusing on:
+- Filesystem database cache implementation
+- Performance optimization for large directory structures
+- Enhanced cross-platform compatibility
+- Comprehensive test coverage and validation
+
+See `TODO_FILESYSTEM_CACHE.md` for detailed development roadmap.
 
 ## License
 
