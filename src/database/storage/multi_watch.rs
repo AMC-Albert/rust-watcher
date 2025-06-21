@@ -391,5 +391,94 @@ impl MultiWatchDatabase {
 	}
 }
 
+/// Represents the overlap relationship between two watches
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WatchOverlap {
+	/// No overlap between the two watches
+	None,
+	/// One watch is a strict ancestor of the other
+	Ancestor { ancestor: Uuid, descendant: Uuid },
+	/// The two watches have a common subtree (partial overlap)
+	Partial {
+		watch_a: Uuid,
+		watch_b: Uuid,
+		common_prefix: std::path::PathBuf,
+	},
+	/// The two watches are identical (same root)
+	Identical(Uuid),
+}
+
+impl MultiWatchDatabase {
+	/// Detect overlap between two watches by root path
+	pub async fn detect_overlap(
+		&self,
+		watch_a: &WatchMetadata,
+		watch_b: &WatchMetadata,
+	) -> WatchOverlap {
+		let a = watch_a.root_path.components().collect::<Vec<_>>();
+		let b = watch_b.root_path.components().collect::<Vec<_>>();
+		if a == b {
+			return WatchOverlap::Identical(watch_a.watch_id);
+		}
+		if a.starts_with(&b) {
+			return WatchOverlap::Ancestor {
+				ancestor: watch_b.watch_id,
+				descendant: watch_a.watch_id,
+			};
+		}
+		if b.starts_with(&a) {
+			return WatchOverlap::Ancestor {
+				ancestor: watch_a.watch_id,
+				descendant: watch_b.watch_id,
+			};
+		}
+		// Find common prefix
+		let min_len = a.len().min(b.len());
+		let mut common = Vec::new();
+		for i in 0..min_len {
+			if a[i] == b[i] {
+				common.push(a[i].as_os_str());
+			} else {
+				break;
+			}
+		}
+		if !common.is_empty() {
+			let prefix = common.iter().collect::<std::path::PathBuf>();
+			// On Windows and Unix, a common prefix of only the root (e.g., "\\" or "/") is not a meaningful overlap.
+			// Only treat as partial overlap if the common prefix is longer than just the root.
+			let mut components = prefix.components();
+			let is_only_root = match components.next() {
+				Some(std::path::Component::RootDir) => components.next().is_none(),
+				_ => false,
+			};
+			if !is_only_root {
+				return WatchOverlap::Partial {
+					watch_a: watch_a.watch_id,
+					watch_b: watch_b.watch_id,
+					common_prefix: prefix,
+				};
+			}
+		}
+		WatchOverlap::None
+	}
+
+	/// Compute overlap statistics for all registered watches
+	pub async fn compute_overlap_statistics(&self) -> DatabaseResult<Vec<WatchOverlap>> {
+		let watches = self.list_watches().await?;
+		let mut overlaps = Vec::new();
+		for i in 0..watches.len() {
+			for j in (i + 1)..watches.len() {
+				let overlap = self.detect_overlap(&watches[i], &watches[j]).await;
+				if overlap != WatchOverlap::None {
+					overlaps.push(overlap);
+				}
+			}
+		}
+		Ok(overlaps)
+	}
+
+	// TODO: Implement background optimization scheduler and shared cache optimization logic.
+}
+
 // TODO: In a real implementation, transaction metadata should be persisted in a dedicated table (e.g., WATCH_TRANSACTIONS),
 // and all watch-scoped mutations should be coordinated through this mechanism. This stub is for API completeness and future expansion.
