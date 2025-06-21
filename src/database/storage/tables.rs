@@ -63,6 +63,16 @@ pub const PATH_TO_WATCHES: MultimapTableDefinition<&[u8], &[u8]> =
 // ===== Performance and Maintenance Tables =====
 
 /// Database statistics and health metrics
+///
+/// Key format (for extensibility):
+///   - b"event_count"                  => total event count (u64)
+///   - b"metadata_count"               => total metadata count (u64)
+///   - b"event_type:<type>"            => per-event-type count (u64)
+///   - b"watch:<uuid>:event_count"     => per-watch event count (u64)
+///   - b"path:<hash>:event_count"      => per-path event count (u64, future)
+///   - ... (future stat types)
+///
+/// All stat keys must be updated transactionally with the relevant mutation.
 pub const STATS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("stats");
 
 /// Maintenance operations log and scheduling

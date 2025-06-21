@@ -45,6 +45,15 @@ pub async fn store_event(database: &Arc<Database>, record: &EventRecord) -> Data
 			.unwrap_or(0);
 		count = count.saturating_add(1);
 		stats_table.insert(super::tables::EVENT_COUNT_KEY, &count.to_le_bytes()[..])?;
+
+		// Increment per-event-type counter
+		let type_key = crate::database::types::event_type_stat_key(&record.event_type);
+		let type_count_bytes = stats_table.get(type_key.as_slice())?;
+		let mut type_count = type_count_bytes
+			.map(|v| u64::from_le_bytes(v.value().try_into().unwrap_or([0u8; 8])))
+			.unwrap_or(0);
+		type_count = type_count.saturating_add(1);
+		stats_table.insert(type_key.as_slice(), &type_count.to_le_bytes()[..])?;
 	}
 	write_txn.commit()?;
 	Ok(())

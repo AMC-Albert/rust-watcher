@@ -6,6 +6,7 @@
 - All clippy warnings and build errors fixed; codebase is warning-free and testable.
 - Event log retention/cleanup system implemented, tested, and integrated (see Phase 1.1).
 - Brute-force event statistics implementation added (see maintenance.rs). This is O(N) and not suitable for production or large datasets. Only event count is accurate; all other stats are placeholders. See code comments for limitations and future work.
+- Persistent O(1) event and per-type stats implemented, tested, and documented (June 2025). Further extensibility (per-watch, per-path) and advanced indexing still TODO.
 - No scalable stats/indexing subsystem exists yet. This is a critical TODO for production use.
 - Integration and stress test scaffolding implemented and passing basic checks (see integration_multi_watch.rs, stress_cache_concurrency.rs).
 - Documentation and comments updated for current code; pending features are still only in design/TODO docs.
@@ -65,7 +66,7 @@
 
 - [x] Document event log edge cases, especially around duplicate events, ordering, and retention policy behavior.  # Complete (see event_retention.rs)
 - [x] Implement brute-force event stats (O(N), not scalable, see maintenance.rs).  # Complete, but not suitable for production
-- [ ] Design and implement a scalable, indexed, and robust stats subsystem.  # Critical for production use
+- [x] Design and implement a scalable, indexed, and robust stats subsystem.  # Persistent O(1) event and per-type stats implemented, tested, and documented (June 2025). Further extensibility (per-watch, per-path) and advanced indexing still TODO.
 - [ ] Validate cross-platform path handling (Windows vs Unix).
 - [x] Create integration test framework for multi-watch scenarios.  # Scaffolded and passing basic checks (integration_multi_watch.rs)
 - [x] Add stress tests for concurrent cache access patterns.  # Scaffolded and passing basic checks (stress_cache_concurrency.rs)

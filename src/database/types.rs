@@ -315,6 +315,9 @@ pub struct DatabaseStats {
 
 	/// Number of expired events cleaned up
 	pub cleaned_up_events: u64,
+
+	/// Per-event-type counts (e.g., {"create": 123, "delete": 45})
+	pub per_type_counts: std::collections::HashMap<String, u64>,
 }
 
 impl DatabaseStats {
@@ -614,4 +617,11 @@ mod tests {
 pub struct WatchScopedKey {
 	pub watch_id: Uuid,
 	pub path_hash: u64,
+}
+
+/// Helper to build a per-event-type stat key (e.g., b"event_type:create")
+pub fn event_type_stat_key(event_type: &str) -> Vec<u8> {
+	let mut key = b"event_type:".to_vec();
+	key.extend_from_slice(event_type.as_bytes());
+	key
 }

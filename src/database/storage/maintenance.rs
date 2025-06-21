@@ -70,6 +70,7 @@ impl MaintenanceStorage for MaintenanceImpl {
 			cache_hit_rate: 0.0,
 			avg_query_time_ms: 0.0,
 			cleaned_up_events: 0,
+			per_type_counts: std::collections::HashMap::new(),
 		})
 	}
 
@@ -209,6 +210,18 @@ pub async fn get_database_stats(database: &Arc<Database>) -> DatabaseResult<Data
 		}
 	}
 
+	// Collect per-event-type stats
+	let mut per_type_counts = std::collections::HashMap::new();
+	for entry in stats_table.iter()? {
+		let (key, value) = entry?;
+		if let Ok(key_str) = std::str::from_utf8(key.value()) {
+			if let Some(event_type) = key_str.strip_prefix("event_type:") {
+				let count = u64::from_le_bytes(value.value().try_into().unwrap_or([0u8; 8]));
+				per_type_counts.insert(event_type.to_string(), count);
+			}
+		}
+	}
+
 	Ok(crate::database::types::DatabaseStats {
 		total_events,
 		total_metadata,
@@ -219,6 +232,7 @@ pub async fn get_database_stats(database: &Arc<Database>) -> DatabaseResult<Data
 		cache_hit_rate: 0.0,
 		avg_query_time_ms: 0.0,
 		cleaned_up_events: 0,
+		per_type_counts,
 	})
 }
 

@@ -681,3 +681,55 @@ async fn test_multi_event_append_only_log() {
 		"Last event should be the duplicate"
 	);
 }
+
+/// Test persistent per-event-type statistics
+#[tokio::test]
+async fn test_persistent_per_event_type_stats() {
+	use chrono::Duration;
+	use rust_watcher::database::storage::maintenance::get_database_stats;
+	use rust_watcher::database::types::EventRecord;
+	use rust_watcher::database::DatabaseStorage;
+	use rust_watcher::database::RedbStorage;
+	use std::path::PathBuf;
+	use tempfile::TempDir;
+
+	let temp_dir = TempDir::new().expect("Failed to create temp directory");
+	let db_path = temp_dir.path().join("stats_test.db");
+	let mut storage = RedbStorage::new(rust_watcher::database::DatabaseConfig {
+		database_path: db_path,
+		..Default::default()
+	})
+	.await
+	.expect("Failed to create RedbStorage");
+
+	// Insert events of different types
+	let events = vec![
+		("Create", "/file1.txt"),
+		("Create", "/file2.txt"),
+		("Delete", "/file3.txt"),
+		("Modify", "/file4.txt"),
+		("Delete", "/file5.txt"),
+	];
+	for (etype, path) in &events {
+		let record = EventRecord::new(
+			etype.to_string(),
+			PathBuf::from(path),
+			false,
+			Duration::minutes(5),
+			0,
+		);
+		storage
+			.store_event(&record)
+			.await
+			.expect("Failed to store event");
+	}
+
+	// Query stats
+	let stats = get_database_stats(storage.database())
+		.await
+		.expect("Failed to get stats");
+	assert_eq!(stats.total_events, events.len() as u64);
+	assert_eq!(stats.per_type_counts.get("Create"), Some(&2));
+	assert_eq!(stats.per_type_counts.get("Delete"), Some(&2));
+	assert_eq!(stats.per_type_counts.get("Modify"), Some(&1));
+}
