@@ -14,32 +14,6 @@
 
 ---
 
-## Phase 0: Pre-Implementation Tasks (Critical)
-
-### 0.1 Dependencies and Infrastructure
-- [x] ~~Add `walkdir = "2"` to Cargo.toml for filesystem traversal~~ (already present)
-- [x] ~~Add `chrono` for timestamp handling in filesystem cache~~ (already present)
-- [x] ~~Verify ReDB performance characteristics with larger datasets (>100k files)~~ (baseline established)
-- [x] ~~Test multimap table scalability with deep directory hierarchies~~ (validated)
-
-### 0.2 Database Foundation Validation
-- [x] ~~Fix existing database test failure in `test_database_integration`~~ (retention policy bug fixed)
-- [x] ~~Validate current ReDB schema supports concurrent read/write operations~~ (concurrency tests pass)
-- [x] ~~Test database recovery after unclean shutdown scenarios~~ (recovery test implemented and passing)
-- [x] ~~Benchmark current database operations to establish baseline~~ (benchmarks created)
-
-### 0.3 Architecture Validation
-- [x] ~~Create proof-of-concept filesystem scanning with `walkdir`~~ (POC implemented with tests)
-- [x] ~~Test path normalization edge cases (symlinks, junction points, UNC paths)~~ (basic validation done)
-- [x] Validate cross-platform path handling (Windows vs Unix)  # Complete (see path_utils.rs, path_normalization.rs)
-- [x] ~~Test memory usage patterns with large directory trees (>1M files)~~ (10K file test validates patterns)
-
-### 0.4 Testing Infrastructure
-- [x] ~~Create test directory structures with known properties for validation~~ (implemented)
-- [x] ~~Add performance benchmarks for filesystem operations~~ (database benchmarks established)
-- [x] Create integration test framework for multi-watch scenarios  # Scaffolded (integration_multi_watch.rs)
-- [x] Add stress tests for concurrent cache access patterns  # Scaffolded (stress_cache_concurrency.rs)
-
 ## Phase 1: Core Storage and Event Log (Highest Priority)
 
 ### 1.1 Event Log Storage Redesign

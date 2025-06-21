@@ -5,38 +5,37 @@
 ### Outstanding Issues
 
 - **Event Retention and Cleanup:**
-  - Not implemented. Expired events are not deleted; database will grow unbounded. Tests expecting cleanup are ignored or failing by design.
-  - **Action:** Implement event cleanup logic and ensure all related tests pass.
+  - Implemented. Expired events are now deleted; database growth is bounded. All related tests pass. (June 2025)
 
 - **Scalable Statistics/Indexing:**
-  - Only brute-force, O(N) stats exist (see `maintenance.rs`). No scalable, indexed, or cached stats subsystem.
-  - **Impact:** Stats queries are slow and not suitable for large datasets or real-time monitoring.
-  - **Action:** Design and implement a persistent, incrementally updated stats/indexing system.
+  - Persistent O(1) event and per-type stats implemented and tested. Per-watch, per-path, and advanced indexing remain TODO for true scalability.
+  - **Impact:** Stats queries are fast for current use cases, but not yet extensible for all future requirements.
+  - **Action:** Extend stats/indexing to support per-watch, per-path, and advanced queries.
 
 - **Multi-Watch Database and APIs:**
-  - Only trait stubs and table definitions exist in `multi_watch.rs`. No real implementation.
-  - **Impact:** Multi-watch scenarios (multiple roots, cross-watch queries) are not supported.
-  - **Action:** Flesh out the design, implement the APIs, and add integration tests.
+  - MultiWatchDatabase now implements watch registration, shared node storage/retrieval, and robust watch removal (including reference count and multi-watch edge cases). Integration tests cover these paths (June 2025).
+  - **Impact:** Multi-watch scenarios (multiple roots, cross-watch queries) are now supported at the storage layer. Transaction coordination and advanced metadata management are still pending.
+  - **Action:** Implement transaction coordination, metadata management, and advanced cross-watch features.
 
 - **Cross-Platform Path Handling (Edge Cases):**
-  - Path normalization is robust for most cases, but edge cases (symlinks, UNC, device paths, short names) are not fully covered.
-  - **Impact:** Subtle bugs may still occur on Windows, especially with network shares or legacy paths.
-  - **Action:** Expand normalization logic and add more comprehensive tests for platform-specific edge cases.
+  - Path normalization is robust for most cases, including UNC, device paths, and redundant/trailing separators. Platform-specific edge cases are covered by tests. (June 2025)
+  - **Impact:** Subtle bugs may still occur on Windows with legacy or highly unusual paths, but coverage is now realistic for production.
+  - **Action:** Continue to expand normalization logic and test coverage as new edge cases are discovered.
 
 - **Error Handling and Recovery:**
-  - Basic error handling is present, but there’s limited recovery for database corruption, partial writes, or schema drift.
-  - **Impact:** In production, a single corrupt record could break stats or event queries.
+  - Basic error handling is present, but recovery for database corruption, partial writes, or schema drift is still limited.
+  - **Impact:** In production, a single corrupt record could still break stats or event queries.
   - **Action:** Harden error handling, add recovery paths, and document known failure modes.
 
 - **Documentation and Design Drift:**
-  - Some code comments and design docs are up to date, but not all edge cases, limitations, or TODOs are documented in one place.
-  - **Impact:** New contributors or future maintainers will have to reverse-engineer some design decisions.
-  - **Action:** Update the design docs and code comments to reflect current reality, known issues, and future plans.
+  - Design docs and code comments are up to date for all implemented features, including persistent stats, path normalization, and multi-watch storage. Outstanding limitations and TODOs are documented in this section and in TODO_FILESYSTEM_CACHE.md.
+  - **Impact:** New contributors have a clear view of current state and pending work.
+  - **Action:** Continue to update documentation as new features are implemented or limitations are discovered.
 
 - **Test Coverage Gaps:**
-  - Most core logic is tested, but there are gaps for concurrency, error injection, and platform-specific behavior.
-  - **Impact:** Some regressions or platform-specific bugs may go unnoticed.
-  - **Action:** Expand test coverage, especially for concurrency, error cases, and Windows/Unix differences.
+  - Core logic for event storage, stats, path normalization, and multi-watch shared node management is now covered by integration and unit tests. Gaps remain for concurrency, error injection, and platform-specific behavior.
+  - **Impact:** Some regressions or platform-specific bugs may go unnoticed, but coverage is now sufficient for most production scenarios.
+  - **Action:** Expand test coverage for concurrency, error cases, and Windows/Unix differences as new features are added.
 
 ---
 
@@ -152,6 +151,31 @@ pub struct ComputedProperties {
     pub path_hash: u64,
     pub parent_hash: Option<u64>,
     pub canonical_name: String,
+}
+```
+
+#### SharedNodeInfo
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SharedNodeInfo {
+    pub node: FilesystemNode,
+    pub watching_scopes: Vec<Uuid>,
+    pub reference_count: u32,
+    pub last_shared_update: DateTime<Utc>,
+}
+```
+
+#### WatchMetadata
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WatchMetadata {
+    pub watch_id: Uuid,
+    pub root_path: PathBuf,
+    pub created_at: DateTime<Utc>,
+    pub last_scan: Option<DateTime<Utc>>,
+    pub node_count: u64,
+    pub is_active: bool,
+    pub config_hash: u64,
 }
 ```
 
