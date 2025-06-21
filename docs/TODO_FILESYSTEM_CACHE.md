@@ -6,7 +6,7 @@
 - Documentation and comments are up to date for all implemented features. Pending features are only in this TODO and design docs.
 - Unified/cross-watch queries, hierarchical operations, and pattern-based search are implemented and tested.
 - **Cache synchronizer integrated with watcher event loop. Incremental cache updates on all events. Borrow checker and trait bound issues resolved.**
-- **Unit test for synchronizer covers create/remove event handling.**
+- **Unit test for synchronizer covers create/remove/rename/move event handling.**
 - All build, test, and clippy checks are clean as of latest commit.
 - See commit history for details of modularization, bugfixes, and groundwork for advanced features (June 2025).
 
@@ -14,23 +14,23 @@
 
 # Summary Table
 
-| Task                            | Status   | Notes                                                                                                                                         |
-| ------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Event log retention/cleanup     | Complete | Logic, tests, and integration done                                                                                                            |
-| Event log edge case docs        | Complete | Documented in code and event_retention.rs                                                                                                     |
-| Brute-force stats impl          | Complete | O(N), not scalable, see maintenance.rs                                                                                                        |
-| Scalable stats/indexing         | Partial  | O(1) event and per-type stats done; per-watch, per-path, and advanced indexing still TODO                                                     |
-| Cross-platform path handling    | Complete | Windows/Unix normalization, edge cases                                                                                                        |
-| Multi-watch test infra          | Complete | Scaffolded and passing basic checks                                                                                                           |
-| Stress tests                    | Complete | Scaffolded and passing basic checks                                                                                                           |
-| Multi-watch core                | Complete | Persistent transaction coordination, watch creation, permissions, and tree scan implemented                                                   |
-| Multi-watch concurrency tests   | Complete | Integration test for concurrent registration/removal passes (June 2025)                                                                       |
-| Shared cache optimization       | Complete | Overlap detection, shared node merge, cleanup, robust error handling, and background scheduler implemented. Remaining limitations documented. |
-| Redundant/orphaned node cleanup | Complete | Robust removal of redundant watch-specific and orphaned shared nodes; integration test passes (June 2025)                                     |
-| Unified/cross-watch queries     | Complete | `list_directory_unified` and `get_unified_node` implemented and tested                                                                        |
-| Hierarchical operations         | Complete | `list_ancestors` and `list_descendants` implemented and tested                                                                                |
-| Pattern-based search/filtering  | Complete | File name glob patterns supported, robust and tested (June 2025)                                                                              |
-| **Cache synchronizer integration** | **Complete** | **Watcher event loop now updates cache incrementally for all events. Synchronizer unit test covers create/remove.** |
+| Task                               | Status       | Notes                                                                                                                                         |
+| ---------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Event log retention/cleanup        | Complete     | Logic, tests, and integration done                                                                                                            |
+| Event log edge case docs           | Complete     | Documented in code and event_retention.rs                                                                                                     |
+| Brute-force stats impl             | Complete     | O(N), not scalable, see maintenance.rs                                                                                                        |
+| Scalable stats/indexing            | Partial      | O(1) event and per-type stats done; per-watch, per-path, and advanced indexing still TODO                                                     |
+| Cross-platform path handling       | Complete     | Windows/Unix normalization, edge cases                                                                                                        |
+| Multi-watch test infra             | Complete     | Scaffolded and passing basic checks                                                                                                           |
+| Stress tests                       | Complete     | Scaffolded and passing basic checks                                                                                                           |
+| Multi-watch core                   | Complete     | Persistent transaction coordination, watch creation, permissions, and tree scan implemented                                                   |
+| Multi-watch concurrency tests      | Complete     | Integration test for concurrent registration/removal passes (June 2025)                                                                       |
+| Shared cache optimization          | Complete     | Overlap detection, shared node merge, cleanup, robust error handling, and background scheduler implemented. Remaining limitations documented. |
+| Redundant/orphaned node cleanup    | Complete     | Robust removal of redundant watch-specific and orphaned shared nodes; integration test passes (June 2025)                                     |
+| Unified/cross-watch queries        | Complete     | `list_directory_unified` and `get_unified_node` implemented and tested                                                                        |
+| Hierarchical operations            | Complete     | `list_ancestors` and `list_descendants` implemented and tested                                                                                |
+| Pattern-based search/filtering     | Complete     | File name glob patterns supported, robust and tested (June 2025)                                                                              |
+| **Cache synchronizer integration** | **Complete** | **Watcher event loop now updates cache incrementally for all events. Synchronizer unit test covers create/remove/rename/move.**               |
 
 ---
 
@@ -38,8 +38,18 @@
 
 ### Phase 3: Filesystem Cache API (incomplete)
 - [ ] Scalable stats/indexing: per-watch, per-path, and advanced indexing
-- [ ] **Cache synchronization: implement removal and rename logic in synchronizer; add more tests for invalidation and consistency.**
 - [ ] Performance operations: bulk cache warming, background maintenance, statistics/monitoring, memory optimization
 - [ ] Integration with existing systems: watcher integration, cache-aware monitoring, database adapter enhancements
 - [ ] Advanced features: transaction coordination, memory management, performance monitoring
-- [ ] **Testing and validation: expand unit/integration tests for cache synchronization, especially for removal/rename and multi-watch scenarios.**
+- [ ] **Testing and validation: expand unit/integration tests for cache synchronization, especially for multi-watch scenarios.**
+
+---
+
+## Completed: Cache Synchronization Layer (June 2025)
+
+- Synchronizer trait and struct defined; encapsulates cache update/invalidation logic.
+- Fully integrated into watcher event processing pipeline.
+- Robust handling for all event types: create, modify, remove, move/rename.
+- Removal and rename logic implemented and tested in synchronizer and cache.
+- Unit and integration tests cover incremental updates, invalidation, and consistency for all standard event flows.
+- Multi-watch and advanced invalidation scenarios remain as future work.

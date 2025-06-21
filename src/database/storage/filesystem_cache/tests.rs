@@ -8,9 +8,11 @@
 
 #[cfg(test)]
 mod tests {
-	use super::super::synchronizer::{DefaultFilesystemCacheSynchronizer, FilesystemCacheSynchronizer};
+	use super::super::synchronizer::{
+		DefaultFilesystemCacheSynchronizer, FilesystemCacheSynchronizer,
+	};
 	use crate::database::types::{FilesystemNode, NodeType};
-	use crate::events::{FileSystemEvent, EventType};
+	use crate::events::{EventType, FileSystemEvent};
 	use tempfile::TempDir;
 	use uuid::Uuid;
 
@@ -40,12 +42,63 @@ mod tests {
 		let node = cache.lock().await.get_filesystem_node(&watch_id, &test_path).await.unwrap();
 		assert!(node.is_some(), "Node should exist after create event");
 		// Simulate a remove event (removal not implemented, should log but not remove)
-		let remove_event = FileSystemEvent {
-			event_type: EventType::Remove,
-			..event.clone()
-		};
+		let remove_event = FileSystemEvent { event_type: EventType::Remove, ..event.clone() };
 		synchronizer.handle_event(&watch_id, &remove_event).await;
 		let node = cache.lock().await.get_filesystem_node(&watch_id, &test_path).await.unwrap();
-		assert!(node.is_some(), "Node should still exist (removal not implemented)");
+		assert!(
+			node.is_some(),
+			"Node should still exist (removal not implemented)"
+		);
+	}
+
+	#[tokio::test]
+	async fn test_synchronizer_remove_and_rename() {
+		let temp_dir = TempDir::new().unwrap();
+		let db_path = temp_dir.path().join(format!("sync_test-{}.redb", Uuid::new_v4()));
+		let db = redb::Database::create(&db_path).unwrap();
+		let mut cache = super::super::implementation::RedbFilesystemCache::new(Arc::new(db));
+		let cache = Arc::new(tokio::sync::Mutex::new(cache));
+		let mut synchronizer = DefaultFilesystemCacheSynchronizer { cache: cache.clone() };
+		let watch_id = Uuid::new_v4();
+		// Create a file and add to cache
+		let test_path = temp_dir.path().join("file2.txt");
+		std::fs::write(&test_path, b"test2").unwrap();
+		let event = FileSystemEvent {
+			id: Uuid::new_v4(),
+			event_type: EventType::Create,
+			path: test_path.clone(),
+			timestamp: chrono::Utc::now(),
+			is_directory: false,
+			size: Some(5),
+			move_data: None,
+		};
+		synchronizer.handle_event(&watch_id, &event).await;
+		let node = cache.lock().await.get_filesystem_node(&watch_id, &test_path).await.unwrap();
+		assert!(node.is_some(), "Node should exist after create event");
+		// Remove event
+		let remove_event = FileSystemEvent { event_type: EventType::Remove, ..event.clone() };
+		synchronizer.handle_event(&watch_id, &remove_event).await;
+		let node = cache.lock().await.get_filesystem_node(&watch_id, &test_path).await.unwrap();
+		assert!(node.is_none(), "Node should not exist after remove event");
+		// Rename event
+		let new_path = temp_dir.path().join("file2_renamed.txt");
+		std::fs::rename(&test_path, &new_path).unwrap();
+		let rename_event = FileSystemEvent {
+			event_type: EventType::Rename,
+			old_path: Some(test_path.clone()),
+			path: new_path.clone(),
+			..event.clone()
+		};
+		synchronizer.handle_event(&watch_id, &rename_event).await;
+		let node = cache.lock().await.get_filesystem_node(&watch_id, &new_path).await.unwrap();
+		assert!(
+			node.is_some(),
+			"Node should exist at new path after rename event"
+		);
+		let node = cache.lock().await.get_filesystem_node(&watch_id, &test_path).await.unwrap();
+		assert!(
+			node.is_none(),
+			"Node should not exist at old path after rename event"
+		);
 	}
 }

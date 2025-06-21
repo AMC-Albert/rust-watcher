@@ -24,7 +24,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use super::trait_def::{CacheStats, FilesystemCacheStorage};
-use redb::ReadableTable;
+use redb::{ReadableMultimapTable, ReadableTable};
 use tracing::{debug, info};
 
 pub struct RedbFilesystemCache {
@@ -525,5 +525,108 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			}
 		}
 		Ok(node)
+	}
+
+	async fn remove_filesystem_node(&mut self, watch_id: &Uuid, path: &Path) -> DatabaseResult<()> {
+		// Remove the node from the cache and update hierarchy/path indices.
+		let canonical = match path.canonicalize() {
+			Ok(p) => p,
+			Err(_) => path.to_path_buf(),
+		};
+		let path_hash = calculate_path_hash(&canonical);
+		let scoped_key = Self::create_scoped_key(watch_id, path_hash);
+		let key_bytes = serialize(&scoped_key)?;
+		let write_txn = self.database.begin_write()?;
+		{
+			let mut fs_cache_table = write_txn.open_table(MULTI_WATCH_FS_CACHE)?;
+			fs_cache_table.remove(key_bytes.as_slice())?;
+			// Remove from hierarchy table (as child)
+			let mut hierarchy_table = write_txn.open_multimap_table(MULTI_WATCH_HIERARCHY)?;
+			// Remove all parent->child links to this node
+			// (Naive: scan all parents, remove child links)
+			let mut to_remove: Vec<Vec<u8>> = Vec::new();
+			for entry in hierarchy_table.iter()? {
+				let (parent_key, child_key) = entry?;
+				// child_key is a MultimapValue<'_, &[u8]>
+				for child in child_key {
+					let child = child?; // AccessGuard<'_, &[u8]>
+					if child.value() == key_bytes.as_slice() {
+						to_remove.push(parent_key.value().to_vec());
+					}
+				}
+			}
+			for parent in to_remove {
+				hierarchy_table.remove(parent.as_slice(), key_bytes.as_slice())?;
+			}
+			// Remove from path prefix table
+			let mut prefix_table = write_txn.open_multimap_table(PATH_PREFIX_TABLE)?;
+			let prefix_str = canonical.to_string_lossy();
+			prefix_table.remove(prefix_str.as_bytes(), key_bytes.as_slice())?;
+		}
+		write_txn.commit()?;
+		Ok(())
+	}
+
+	async fn rename_filesystem_node(
+		&mut self, watch_id: &Uuid, old_path: &Path, new_path: &Path,
+	) -> DatabaseResult<()> {
+		// Move the node, update indices, handle parent/child relationships.
+		let old_canonical = match old_path.canonicalize() {
+			Ok(p) => p,
+			Err(_) => old_path.to_path_buf(),
+		};
+		let new_canonical = match new_path.canonicalize() {
+			Ok(p) => p,
+			Err(_) => new_path.to_path_buf(),
+		};
+		let old_hash = calculate_path_hash(&old_canonical);
+		let new_hash = calculate_path_hash(&new_canonical);
+		let old_key = Self::create_scoped_key(watch_id, old_hash);
+		let new_key = Self::create_scoped_key(watch_id, new_hash);
+		let old_key_bytes = serialize(&old_key)?;
+		let new_key_bytes = serialize(&new_key)?;
+		let write_txn = self.database.begin_write()?;
+		{
+			let mut fs_cache_table = write_txn.open_table(MULTI_WATCH_FS_CACHE)?;
+			// Scope the immutable borrow to avoid borrow checker issues
+			let node_opt = {
+				if let Some(node_bytes) = fs_cache_table.get(old_key_bytes.as_slice())? {
+					let mut node: FilesystemNode = deserialize(node_bytes.value())?;
+					node.path = new_canonical.clone();
+					node.computed.path_hash = new_hash;
+					Some(node)
+				} else {
+					None
+				}
+			};
+			if let Some(node) = node_opt {
+				fs_cache_table.insert(new_key_bytes.as_slice(), serialize(&node)?.as_slice())?;
+				fs_cache_table.remove(old_key_bytes.as_slice())?;
+				// Update hierarchy: remove old parent->child, add new parent->child
+				let mut hierarchy_table = write_txn.open_multimap_table(MULTI_WATCH_HIERARCHY)?;
+				let mut to_remove = Vec::new();
+				for entry in hierarchy_table.iter()? {
+					let (parent_key, child_key) = entry?;
+					for child in child_key {
+						let child = child?;
+						if child.value() == old_key_bytes.as_slice() {
+							to_remove.push(parent_key.value().to_vec());
+						}
+					}
+				}
+				for parent in to_remove {
+					hierarchy_table.remove(parent.as_slice(), old_key_bytes.as_slice())?;
+					hierarchy_table.insert(parent.as_slice(), new_key_bytes.as_slice())?;
+				}
+				// Update path prefix table: remove old, add new
+				let mut prefix_table = write_txn.open_multimap_table(PATH_PREFIX_TABLE)?;
+				let old_prefix_str = old_canonical.to_string_lossy();
+				let new_prefix_str = new_canonical.to_string_lossy();
+				prefix_table.remove(old_prefix_str.as_bytes(), old_key_bytes.as_slice())?;
+				prefix_table.insert(new_prefix_str.as_bytes(), new_key_bytes.as_slice())?;
+			}
+		}
+		write_txn.commit()?;
+		Ok(())
 	}
 }

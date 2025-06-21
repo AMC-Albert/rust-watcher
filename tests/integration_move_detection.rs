@@ -118,6 +118,16 @@ impl FilesystemCacheStorage for DummyCache {
 	> {
 		Ok(vec![])
 	}
+	async fn remove_filesystem_node(
+		&mut self, _: &uuid::Uuid, _: &std::path::Path,
+	) -> rust_watcher::database::error::DatabaseResult<()> {
+		Ok(())
+	}
+	async fn rename_filesystem_node(
+		&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path,
+	) -> rust_watcher::database::error::DatabaseResult<()> {
+		Ok(())
+	}
 }
 
 #[test]

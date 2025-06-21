@@ -554,6 +554,16 @@ mod tests {
 			{
 				Ok(vec![])
 			}
+			async fn remove_filesystem_node(
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn rename_filesystem_node(
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
 		}
 		let mut dummy_cache = DummyCache;
 		let detector = MoveDetector::new(config, &mut dummy_cache);
@@ -669,6 +679,16 @@ mod tests {
 			{
 				Ok(vec![])
 			}
+			async fn remove_filesystem_node(
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn rename_filesystem_node(
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
 		}
 		let mut dummy_cache = DummyCache;
 		let detector = MoveDetector::with_timeout(5000, &mut dummy_cache);
@@ -779,6 +799,16 @@ mod tests {
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
+			}
+			async fn remove_filesystem_node(
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn rename_filesystem_node(
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
 			}
 		}
 		let mut dummy_cache = DummyCache;
@@ -901,6 +931,16 @@ mod tests {
 			{
 				Ok(vec![])
 			}
+			async fn remove_filesystem_node(
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn rename_filesystem_node(
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
 		}
 		let mut dummy_cache = DummyCache;
 		let detector = MoveDetector::new(config, &mut dummy_cache);
@@ -1014,6 +1054,16 @@ mod tests {
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
+			}
+			async fn remove_filesystem_node(
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn rename_filesystem_node(
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
 			}
 		}
 		let mut dummy_cache = DummyCache;

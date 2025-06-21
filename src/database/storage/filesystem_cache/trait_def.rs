@@ -126,6 +126,14 @@ pub trait FilesystemCacheStorage: Send + Sync {
 	) -> DatabaseResult<Option<FilesystemNode>> {
 		unimplemented!("get_node not yet implemented");
 	}
+
+	/// Remove a single filesystem node for a specific watch
+	async fn remove_filesystem_node(&mut self, watch_id: &Uuid, path: &Path) -> DatabaseResult<()>;
+
+	/// Rename (move) a filesystem node for a specific watch
+	async fn rename_filesystem_node(
+		&mut self, watch_id: &Uuid, old_path: &Path, new_path: &Path,
+	) -> DatabaseResult<()>;
 }
 
 /// Cache statistics for monitoring

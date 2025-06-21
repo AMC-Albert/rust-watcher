@@ -45,18 +45,27 @@ impl<T: FilesystemCacheStorage> FilesystemCacheSynchronizer
 				}
 			}
 			EventType::Remove => {
-				// TODO: Implement node removal from cache. This requires a remove API on FilesystemCacheStorage.
-				tracing::debug!(
-					"Remove event received, but cache removal is not implemented: {:?}",
-					event
-				);
+				// Remove the node from the cache if possible.
+				let path = &event.path;
+				if let Err(e) = cache.remove_filesystem_node(watch_id, path).await {
+					tracing::warn!("Cache node removal failed: {}", e);
+				}
 			}
 			EventType::Rename => {
-				// TODO: Implement move/rename handling. This requires a move/rename API on FilesystemCacheStorage.
-				tracing::debug!(
-					"Rename event received, but cache move/rename is not implemented: {:?}",
-					event
-				);
+				// Rename (move) the node in the cache if possible.
+				if let Some(ref move_data) = event.move_data {
+					let old_path = &move_data.source_path;
+					let new_path = &move_data.destination_path;
+					if let Err(e) = cache.rename_filesystem_node(watch_id, old_path, new_path).await
+					{
+						tracing::warn!("Cache node rename failed: {}", e);
+					}
+				} else {
+					tracing::debug!(
+						"Missing move_data for rename event, skipping cache rename: {:?}",
+						event
+					);
+				}
 			}
 			_ => {
 				// Ignore other event types for now.
