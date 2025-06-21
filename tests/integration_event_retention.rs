@@ -13,7 +13,9 @@ use tempfile::tempdir;
 #[tokio::test]
 async fn test_event_retention_cleanup_storage() {
 	let temp_dir = tempdir().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join("retention_test.db");
+	let db_path = temp_dir
+		.path()
+		.join(format!("retention_test-{}.db", uuid::Uuid::new_v4()));
 	let config = rust_watcher::database::DatabaseConfig {
 		database_path: db_path,
 		..rust_watcher::database::DatabaseConfig::for_small_directories()
@@ -118,7 +120,9 @@ async fn test_event_retention_cleanup_storage() {
 #[tokio::test]
 async fn test_event_retention_duplicates_and_out_of_order() {
 	let temp_dir = tempfile::tempdir().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join("retention_test_dupes.db");
+	let db_path = temp_dir
+		.path()
+		.join(format!("retention_test_dupes-{}.db", uuid::Uuid::new_v4()));
 	let config = rust_watcher::database::DatabaseConfig {
 		database_path: db_path,
 		..rust_watcher::database::DatabaseConfig::for_small_directories()

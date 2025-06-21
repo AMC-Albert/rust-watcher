@@ -17,6 +17,7 @@ Thumbs.db
 /tmp
 /temp
 *.tmp
+/tests/test_artifacts
 # Ignore all test data directories under test_playground, but keep all scripts
 /test_playground/*/
 !/test_playground/*.ps1

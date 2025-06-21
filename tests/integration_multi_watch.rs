@@ -13,7 +13,9 @@ use uuid::Uuid;
 #[tokio::test]
 async fn test_register_and_list_watches() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
-	let db_path = temp_dir.path().join("multi_watch_test.db");
+	let db_path = temp_dir
+		.path()
+		.join(format!("multi_watch_test-{}.db", uuid::Uuid::new_v4()));
 	let db = redb::Database::create(&db_path).expect("Failed to create database");
 	let db = std::sync::Arc::new(db);
 	let multi_watch = MultiWatchDatabase::new(db.clone());
@@ -66,7 +68,10 @@ async fn test_register_and_list_watches() {
 #[tokio::test]
 async fn test_remove_watch() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
-	let db_path = temp_dir.path().join("multi_watch_test_remove.db");
+	let db_path = temp_dir.path().join(format!(
+		"multi_watch_test_remove-{}.db",
+		uuid::Uuid::new_v4()
+	));
 	let db = redb::Database::create(&db_path).expect("Failed to create database");
 	let db = std::sync::Arc::new(db);
 	let multi_watch = MultiWatchDatabase::new(db.clone());
@@ -148,7 +153,10 @@ async fn test_remove_watch() {
 #[tokio::test]
 async fn test_shared_node_management() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
-	let db_path = temp_dir.path().join("multi_watch_test_shared.db");
+	let db_path = temp_dir.path().join(format!(
+		"multi_watch_test_shared-{}.db",
+		uuid::Uuid::new_v4()
+	));
 	let db = redb::Database::create(&db_path).expect("Failed to create database");
 	let db = std::sync::Arc::new(db);
 	let multi_watch = MultiWatchDatabase::new(db.clone());

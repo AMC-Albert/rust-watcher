@@ -1,3 +1,4 @@
+use crate::database::storage::filesystem_cache::FilesystemCacheStorage;
 use crate::events::{EventType, FileSystemEvent, MoveEvent};
 use crate::move_detection::config::MoveDetectorConfig;
 use crate::move_detection::events::{PendingEvent, PendingEventsStorage};
@@ -9,12 +10,15 @@ use std::path::Path;
 use tokio::time::Instant;
 use tracing::{debug, warn};
 
-pub struct MoveDetector {
+pub struct MoveDetector<'a> {
 	/// Event storage organized for efficient lookups
 	pending_events: PendingEventsStorage,
 
 	/// Cache metadata for files we've seen (for use when they get removed)
 	metadata_cache: MetadataCache,
+
+	/// Reference to persistent filesystem cache
+	cache: &'a mut dyn FilesystemCacheStorage,
 
 	/// Configuration for move detection
 	config: MoveDetectorConfig,
@@ -23,20 +27,21 @@ pub struct MoveDetector {
 	stats: ResourceStats,
 }
 
-impl MoveDetector {
-	pub fn new(config: MoveDetectorConfig) -> Self {
+impl<'a> MoveDetector<'a> {
+	pub fn new(config: MoveDetectorConfig, cache: &'a mut dyn FilesystemCacheStorage) -> Self {
 		Self {
 			pending_events: PendingEventsStorage::new(),
 			metadata_cache: MetadataCache::new(),
+			cache,
 			config,
 			stats: ResourceStats::new(),
 		}
 	}
 
 	/// Create a new MoveDetector with default configuration and custom timeout
-	pub fn with_timeout(timeout_ms: u64) -> Self {
+	pub fn with_timeout(timeout_ms: u64, cache: &'a mut dyn FilesystemCacheStorage) -> Self {
 		let config = MoveDetectorConfig::with_timeout(timeout_ms);
-		Self::new(config)
+		Self::new(config, cache)
 	}
 	/// Process a filesystem event and potentially detect moves
 	pub async fn process_event(&mut self, event: FileSystemEvent) -> Vec<FileSystemEvent> {
@@ -154,7 +159,19 @@ impl MoveDetector {
 	}
 	async fn handle_remove_event(&mut self, mut event: FileSystemEvent) -> Vec<FileSystemEvent> {
 		// Try to get cached metadata for this file (since it's being removed)
-		let cached_metadata = self.metadata_cache.remove(&event.path);
+		let mut cached_metadata = self.metadata_cache.remove(&event.path);
+		if cached_metadata.is_none() {
+			// Fallback: query persistent cache for metadata
+			if let Ok(Some(node)) = self.cache.get_unified_node(&event.path).await {
+				let (size, windows_id) = match &node.node_type {
+					crate::database::types::NodeType::File { size, .. } => {
+						(Some(*size), node.metadata.windows_id)
+					}
+					_ => (None, node.metadata.windows_id),
+				};
+				cached_metadata = Some(FileMetadata::new(size, windows_id));
+			}
+		}
 		debug!(
 			"Remove event: cached_metadata available={}",
 			cached_metadata.is_some()
@@ -444,7 +461,135 @@ mod tests {
 	#[test]
 	fn test_move_detector_creation() {
 		let config = MoveDetectorConfig::default();
-		let detector = MoveDetector::new(config);
+		struct DummyCache;
+		#[async_trait::async_trait]
+		impl FilesystemCacheStorage for DummyCache {
+			async fn store_filesystem_node(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &crate::database::types::FilesystemNode,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_filesystem_node(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
+			}
+			async fn list_directory_for_watch(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn store_watch_metadata(
+				&mut self,
+				_: &crate::database::types::WatchMetadata,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_watch_metadata(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>>
+			{
+				Ok(None)
+			}
+			async fn remove_watch(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn store_shared_node(
+				&mut self,
+				_: &crate::database::types::SharedNodeInfo,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_shared_node(
+				&mut self,
+				_: u64,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::SharedNodeInfo>,
+			> {
+				Ok(None)
+			}
+			async fn batch_store_filesystem_nodes(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &[crate::database::types::FilesystemNode],
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn find_nodes_by_prefix(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn get_cache_stats(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<
+				crate::database::storage::filesystem_cache::CacheStats,
+			> {
+				Ok(Default::default())
+			}
+			async fn cleanup_stale_cache(
+				&mut self,
+				_: &uuid::Uuid,
+				_: u64,
+			) -> crate::database::error::DatabaseResult<usize> {
+				Ok(0)
+			}
+			async fn list_directory_unified(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn get_unified_node(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
+			}
+			async fn list_ancestors(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn list_descendants(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn search_nodes(
+				&mut self,
+				_: &str,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+		}
+		let mut dummy_cache = DummyCache;
+		let detector = MoveDetector::new(config, &mut dummy_cache);
 
 		// Test that detector is properly initialized
 		assert!(detector.pending_events.pending_rename_from.is_none());
@@ -456,7 +601,135 @@ mod tests {
 
 	#[test]
 	fn test_move_detector_with_timeout() {
-		let detector = MoveDetector::with_timeout(5000);
+		struct DummyCache;
+		#[async_trait::async_trait]
+		impl FilesystemCacheStorage for DummyCache {
+			async fn store_filesystem_node(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &crate::database::types::FilesystemNode,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_filesystem_node(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
+			}
+			async fn list_directory_for_watch(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn store_watch_metadata(
+				&mut self,
+				_: &crate::database::types::WatchMetadata,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_watch_metadata(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>>
+			{
+				Ok(None)
+			}
+			async fn remove_watch(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn store_shared_node(
+				&mut self,
+				_: &crate::database::types::SharedNodeInfo,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_shared_node(
+				&mut self,
+				_: u64,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::SharedNodeInfo>,
+			> {
+				Ok(None)
+			}
+			async fn batch_store_filesystem_nodes(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &[crate::database::types::FilesystemNode],
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn find_nodes_by_prefix(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn get_cache_stats(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<
+				crate::database::storage::filesystem_cache::CacheStats,
+			> {
+				Ok(Default::default())
+			}
+			async fn cleanup_stale_cache(
+				&mut self,
+				_: &uuid::Uuid,
+				_: u64,
+			) -> crate::database::error::DatabaseResult<usize> {
+				Ok(0)
+			}
+			async fn list_directory_unified(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn get_unified_node(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
+			}
+			async fn list_ancestors(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn list_descendants(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn search_nodes(
+				&mut self,
+				_: &str,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+		}
+		let mut dummy_cache = DummyCache;
+		let detector = MoveDetector::with_timeout(5000, &mut dummy_cache);
 
 		// Test that detector is created with custom timeout
 		assert_eq!(detector.config.timeout, Duration::from_millis(5000));
@@ -464,7 +737,135 @@ mod tests {
 	#[test]
 	fn test_infer_path_type() {
 		let config = MoveDetectorConfig::default();
-		let detector = MoveDetector::new(config);
+		struct DummyCache;
+		#[async_trait::async_trait]
+		impl FilesystemCacheStorage for DummyCache {
+			async fn store_filesystem_node(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &crate::database::types::FilesystemNode,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_filesystem_node(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
+			}
+			async fn list_directory_for_watch(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn store_watch_metadata(
+				&mut self,
+				_: &crate::database::types::WatchMetadata,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_watch_metadata(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>>
+			{
+				Ok(None)
+			}
+			async fn remove_watch(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn store_shared_node(
+				&mut self,
+				_: &crate::database::types::SharedNodeInfo,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_shared_node(
+				&mut self,
+				_: u64,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::SharedNodeInfo>,
+			> {
+				Ok(None)
+			}
+			async fn batch_store_filesystem_nodes(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &[crate::database::types::FilesystemNode],
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn find_nodes_by_prefix(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn get_cache_stats(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<
+				crate::database::storage::filesystem_cache::CacheStats,
+			> {
+				Ok(Default::default())
+			}
+			async fn cleanup_stale_cache(
+				&mut self,
+				_: &uuid::Uuid,
+				_: u64,
+			) -> crate::database::error::DatabaseResult<usize> {
+				Ok(0)
+			}
+			async fn list_directory_unified(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn get_unified_node(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
+			}
+			async fn list_ancestors(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn list_descendants(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn search_nodes(
+				&mut self,
+				_: &str,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+		}
+		let mut dummy_cache = DummyCache;
+		let detector = MoveDetector::new(config, &mut dummy_cache);
 
 		// Test path type inference - since there's no metadata or pending events,
 		// the function will fall back to basic heuristics
@@ -482,7 +883,135 @@ mod tests {
 	#[test]
 	fn test_get_pending_events_summary() {
 		let config = MoveDetectorConfig::default();
-		let detector = MoveDetector::new(config);
+		struct DummyCache;
+		#[async_trait::async_trait]
+		impl FilesystemCacheStorage for DummyCache {
+			async fn store_filesystem_node(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &crate::database::types::FilesystemNode,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_filesystem_node(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
+			}
+			async fn list_directory_for_watch(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn store_watch_metadata(
+				&mut self,
+				_: &crate::database::types::WatchMetadata,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_watch_metadata(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>>
+			{
+				Ok(None)
+			}
+			async fn remove_watch(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn store_shared_node(
+				&mut self,
+				_: &crate::database::types::SharedNodeInfo,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_shared_node(
+				&mut self,
+				_: u64,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::SharedNodeInfo>,
+			> {
+				Ok(None)
+			}
+			async fn batch_store_filesystem_nodes(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &[crate::database::types::FilesystemNode],
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn find_nodes_by_prefix(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn get_cache_stats(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<
+				crate::database::storage::filesystem_cache::CacheStats,
+			> {
+				Ok(Default::default())
+			}
+			async fn cleanup_stale_cache(
+				&mut self,
+				_: &uuid::Uuid,
+				_: u64,
+			) -> crate::database::error::DatabaseResult<usize> {
+				Ok(0)
+			}
+			async fn list_directory_unified(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn get_unified_node(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
+			}
+			async fn list_ancestors(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn list_descendants(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn search_nodes(
+				&mut self,
+				_: &str,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+		}
+		let mut dummy_cache = DummyCache;
+		let detector = MoveDetector::new(config, &mut dummy_cache);
 
 		let summary = detector.get_pending_events_summary();
 		assert_eq!(summary.removes_by_size_buckets, 0);
@@ -493,7 +1022,135 @@ mod tests {
 	#[test]
 	fn test_get_resource_stats() {
 		let config = MoveDetectorConfig::default();
-		let mut detector = MoveDetector::new(config);
+		struct DummyCache;
+		#[async_trait::async_trait]
+		impl FilesystemCacheStorage for DummyCache {
+			async fn store_filesystem_node(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &crate::database::types::FilesystemNode,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_filesystem_node(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
+			}
+			async fn list_directory_for_watch(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn store_watch_metadata(
+				&mut self,
+				_: &crate::database::types::WatchMetadata,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_watch_metadata(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>>
+			{
+				Ok(None)
+			}
+			async fn remove_watch(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn store_shared_node(
+				&mut self,
+				_: &crate::database::types::SharedNodeInfo,
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn get_shared_node(
+				&mut self,
+				_: u64,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::SharedNodeInfo>,
+			> {
+				Ok(None)
+			}
+			async fn batch_store_filesystem_nodes(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &[crate::database::types::FilesystemNode],
+			) -> crate::database::error::DatabaseResult<()> {
+				Ok(())
+			}
+			async fn find_nodes_by_prefix(
+				&mut self,
+				_: &uuid::Uuid,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn get_cache_stats(
+				&mut self,
+				_: &uuid::Uuid,
+			) -> crate::database::error::DatabaseResult<
+				crate::database::storage::filesystem_cache::CacheStats,
+			> {
+				Ok(Default::default())
+			}
+			async fn cleanup_stale_cache(
+				&mut self,
+				_: &uuid::Uuid,
+				_: u64,
+			) -> crate::database::error::DatabaseResult<usize> {
+				Ok(0)
+			}
+			async fn list_directory_unified(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn get_unified_node(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
+			}
+			async fn list_ancestors(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn list_descendants(
+				&mut self,
+				_: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+			async fn search_nodes(
+				&mut self,
+				_: &str,
+			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
+			{
+				Ok(vec![])
+			}
+		}
+		let mut dummy_cache = DummyCache;
+		let mut detector = MoveDetector::new(config, &mut dummy_cache);
 
 		// Get resource stats should not panic on empty detector
 		let stats = detector.get_resource_stats();

@@ -1,3 +1,4 @@
+use crate::database::storage::filesystem_cache::RedbFilesystemCache;
 use crate::database::{DatabaseAdapter, DatabaseConfig};
 use crate::error::{ErrorRecoveryConfig, Result, WatcherError};
 use crate::events::{EventType, FileSystemEvent};
@@ -5,9 +6,13 @@ use crate::move_detection::{MoveDetector, MoveDetectorConfig};
 use crate::retry::RetryManager;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher as NotifyWatcher};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error, info, warn};
+
+// Keep in sync with tests/common/mod.rs
+const TEST_ARTIFACTS_DIR: &str = "tests/test_artifacts";
 
 #[derive(Debug, Clone)]
 pub struct WatcherConfig {
@@ -137,6 +142,20 @@ async fn run_watcher(
 		DatabaseAdapter::disabled()
 	};
 
+	// Initialize persistent filesystem cache
+	let mut fs_cache = if let Some(cache) = database.get_filesystem_cache().await {
+		cache
+	} else {
+		// Use a unique dummy DB file per watcher instance to avoid concurrency issues
+		let uuid = uuid::Uuid::new_v4();
+		let dummy_db_path =
+			std::path::Path::new(TEST_ARTIFACTS_DIR).join(format!("dummy-{}.db", uuid));
+		RedbFilesystemCache::new(Arc::new(redb::Database::create(dummy_db_path).unwrap()))
+	};
+
+	let move_detector_config = config.move_detector_config.unwrap_or_default();
+	let mut move_detector = MoveDetector::new(move_detector_config, &mut fs_cache);
+
 	// Initialize retry manager
 	let retry_config = config.error_recovery_config.unwrap_or_default();
 	let retry_manager = RetryManager::new(retry_config); // Initialize watcher with retry logic
@@ -156,9 +175,6 @@ async fn run_watcher(
 			return;
 		}
 	};
-
-	let move_detector_config = config.move_detector_config.unwrap_or_default();
-	let mut move_detector = MoveDetector::new(move_detector_config);
 
 	let (raw_event_tx, mut raw_event_rx) = mpsc::channel(100);
 	let (notify_tx, notify_rx) = std::sync::mpsc::channel(); // Set up the watcher callback with direct error handling for now
@@ -184,10 +200,9 @@ async fn run_watcher(
 				info!("Watcher shutdown requested, stopping event processing.");
 				break;
 			}
-			Some(event) = raw_event_rx.recv() => {				// Process event with direct error handling for now
+			Some(event) = raw_event_rx.recv() => {
 				if let Err(e) = process_single_event(event.clone(), &mut move_detector, &database, &event_tx).await {
 					warn!("Failed to process filesystem event: {} - Event: {:?}", e, event);
-					// Continue processing other events even if one fails
 				}
 			}
 			else => {
@@ -282,9 +297,9 @@ async fn setup_watcher_callback(
 }
 
 /// Process a single filesystem event with proper error handling
-async fn process_single_event(
+async fn process_single_event<'a>(
 	event: notify::Event,
-	move_detector: &mut MoveDetector,
+	move_detector: &mut MoveDetector<'a>,
 	database: &DatabaseAdapter,
 	event_tx: &mpsc::Sender<FileSystemEvent>,
 ) -> Result<()> {
@@ -333,7 +348,7 @@ async fn process_single_event(
 fn convert_notify_event(
 	kind: &EventKind,
 	path: PathBuf,
-	move_detector: &MoveDetector,
+	move_detector: &MoveDetector<'_>,
 ) -> FileSystemEvent {
 	let event_type = EventType::from(*kind);
 	debug!(

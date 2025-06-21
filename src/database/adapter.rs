@@ -4,6 +4,7 @@
 //! that can be used by the watcher core, move detection, and future modules
 //! without tight coupling to the underlying storage implementation.
 
+use crate::database::storage::filesystem_cache::RedbFilesystemCache;
 use crate::database::{
 	config::DatabaseConfig,
 	error::{DatabaseError, DatabaseResult},
@@ -198,6 +199,19 @@ impl DatabaseAdapter {
 			}
 		}
 	}
+
+	/// Get a RedbFilesystemCache if enabled, else None
+	pub async fn get_filesystem_cache(&self) -> Option<RedbFilesystemCache> {
+		if !self.enabled {
+			return None;
+		}
+		let storage = self.storage.read().await;
+		// Downcast to RedbStorage to access the database
+		storage
+			.as_any()
+			.downcast_ref::<crate::database::storage::core::RedbStorage>()
+			.map(|redb_storage| RedbFilesystemCache::new(redb_storage.database().clone()))
+	}
 }
 
 /// No-op storage implementation for when database is disabled
@@ -205,6 +219,9 @@ struct NoOpStorage;
 
 #[async_trait::async_trait]
 impl DatabaseStorage for NoOpStorage {
+	fn as_any(&self) -> &dyn std::any::Any {
+		self
+	}
 	async fn initialize(&mut self) -> DatabaseResult<()> {
 		Ok(())
 	}

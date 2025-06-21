@@ -14,7 +14,9 @@ use uuid::Uuid;
 #[tokio::test]
 async fn test_filesystem_node_insert_and_retrieve() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join("fs_cache_test.db");
+	let db_path = temp_dir
+		.path()
+		.join(format!("fs_cache_test-{}.db", uuid::Uuid::new_v4()));
 	let config = DatabaseConfig {
 		database_path: db_path,
 		..Default::default()
@@ -48,7 +50,9 @@ async fn test_filesystem_node_insert_and_retrieve() {
 #[tokio::test]
 async fn test_filesystem_hierarchy_and_list_directory() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join("fs_cache_hierarchy.db");
+	let db_path = temp_dir
+		.path()
+		.join(format!("fs_cache_hierarchy-{}.db", uuid::Uuid::new_v4()));
 	let config = DatabaseConfig {
 		database_path: db_path,
 		..Default::default()

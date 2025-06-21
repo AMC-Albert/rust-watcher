@@ -34,7 +34,10 @@ fn make_watch(root: &str) -> WatchMetadata {
 #[tokio::test]
 async fn test_concurrent_watch_registration_and_removal() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
-	let db_path = temp_dir.path().join("multi_watch_concurrency_test.db");
+	let db_path = temp_dir.path().join(format!(
+		"multi_watch_concurrency_test-{}.db",
+		uuid::Uuid::new_v4()
+	));
 	let db = redb::Database::create(&db_path).expect("Failed to create database");
 	let db = Arc::new(db);
 	let multi_watch = Arc::new(MultiWatchDatabase::new(db.clone()));

@@ -11,6 +11,7 @@ use crate::database::{
 };
 use chrono::{DateTime, Utc};
 use redb::{Database, ReadableMultimapTable, ReadableTable};
+use std::any::Any;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -18,6 +19,8 @@ use std::time::SystemTime;
 /// Main trait for database storage operations
 #[async_trait::async_trait]
 pub trait DatabaseStorage: Send + Sync {
+	fn as_any(&self) -> &dyn Any;
+
 	/// Initialize the database
 	async fn initialize(&mut self) -> DatabaseResult<()>;
 
@@ -140,6 +143,10 @@ impl RedbStorage {
 
 #[async_trait::async_trait]
 impl DatabaseStorage for RedbStorage {
+	fn as_any(&self) -> &dyn Any {
+		self
+	}
+
 	async fn initialize(&mut self) -> DatabaseResult<()> {
 		// Initialize all required tables through specialized modules
 		super::tables::initialize_tables(&self.database).await?;

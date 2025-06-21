@@ -1,7 +1,9 @@
-//! Path normalization and cross-platform compatibility tests
-//!
-//! These tests validate that filesystem paths are handled correctly
-//! across different platforms and edge cases.
+mod common;
+use common::TEST_ARTIFACTS_DIR;
+// Path normalization and cross-platform compatibility tests
+//
+// These tests validate that filesystem paths are handled correctly
+// across different platforms and edge cases.
 
 use rust_watcher::filesystem_poc::scan_directory_tree;
 use std::fs;
@@ -239,16 +241,20 @@ mod path_normalization {
 	#[cfg(windows)]
 	fn test_reserved_names_and_trailing_dot_space() {
 		// Windows has reserved names and ignores trailing dots/spaces
+		// Use a dedicated subdirectory under test_artifacts for isolation
+		let artifact_dir = std::path::Path::new(TEST_ARTIFACTS_DIR).join("path_normalization");
+		std::fs::create_dir_all(&artifact_dir).expect("Failed to create artifact dir");
+		let temp_dir = tempfile::Builder::new()
+			.prefix("trailingdot_test_")
+			.tempdir_in(&artifact_dir)
+			.expect("Failed to create temp dir");
 		let reserved = ["CON", "PRN", "AUX", "NUL", "COM1", "LPT1"];
 		for name in reserved.iter() {
-			let path = PathBuf::from(name);
-			// Creating these files should fail, but some environments may allow it (e.g., inside temp dirs or with special permissions)
+			let path = temp_dir.path().join(name);
 			let result = std::fs::File::create(&path);
 			if result.is_ok() {
-				// Known limitation: Windows sometimes allows reserved names in certain contexts
 				eprintln!("Warning: Reserved name {} was created successfully. This may be an environment quirk.", name);
 			} else {
-				// Expected failure
 				assert!(
 					result.is_err(),
 					"Should not be able to create reserved name: {}",
@@ -257,17 +263,18 @@ mod path_normalization {
 			}
 		}
 		// Trailing dot/space
-		let path = PathBuf::from("trailingdot.txt.");
+		let path = temp_dir.path().join("trailingdot.txt.");
 		let file = std::fs::File::create(&path);
 		assert!(
 			file.is_ok(),
 			"Should be able to create file with trailing dot"
 		);
-		let meta = std::fs::metadata("trailingdot.txt");
+		let meta = std::fs::metadata(temp_dir.path().join("trailingdot.txt"));
 		assert!(
 			meta.is_ok(),
 			"Windows should treat trailing dot as equivalent"
 		);
+		// Cleanup: temp_dir is deleted when dropped
 	}
 }
 
