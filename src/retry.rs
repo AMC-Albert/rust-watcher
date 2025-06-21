@@ -33,9 +33,7 @@ impl RetryManager {
 impl RetryManager {
 	/// Execute an operation with retry logic
 	pub async fn execute<T, F>(&self, mut operation: F) -> Result<T>
-	where
-		F: RetryableOperation<T>,
-	{
+	where F: RetryableOperation<T> {
 		let mut attempt = 0;
 		let start_time = std::time::Instant::now();
 
@@ -97,9 +95,7 @@ impl RetryManager {
 	}
 	/// Execute a simple async closure with retry logic
 	pub async fn execute_simple<T, F, Fut>(
-		&self,
-		operation_name: &str,
-		mut operation_fn: F,
+		&self, operation_name: &str, mut operation_fn: F,
 	) -> Result<T>
 	where
 		F: FnMut() -> Fut + Send,
@@ -171,9 +167,7 @@ pub struct RetryConfigBuilder {
 impl RetryConfigBuilder {
 	/// Create a new builder with default configuration
 	pub fn new() -> Self {
-		Self {
-			config: ErrorRecoveryConfig::default(),
-		}
+		Self { config: ErrorRecoveryConfig::default() }
 	}
 
 	/// Set the maximum number of retry attempts

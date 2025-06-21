@@ -39,9 +39,7 @@ pub trait DatabaseStorage: Send + Sync {
 
 	/// Find events by time range
 	async fn find_events_by_time_range(
-		&mut self,
-		start: DateTime<Utc>,
-		end: DateTime<Utc>,
+		&mut self, start: DateTime<Utc>, end: DateTime<Utc>,
 	) -> DatabaseResult<Vec<EventRecord>>;
 
 	/// Clean up expired events
@@ -49,8 +47,7 @@ pub trait DatabaseStorage: Send + Sync {
 
 	/// Clean up events using a configurable retention policy
 	async fn cleanup_events_with_policy(
-		&mut self,
-		config: &crate::database::storage::event_retention::EventRetentionConfig,
+		&mut self, config: &crate::database::storage::event_retention::EventRetentionConfig,
 	) -> DatabaseResult<usize>;
 
 	/// Get database statistics
@@ -64,43 +61,32 @@ pub trait DatabaseStorage: Send + Sync {
 
 	/// --- Filesystem cache methods ---
 	async fn store_filesystem_node(
-		&mut self,
-		watch_id: &uuid::Uuid,
-		node: &crate::database::types::FilesystemNode,
+		&mut self, watch_id: &uuid::Uuid, node: &crate::database::types::FilesystemNode,
 	) -> crate::database::error::DatabaseResult<()>;
 
 	async fn get_filesystem_node(
-		&mut self,
-		watch_id: &uuid::Uuid,
-		path: &std::path::Path,
+		&mut self, watch_id: &uuid::Uuid, path: &std::path::Path,
 	) -> crate::database::error::DatabaseResult<Option<crate::database::types::FilesystemNode>>;
 
 	async fn list_directory_for_watch(
-		&mut self,
-		watch_id: &uuid::Uuid,
-		parent_path: &std::path::Path,
+		&mut self, watch_id: &uuid::Uuid, parent_path: &std::path::Path,
 	) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>;
 
 	async fn batch_store_filesystem_nodes(
-		&mut self,
-		watch_id: &uuid::Uuid,
-		nodes: &[crate::database::types::FilesystemNode],
+		&mut self, watch_id: &uuid::Uuid, nodes: &[crate::database::types::FilesystemNode],
 	) -> crate::database::error::DatabaseResult<()>;
 
 	async fn store_watch_metadata(
-		&mut self,
-		metadata: &crate::database::types::WatchMetadata,
+		&mut self, metadata: &crate::database::types::WatchMetadata,
 	) -> crate::database::error::DatabaseResult<()>;
 
 	async fn get_watch_metadata(
-		&mut self,
-		watch_id: &uuid::Uuid,
+		&mut self, watch_id: &uuid::Uuid,
 	) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>>;
 
 	/// Delete all events older than the given cutoff timestamp
 	async fn delete_events_older_than(
-		&mut self,
-		cutoff: std::time::SystemTime,
+		&mut self, cutoff: std::time::SystemTime,
 	) -> DatabaseResult<usize>;
 
 	/// Count total number of events in the log
@@ -171,9 +157,7 @@ impl DatabaseStorage for RedbStorage {
 	}
 
 	async fn find_events_by_time_range(
-		&mut self,
-		start: DateTime<Utc>,
-		end: DateTime<Utc>,
+		&mut self, start: DateTime<Utc>, end: DateTime<Utc>,
 	) -> DatabaseResult<Vec<EventRecord>> {
 		super::indexing::find_events_by_time_range(&self.database, start, end).await
 	}
@@ -183,8 +167,7 @@ impl DatabaseStorage for RedbStorage {
 	}
 
 	async fn cleanup_events_with_policy(
-		&mut self,
-		config: &crate::database::storage::event_retention::EventRetentionConfig,
+		&mut self, config: &crate::database::storage::event_retention::EventRetentionConfig,
 	) -> DatabaseResult<usize> {
 		// Use the new event_retention logic for cleanup
 		crate::database::storage::event_retention::cleanup_old_events(self, config).await
@@ -204,60 +187,49 @@ impl DatabaseStorage for RedbStorage {
 	}
 
 	async fn store_filesystem_node(
-		&mut self,
-		watch_id: &uuid::Uuid,
-		node: &crate::database::types::FilesystemNode,
+		&mut self, watch_id: &uuid::Uuid, node: &crate::database::types::FilesystemNode,
 	) -> crate::database::error::DatabaseResult<()> {
 		let mut cache = self.cache();
 		cache.store_filesystem_node(watch_id, node).await
 	}
 
 	async fn get_filesystem_node(
-		&mut self,
-		watch_id: &uuid::Uuid,
-		path: &std::path::Path,
+		&mut self, watch_id: &uuid::Uuid, path: &std::path::Path,
 	) -> crate::database::error::DatabaseResult<Option<crate::database::types::FilesystemNode>> {
 		let mut cache = self.cache();
 		cache.get_filesystem_node(watch_id, path).await
 	}
 
 	async fn list_directory_for_watch(
-		&mut self,
-		watch_id: &uuid::Uuid,
-		parent_path: &std::path::Path,
+		&mut self, watch_id: &uuid::Uuid, parent_path: &std::path::Path,
 	) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>> {
 		let mut cache = self.cache();
 		cache.list_directory_for_watch(watch_id, parent_path).await
 	}
 
 	async fn batch_store_filesystem_nodes(
-		&mut self,
-		watch_id: &uuid::Uuid,
-		nodes: &[crate::database::types::FilesystemNode],
+		&mut self, watch_id: &uuid::Uuid, nodes: &[crate::database::types::FilesystemNode],
 	) -> crate::database::error::DatabaseResult<()> {
 		let mut cache = self.cache();
 		cache.batch_store_filesystem_nodes(watch_id, nodes).await
 	}
 
 	async fn store_watch_metadata(
-		&mut self,
-		metadata: &crate::database::types::WatchMetadata,
+		&mut self, metadata: &crate::database::types::WatchMetadata,
 	) -> crate::database::error::DatabaseResult<()> {
 		let mut cache = self.cache();
 		cache.store_watch_metadata(metadata).await
 	}
 
 	async fn get_watch_metadata(
-		&mut self,
-		watch_id: &uuid::Uuid,
+		&mut self, watch_id: &uuid::Uuid,
 	) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>> {
 		let mut cache = self.cache();
 		cache.get_watch_metadata(watch_id).await
 	}
 
 	async fn delete_events_older_than(
-		&mut self,
-		cutoff: std::time::SystemTime,
+		&mut self, cutoff: std::time::SystemTime,
 	) -> DatabaseResult<usize> {
 		// WARNING: This implementation iterates all events. Performance will degrade with large logs.
 		// For production, use an indexed timestamp or batch delete if supported by backend.
@@ -383,19 +355,15 @@ mod tests {
 
 	async fn create_test_storage(test_name: &str) -> DatabaseResult<RedbStorage> {
 		let temp_dir = tempdir().unwrap();
-		let db_path = temp_dir.path().join(format!("{}.db", test_name));
-		let config = DatabaseConfig {
-			database_path: db_path,
-			..DatabaseConfig::for_small_directories()
-		};
+		let db_path = temp_dir.path().join(format!("{test_name}.db"));
+		let config =
+			DatabaseConfig { database_path: db_path, ..DatabaseConfig::for_small_directories() };
 		RedbStorage::new(config).await
 	}
 
 	#[tokio::test]
 	async fn test_storage_initialization() {
-		let _storage = create_test_storage("test_storage_initialization")
-			.await
-			.unwrap();
+		let _storage = create_test_storage("test_storage_initialization").await.unwrap();
 	}
 
 	#[tokio::test]

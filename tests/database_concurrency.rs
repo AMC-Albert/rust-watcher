@@ -20,24 +20,17 @@ async fn test_concurrent_readers() {
 		..Default::default()
 	};
 
-	let adapter = Arc::new(
-		DatabaseAdapter::new(config)
-			.await
-			.expect("Failed to create adapter"),
-	);
+	let adapter = Arc::new(DatabaseAdapter::new(config).await.expect("Failed to create adapter"));
 
 	// Insert test data
 	for i in 0..50 {
 		let event = FileSystemEvent::new(
 			EventType::Create,
-			PathBuf::from(format!("/test/concurrent_{}.txt", i)),
+			PathBuf::from(format!("/test/concurrent_{i}.txt")),
 			false,
 			Some(1024),
 		);
-		adapter
-			.store_event(&event)
-			.await
-			.expect("Failed to store event");
+		adapter.store_event(&event).await.expect("Failed to store event");
 	}
 
 	// Spawn multiple concurrent readers
@@ -56,10 +49,7 @@ async fn test_concurrent_readers() {
 					.expect("Failed to get events");
 				assert!(!events.is_empty(), "Should find events for path");
 
-				let stats = adapter_clone
-					.get_stats()
-					.await
-					.expect("Failed to get stats");
+				let stats = adapter_clone.get_stats().await.expect("Failed to get stats");
 				assert!(stats.total_events >= 50, "Should have at least 50 events");
 
 				// Small delay to interleave operations
@@ -90,11 +80,7 @@ async fn test_reader_writer_concurrency() {
 		..Default::default()
 	};
 
-	let adapter = Arc::new(
-		DatabaseAdapter::new(config)
-			.await
-			.expect("Failed to create adapter"),
-	);
+	let adapter = Arc::new(DatabaseAdapter::new(config).await.expect("Failed to create adapter"));
 
 	let mut tasks = JoinSet::new();
 
@@ -105,20 +91,17 @@ async fn test_reader_writer_concurrency() {
 			for i in 0..20 {
 				let event = FileSystemEvent::new(
 					EventType::Create,
-					PathBuf::from(format!("/test/writer_{}_{}.txt", writer_id, i)),
+					PathBuf::from(format!("/test/writer_{writer_id}_{i}.txt")),
 					false,
 					Some(1024),
 				);
 
-				adapter_clone
-					.store_event(&event)
-					.await
-					.expect("Failed to store event");
+				adapter_clone.store_event(&event).await.expect("Failed to store event");
 
 				// Small delay between writes
 				tokio::time::sleep(Duration::from_millis(2)).await;
 			}
-			format!("writer_{}", writer_id)
+			format!("writer_{writer_id}")
 		});
 	}
 
@@ -127,16 +110,10 @@ async fn test_reader_writer_concurrency() {
 		let adapter_clone = Arc::clone(&adapter);
 		tasks.spawn(async move {
 			for _ in 0..30 {
-				let _stats = adapter_clone
-					.get_stats()
-					.await
-					.expect("Failed to get stats");
+				let _stats = adapter_clone.get_stats().await.expect("Failed to get stats");
 
 				// Health check during concurrent operations
-				let health = adapter_clone
-					.health_check()
-					.await
-					.expect("Health check failed");
+				let health = adapter_clone.health_check().await.expect("Health check failed");
 				assert!(
 					health,
 					"Database should remain healthy during concurrent access"
@@ -144,7 +121,7 @@ async fn test_reader_writer_concurrency() {
 
 				tokio::time::sleep(Duration::from_millis(3)).await;
 			}
-			format!("reader_{}", reader_id)
+			format!("reader_{reader_id}")
 		});
 	}
 
@@ -158,10 +135,7 @@ async fn test_reader_writer_concurrency() {
 	assert_eq!(completed_tasks.len(), 10, "All tasks should complete");
 
 	// Verify final state
-	let final_stats = adapter
-		.get_stats()
-		.await
-		.expect("Failed to get final stats");
+	let final_stats = adapter.get_stats().await.expect("Failed to get final stats");
 	assert_eq!(
 		final_stats.total_events, 100,
 		"Should have 100 events total"
@@ -178,11 +152,7 @@ async fn test_concurrent_writers() {
 		..Default::default()
 	};
 
-	let adapter = Arc::new(
-		DatabaseAdapter::new(config)
-			.await
-			.expect("Failed to create adapter"),
-	);
+	let adapter = Arc::new(DatabaseAdapter::new(config).await.expect("Failed to create adapter"));
 
 	let mut tasks = JoinSet::new();
 
@@ -195,15 +165,12 @@ async fn test_concurrent_writers() {
 			for i in 0..25 {
 				let event = FileSystemEvent::new(
 					EventType::Create,
-					PathBuf::from(format!("/test/writer_{}_{}.txt", writer_id, i)),
+					PathBuf::from(format!("/test/writer_{writer_id}_{i}.txt")),
 					false,
 					Some(1024 + i as u64),
 				);
 
-				adapter_clone
-					.store_event(&event)
-					.await
-					.expect("Failed to store event");
+				adapter_clone.store_event(&event).await.expect("Failed to store event");
 				event_count += 1;
 
 				// Vary timing to create more realistic concurrent access
@@ -224,8 +191,7 @@ async fn test_concurrent_writers() {
 		let (writer_id, event_count) = result.expect("Writer task failed");
 		assert_eq!(
 			event_count, 25,
-			"Writer {} should have written 25 events",
-			writer_id
+			"Writer {writer_id} should have written 25 events"
 		);
 		total_written += event_count;
 		completed_writers += 1;
@@ -235,10 +201,7 @@ async fn test_concurrent_writers() {
 	assert_eq!(total_written, 200, "Should have written 200 events total");
 
 	// Verify data integrity
-	let final_stats = adapter
-		.get_stats()
-		.await
-		.expect("Failed to get final stats");
+	let final_stats = adapter.get_stats().await.expect("Failed to get final stats");
 	assert_eq!(
 		final_stats.total_events, 200,
 		"Database should contain all written events"
@@ -247,11 +210,9 @@ async fn test_concurrent_writers() {
 	// Verify we can read back specific events
 	for writer_id in 0..8 {
 		for i in 0..25 {
-			let path = PathBuf::from(format!("/test/writer_{}_{}.txt", writer_id, i));
-			let events = adapter
-				.get_events_for_path(&path)
-				.await
-				.expect("Failed to get events for path");
+			let path = PathBuf::from(format!("/test/writer_{writer_id}_{i}.txt"));
+			let events =
+				adapter.get_events_for_path(&path).await.expect("Failed to get events for path");
 			assert_eq!(
 				events.len(),
 				1,
@@ -280,21 +241,16 @@ async fn test_database_recovery() {
 
 	// Phase 1: Write some data
 	{
-		let adapter = DatabaseAdapter::new(config.clone())
-			.await
-			.expect("Failed to create adapter");
+		let adapter = DatabaseAdapter::new(config.clone()).await.expect("Failed to create adapter");
 
 		for i in 0..50 {
 			let event = FileSystemEvent::new(
 				EventType::Create,
-				PathBuf::from(format!("/test/recovery_{}.txt", i)),
+				PathBuf::from(format!("/test/recovery_{i}.txt")),
 				false,
 				Some(1024),
 			);
-			adapter
-				.store_event(&event)
-				.await
-				.expect("Failed to store event");
+			adapter.store_event(&event).await.expect("Failed to store event");
 		}
 
 		let stats = adapter.get_stats().await.expect("Failed to get stats");
@@ -312,10 +268,7 @@ async fn test_database_recovery() {
 			.await
 			.expect("Failed to reopen database after simulated shutdown");
 
-		let stats = adapter
-			.get_stats()
-			.await
-			.expect("Failed to get stats after recovery");
+		let stats = adapter.get_stats().await.expect("Failed to get stats after recovery");
 		assert_eq!(
 			stats.total_events, 50,
 			"Should recover all 50 events after restart"
@@ -323,12 +276,12 @@ async fn test_database_recovery() {
 
 		// Verify data integrity by reading specific events
 		for i in 0..50 {
-			let path = PathBuf::from(format!("/test/recovery_{}.txt", i));
+			let path = PathBuf::from(format!("/test/recovery_{i}.txt"));
 			let events = adapter
 				.get_events_for_path(&path)
 				.await
 				.expect("Failed to get events after recovery");
-			assert_eq!(events.len(), 1, "Should find event {} after recovery", i);
+			assert_eq!(events.len(), 1, "Should find event {i} after recovery");
 		}
 
 		// Verify we can continue writing
@@ -343,10 +296,7 @@ async fn test_database_recovery() {
 			.await
 			.expect("Should be able to write after recovery");
 
-		let final_stats = adapter
-			.get_stats()
-			.await
-			.expect("Failed to get final stats");
+		let final_stats = adapter.get_stats().await.expect("Failed to get final stats");
 		assert_eq!(
 			final_stats.total_events, 51,
 			"Should have 51 events after post-recovery write"

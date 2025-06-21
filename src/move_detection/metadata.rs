@@ -12,11 +12,7 @@ pub struct FileMetadata {
 
 impl FileMetadata {
 	pub fn new(size: Option<u64>, windows_id: Option<u64>) -> Self {
-		Self {
-			size,
-			windows_id,
-			last_seen: Instant::now(),
-		}
+		Self { size, windows_id, last_seen: Instant::now() }
 	}
 }
 

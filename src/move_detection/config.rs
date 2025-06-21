@@ -74,10 +74,7 @@ impl Default for MoveDetectorConfig {
 impl MoveDetectorConfig {
 	/// Create a new configuration with custom timeout
 	pub fn with_timeout(timeout_ms: u64) -> Self {
-		Self {
-			timeout: Duration::from_millis(timeout_ms),
-			..Default::default()
-		}
+		Self { timeout: Duration::from_millis(timeout_ms), ..Default::default() }
 	}
 
 	/// Validate the configuration and return errors if invalid
@@ -99,8 +96,7 @@ impl MoveDetectorConfig {
 
 		if (total_weight - 1.0).abs() > 0.1 {
 			return Err(format!(
-				"Weights should sum to approximately 1.0, got {:.2}",
-				total_weight
+				"Weights should sum to approximately 1.0, got {total_weight:.2}"
 			));
 		}
 
@@ -152,49 +148,28 @@ mod tests {
 	#[test]
 	fn test_config_validation_confidence_threshold() {
 		// Test invalid confidence threshold
-		let config = MoveDetectorConfig {
-			confidence_threshold: -0.1,
-			..Default::default()
-		};
+		let config = MoveDetectorConfig { confidence_threshold: -0.1, ..Default::default() };
 		assert!(config.validate().is_err());
 
-		let config = MoveDetectorConfig {
-			confidence_threshold: 1.1,
-			..Default::default()
-		};
+		let config = MoveDetectorConfig { confidence_threshold: 1.1, ..Default::default() };
 		assert!(config.validate().is_err());
 
 		// Test valid thresholds
-		let config = MoveDetectorConfig {
-			confidence_threshold: 0.0,
-			..Default::default()
-		};
+		let config = MoveDetectorConfig { confidence_threshold: 0.0, ..Default::default() };
 		assert!(config.validate().is_ok());
 
-		let config = MoveDetectorConfig {
-			confidence_threshold: 1.0,
-			..Default::default()
-		};
+		let config = MoveDetectorConfig { confidence_threshold: 1.0, ..Default::default() };
 		assert!(config.validate().is_ok());
 
-		let config = MoveDetectorConfig {
-			confidence_threshold: 0.5,
-			..Default::default()
-		};
+		let config = MoveDetectorConfig { confidence_threshold: 0.5, ..Default::default() };
 		assert!(config.validate().is_ok());
 	}
 	#[test]
 	fn test_config_validation_max_pending_events() {
-		let config = MoveDetectorConfig {
-			max_pending_events: 0,
-			..Default::default()
-		};
+		let config = MoveDetectorConfig { max_pending_events: 0, ..Default::default() };
 		assert!(config.validate().is_err());
 
-		let config = MoveDetectorConfig {
-			max_pending_events: 1,
-			..Default::default()
-		};
+		let config = MoveDetectorConfig { max_pending_events: 1, ..Default::default() };
 		assert!(config.validate().is_ok());
 	}
 	#[test]
@@ -241,8 +216,7 @@ mod tests {
 
 		assert!(
 			(total_weight - 1.0).abs() <= 0.1,
-			"Total weight should be close to 1.0, got {}",
-			total_weight
+			"Total weight should be close to 1.0, got {total_weight}",
 		);
 	}
 }

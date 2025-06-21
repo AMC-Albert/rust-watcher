@@ -13,9 +13,7 @@ use uuid::Uuid;
 #[tokio::test]
 async fn test_register_and_list_watches() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
-	let db_path = temp_dir
-		.path()
-		.join(format!("multi_watch_test-{}.db", uuid::Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("multi_watch_test-{}.db", uuid::Uuid::new_v4()));
 	let db = redb::Database::create(&db_path).expect("Failed to create database");
 	let db = std::sync::Arc::new(db);
 	let multi_watch = MultiWatchDatabase::new(db.clone());
@@ -41,14 +39,8 @@ async fn test_register_and_list_watches() {
 		config_hash: 456,
 		permissions: None,
 	};
-	multi_watch
-		.register_watch(&watch1)
-		.await
-		.expect("register_watch 1");
-	multi_watch
-		.register_watch(&watch2)
-		.await
-		.expect("register_watch 2");
+	multi_watch.register_watch(&watch1).await.expect("register_watch 1");
+	multi_watch.register_watch(&watch2).await.expect("register_watch 2");
 
 	// List watches and verify
 	let watches = multi_watch.list_watches().await.expect("list_watches");
@@ -91,10 +83,7 @@ async fn test_remove_watch() {
 		config_hash: 789,
 		permissions: None,
 	};
-	multi_watch
-		.register_watch(&watch)
-		.await
-		.expect("register_watch");
+	multi_watch.register_watch(&watch).await.expect("register_watch");
 
 	// Add a shared node referencing this watch
 	let shared_info = SharedNodeInfo {
@@ -130,16 +119,10 @@ async fn test_remove_watch() {
 		reference_count: 1,
 		last_shared_update: Utc::now(),
 	};
-	multi_watch
-		.store_shared_node(&shared_info)
-		.await
-		.expect("store_shared_node");
+	multi_watch.store_shared_node(&shared_info).await.expect("store_shared_node");
 
 	// Remove the watch
-	multi_watch
-		.remove_watch(&watch.watch_id)
-		.await
-		.expect("remove_watch");
+	multi_watch.remove_watch(&watch.watch_id).await.expect("remove_watch");
 
 	// Assert the watch is gone
 	let watches = multi_watch.list_watches().await.expect("list_watches");
@@ -147,10 +130,7 @@ async fn test_remove_watch() {
 
 	// Assert the shared node is removed (reference_count == 0)
 	let path_hash = rust_watcher::database::types::calculate_path_hash(&watch.root_path);
-	let shared = multi_watch
-		.get_shared_node(path_hash)
-		.await
-		.expect("get_shared_node");
+	let shared = multi_watch.get_shared_node(path_hash).await.expect("get_shared_node");
 	assert!(shared.is_none() || shared.as_ref().unwrap().reference_count == 0);
 
 	// Explicitly drop database before temp_dir goes out of scope to avoid file lock issues
@@ -190,14 +170,8 @@ async fn test_shared_node_management() {
 		config_hash: 222,
 		permissions: None,
 	};
-	multi_watch
-		.register_watch(&watch1)
-		.await
-		.expect("register_watch1");
-	multi_watch
-		.register_watch(&watch2)
-		.await
-		.expect("register_watch2");
+	multi_watch.register_watch(&watch1).await.expect("register_watch1");
+	multi_watch.register_watch(&watch2).await.expect("register_watch2");
 
 	// Add a shared node referencing both watches
 	let shared_info = SharedNodeInfo {
@@ -235,35 +209,20 @@ async fn test_shared_node_management() {
 		reference_count: 2,
 		last_shared_update: Utc::now(),
 	};
-	multi_watch
-		.store_shared_node(&shared_info)
-		.await
-		.expect("store_shared_node");
+	multi_watch.store_shared_node(&shared_info).await.expect("store_shared_node");
 
 	// Remove one watch
-	multi_watch
-		.remove_watch(&watch1.watch_id)
-		.await
-		.expect("remove_watch1");
+	multi_watch.remove_watch(&watch1.watch_id).await.expect("remove_watch1");
 	let path_hash = rust_watcher::database::types::calculate_path_hash(&shared_info.node.path);
-	let shared = multi_watch
-		.get_shared_node(path_hash)
-		.await
-		.expect("get_shared_node");
+	let shared = multi_watch.get_shared_node(path_hash).await.expect("get_shared_node");
 	assert!(shared.is_some());
 	let shared = shared.unwrap();
 	assert_eq!(shared.reference_count, 1);
 	assert_eq!(shared.watching_scopes, vec![watch2.watch_id]);
 
 	// Remove the second watch
-	multi_watch
-		.remove_watch(&watch2.watch_id)
-		.await
-		.expect("remove_watch2");
-	let shared = multi_watch
-		.get_shared_node(path_hash)
-		.await
-		.expect("get_shared_node");
+	multi_watch.remove_watch(&watch2.watch_id).await.expect("remove_watch2");
+	let shared = multi_watch.get_shared_node(path_hash).await.expect("get_shared_node");
 	assert!(shared.is_none() || shared.as_ref().unwrap().reference_count == 0);
 
 	// Explicitly drop database before temp_dir goes out of scope to avoid file lock issues

@@ -101,8 +101,7 @@ impl MaintenanceStorage for MaintenanceImpl {
 
 /// Clean up expired events using the provided database
 pub async fn cleanup_expired_events(
-	_database: &Arc<Database>,
-	_before: std::time::SystemTime,
+	_database: &Arc<Database>, _before: std::time::SystemTime,
 ) -> DatabaseResult<usize> {
 	// TODO: Implement cleanup
 	// For now, return 0 - this would be implemented properly in Phase 1.2

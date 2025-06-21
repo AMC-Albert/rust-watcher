@@ -50,17 +50,11 @@ async fn test_detect_overlap_cases() {
 	// Ancestor/descendant
 	assert_eq!(
 		multi_watch.detect_overlap(&w1, &w3).await,
-		WatchOverlap::Ancestor {
-			ancestor: w3.watch_id,
-			descendant: w1.watch_id
-		}
+		WatchOverlap::Ancestor { ancestor: w3.watch_id, descendant: w1.watch_id }
 	);
 	assert_eq!(
 		multi_watch.detect_overlap(&w4, &w1).await,
-		WatchOverlap::Ancestor {
-			ancestor: w1.watch_id,
-			descendant: w4.watch_id
-		}
+		WatchOverlap::Ancestor { ancestor: w1.watch_id, descendant: w4.watch_id }
 	);
 	// No overlap
 	assert_eq!(
@@ -100,10 +94,6 @@ async fn test_compute_overlap_statistics() {
 		.await
 		.expect("compute_overlap_statistics");
 	// There should be at least one ancestor/descendant and one partial overlap
-	assert!(overlaps
-		.iter()
-		.any(|o| matches!(o, WatchOverlap::Ancestor { .. })));
-	assert!(overlaps
-		.iter()
-		.any(|o| matches!(o, WatchOverlap::Partial { .. })));
+	assert!(overlaps.iter().any(|o| matches!(o, WatchOverlap::Ancestor { .. })));
+	assert!(overlaps.iter().any(|o| matches!(o, WatchOverlap::Partial { .. })));
 }

@@ -42,8 +42,7 @@ impl Default for EventRetentionConfig {
 
 /// Performs cleanup of old events according to the provided retention config.
 pub async fn cleanup_old_events<S: DatabaseStorage>(
-	storage: &mut S,
-	config: &EventRetentionConfig,
+	storage: &mut S, config: &EventRetentionConfig,
 ) -> crate::database::error::DatabaseResult<usize> {
 	// Remove events older than max_event_age.
 	let cutoff = SystemTime::now()

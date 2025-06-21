@@ -53,10 +53,7 @@ impl RedbFilesystemCache {
 
 	/// Create a scoped key for a watch-specific node
 	fn create_scoped_key(watch_id: &Uuid, path_hash: u64) -> WatchScopedKey {
-		WatchScopedKey {
-			watch_id: *watch_id,
-			path_hash,
-		}
+		WatchScopedKey { watch_id: *watch_id, path_hash }
 	}
 
 	#[allow(dead_code)]
@@ -67,9 +64,7 @@ impl RedbFilesystemCache {
 
 	/// Helper: insert all path prefixes for a node into PATH_PREFIX_TABLE
 	fn index_path_prefixes(
-		write_txn: &redb::WriteTransaction,
-		node: &FilesystemNode,
-		watch_id: &Uuid,
+		write_txn: &redb::WriteTransaction, node: &FilesystemNode, watch_id: &Uuid,
 	) -> DatabaseResult<()> {
 		let mut prefix_table = write_txn.open_multimap_table(PATH_PREFIX_TABLE)?;
 		let path = &node.path;
@@ -90,9 +85,7 @@ impl RedbFilesystemCache {
 #[async_trait::async_trait]
 impl FilesystemCacheStorage for RedbFilesystemCache {
 	async fn store_filesystem_node(
-		&mut self,
-		watch_id: &Uuid,
-		node: &FilesystemNode,
+		&mut self, watch_id: &Uuid, node: &FilesystemNode,
 	) -> DatabaseResult<()> {
 		let path_hash = calculate_path_hash(&node.path);
 		let scoped_key = Self::create_scoped_key(watch_id, path_hash);
@@ -138,9 +131,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	}
 
 	async fn get_filesystem_node(
-		&mut self,
-		watch_id: &Uuid,
-		path: &Path,
+		&mut self, watch_id: &Uuid, path: &Path,
 	) -> DatabaseResult<Option<FilesystemNode>> {
 		let read_txn = self.database.begin_read()?;
 		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
@@ -155,9 +146,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	}
 
 	async fn list_directory_for_watch(
-		&mut self,
-		watch_id: &Uuid,
-		parent_path: &Path,
+		&mut self, watch_id: &Uuid, parent_path: &Path,
 	) -> DatabaseResult<Vec<FilesystemNode>> {
 		let parent_hash = calculate_path_hash(parent_path);
 		let parent_key = Self::create_scoped_key(watch_id, parent_hash);
@@ -194,8 +183,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	}
 
 	async fn get_watch_metadata(
-		&mut self,
-		watch_id: &Uuid,
+		&mut self, watch_id: &Uuid,
 	) -> DatabaseResult<Option<WatchMetadata>> {
 		let read_txn = self.database.begin_read()?;
 		let watch_registry = read_txn.open_table(WATCH_REGISTRY)?;
@@ -241,9 +229,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	}
 
 	async fn batch_store_filesystem_nodes(
-		&mut self,
-		watch_id: &Uuid,
-		nodes: &[FilesystemNode],
+		&mut self, watch_id: &Uuid, nodes: &[FilesystemNode],
 	) -> DatabaseResult<()> {
 		let write_txn = self.database.begin_write()?;
 		{
@@ -261,9 +247,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	}
 
 	async fn find_nodes_by_prefix(
-		&mut self,
-		_watch_id: &Uuid,
-		prefix: &Path,
+		&mut self, _watch_id: &Uuid, prefix: &Path,
 	) -> DatabaseResult<Vec<FilesystemNode>> {
 		let read_txn = self.database.begin_read()?;
 		let path_prefix_table = read_txn.open_multimap_table(PATH_PREFIX_TABLE)?;
@@ -312,9 +296,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	}
 
 	async fn cleanup_stale_cache(
-		&mut self,
-		_watch_id: &Uuid,
-		max_age_seconds: u64,
+		&mut self, _watch_id: &Uuid, max_age_seconds: u64,
 	) -> DatabaseResult<usize> {
 		let write_txn = self.database.begin_write()?;
 		let mut deleted_count = 0;
@@ -342,8 +324,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	}
 
 	async fn list_directory_unified(
-		&mut self,
-		parent_path: &Path,
+		&mut self, parent_path: &Path,
 	) -> DatabaseResult<Vec<FilesystemNode>> {
 		// Aggregate all direct children of parent_path across all watches and shared nodes
 		let read_txn = self.database.begin_read()?;

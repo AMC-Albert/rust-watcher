@@ -61,8 +61,7 @@ pub async fn store_event(database: &Arc<Database>, record: &EventRecord) -> Data
 
 /// Retrieve events by storage key using the provided database
 pub async fn get_events(
-	database: &Arc<Database>,
-	key: &StorageKey,
+	database: &Arc<Database>, key: &StorageKey,
 ) -> DatabaseResult<Vec<EventRecord>> {
 	let read_txn = database.begin_read()?;
 	let events_log = read_txn.open_multimap_table(super::tables::EVENTS_LOG_TABLE)?;

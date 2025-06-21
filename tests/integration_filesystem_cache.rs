@@ -14,16 +14,9 @@ use uuid::Uuid;
 #[tokio::test]
 async fn test_filesystem_node_insert_and_retrieve() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir
-		.path()
-		.join(format!("fs_cache_test-{}.db", uuid::Uuid::new_v4()));
-	let config = DatabaseConfig {
-		database_path: db_path,
-		..Default::default()
-	};
-	let mut storage = RedbStorage::new(config)
-		.await
-		.expect("Failed to create storage");
+	let db_path = temp_dir.path().join(format!("fs_cache_test-{}.db", uuid::Uuid::new_v4()));
+	let config = DatabaseConfig { database_path: db_path, ..Default::default() };
+	let mut storage = RedbStorage::new(config).await.expect("Failed to create storage");
 	let watch_id = Uuid::new_v4();
 
 	// Create a test node
@@ -33,14 +26,8 @@ async fn test_filesystem_node_insert_and_retrieve() {
 	let node = FilesystemNode::new(node_path.clone(), &metadata);
 
 	// Store and retrieve
-	storage
-		.store_filesystem_node(&watch_id, &node)
-		.await
-		.expect("store");
-	let retrieved = storage
-		.get_filesystem_node(&watch_id, &node_path)
-		.await
-		.expect("get");
+	storage.store_filesystem_node(&watch_id, &node).await.expect("store");
+	let retrieved = storage.get_filesystem_node(&watch_id, &node_path).await.expect("get");
 	assert!(retrieved.is_some());
 	let retrieved = retrieved.unwrap();
 	assert_eq!(retrieved.path, node.path);
@@ -50,16 +37,9 @@ async fn test_filesystem_node_insert_and_retrieve() {
 #[tokio::test]
 async fn test_filesystem_hierarchy_and_list_directory() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir
-		.path()
-		.join(format!("fs_cache_hierarchy-{}.db", uuid::Uuid::new_v4()));
-	let config = DatabaseConfig {
-		database_path: db_path,
-		..Default::default()
-	};
-	let mut storage = RedbStorage::new(config)
-		.await
-		.expect("Failed to create storage");
+	let db_path = temp_dir.path().join(format!("fs_cache_hierarchy-{}.db", uuid::Uuid::new_v4()));
+	let config = DatabaseConfig { database_path: db_path, ..Default::default() };
+	let mut storage = RedbStorage::new(config).await.expect("Failed to create storage");
 	let watch_id = Uuid::new_v4();
 
 	// Create parent and child nodes
@@ -83,10 +63,7 @@ async fn test_filesystem_hierarchy_and_list_directory() {
 		.expect("store child");
 
 	// List directory
-	let children = storage
-		.list_directory_for_watch(&watch_id, &parent_path)
-		.await
-		.expect("list");
+	let children = storage.list_directory_for_watch(&watch_id, &parent_path).await.expect("list");
 	assert_eq!(children.len(), 1);
 	assert_eq!(children[0].path, child_path);
 }

@@ -15,16 +15,10 @@ pub fn detect_overlap(watch_a: &WatchMetadata, watch_b: &WatchMetadata) -> Watch
 		return WatchOverlap::Identical(watch_a.watch_id);
 	}
 	if a.starts_with(&b) {
-		return WatchOverlap::Ancestor {
-			ancestor: watch_b.watch_id,
-			descendant: watch_a.watch_id,
-		};
+		return WatchOverlap::Ancestor { ancestor: watch_b.watch_id, descendant: watch_a.watch_id };
 	}
 	if b.starts_with(&a) {
-		return WatchOverlap::Ancestor {
-			ancestor: watch_a.watch_id,
-			descendant: watch_b.watch_id,
-		};
+		return WatchOverlap::Ancestor { ancestor: watch_a.watch_id, descendant: watch_b.watch_id };
 	}
 	let min_len = a.len().min(b.len());
 	let mut common = Vec::new();
@@ -83,37 +77,27 @@ impl MultiWatchDatabase {
 		};
 		for overlap in overlaps {
 			match overlap {
-				WatchOverlap::Partial {
-					watch_a,
-					watch_b,
-					ref common_prefix,
-				} => {
-					if let Err(e) = self
-						.merge_nodes_to_shared(common_prefix, &[watch_a, watch_b])
-						.await
+				WatchOverlap::Partial { watch_a, watch_b, ref common_prefix } => {
+					if let Err(e) =
+						self.merge_nodes_to_shared(common_prefix, &[watch_a, watch_b]).await
 					{
 						eprintln!(
-							"[MultiWatchDatabase] Failed to merge nodes at {:?}: {e}",
-							common_prefix
+							"[MultiWatchDatabase] Failed to merge nodes at {common_prefix:?}: {e}"
 						);
 					} else {
-						println!("[MultiWatchDatabase] Merged nodes at {:?} into shared node for watches {:?}", common_prefix, [watch_a, watch_b]);
+						println!("[MultiWatchDatabase] Merged nodes at {common_prefix:?} into shared node for watches {watch_a:?}, {watch_b:?}");
 					}
 				}
-				WatchOverlap::Ancestor {
-					ancestor: watch_a,
-					descendant: watch_b,
-				} => {
+				WatchOverlap::Ancestor { ancestor: watch_a, descendant: watch_b } => {
 					if let Ok(Some(watch)) = self.get_watch_metadata(&watch_b).await {
 						let path = &watch.root_path;
 						if let Err(e) = self.merge_nodes_to_shared(path, &[watch_a, watch_b]).await
 						{
 							eprintln!(
-								"[MultiWatchDatabase] Failed to merge nodes at {:?}: {e}",
-								path
+								"[MultiWatchDatabase] Failed to merge nodes at {path:?}: {e}"
 							);
 						} else {
-							println!("[MultiWatchDatabase] Merged nodes at {:?} into shared node for watches {:?}", path, [watch_a, watch_b]);
+							println!("[MultiWatchDatabase] Merged nodes at {path:?} into shared node for watches {watch_a:?}, {watch_b:?}");
 						}
 					}
 				}
@@ -170,9 +154,7 @@ impl MultiWatchDatabase {
 							if let Ok(UnifiedNode::Shared { shared_info }) =
 								bincode::deserialize::<UnifiedNode>(shared_value.value())
 							{
-								if shared_info
-									.watching_scopes
-									.contains(&watch_scoped_key.watch_id)
+								if shared_info.watching_scopes.contains(&watch_scoped_key.watch_id)
 								{
 									fs_cache_keys_to_remove.push(key.value().to_vec());
 								}
@@ -224,9 +206,7 @@ impl MultiWatchDatabase {
 				.open_table(crate::database::storage::tables::SHARED_NODES)
 				.map_err(|e| e.to_string())?;
 			for key in &shared_nodes_keys_to_remove {
-				shared_nodes
-					.remove(key.as_slice())
-					.map_err(|e| e.to_string())?;
+				shared_nodes.remove(key.as_slice()).map_err(|e| e.to_string())?;
 			}
 		}
 		db.commit().map_err(|e| e.to_string())?;

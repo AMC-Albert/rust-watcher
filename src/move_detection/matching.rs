@@ -12,9 +12,7 @@ pub struct MoveMatching;
 impl MoveMatching {
 	/// Find a matching create event for a given remove event
 	pub async fn find_matching_create(
-		remove_event: &PendingEvent,
-		storage: &PendingEventsStorage,
-		config: &MoveDetectorConfig,
+		remove_event: &PendingEvent, storage: &PendingEventsStorage, config: &MoveDetectorConfig,
 	) -> Option<PendingEvent> {
 		// Quick inode-based matching for Unix systems
 		#[cfg(unix)]
@@ -75,9 +73,7 @@ impl MoveMatching {
 
 	/// Find a matching remove event for a given create event
 	pub async fn find_matching_remove(
-		create_event: &PendingEvent,
-		storage: &PendingEventsStorage,
-		config: &MoveDetectorConfig,
+		create_event: &PendingEvent, storage: &PendingEventsStorage, config: &MoveDetectorConfig,
 	) -> Option<PendingEvent> {
 		// Quick inode-based matching for Unix systems
 		#[cfg(unix)]
@@ -139,9 +135,7 @@ impl MoveMatching {
 
 	/// Calculate confidence score for a potential move match
 	pub fn calculate_confidence(
-		remove_event: &PendingEvent,
-		create_event: &PendingEvent,
-		config: &MoveDetectorConfig,
+		remove_event: &PendingEvent, create_event: &PendingEvent, config: &MoveDetectorConfig,
 	) -> f32 {
 		let mut confidence = 0.0;
 		// Size matching
@@ -156,13 +150,9 @@ impl MoveMatching {
 
 		// Time factor (closer in time = higher confidence)
 		let time_diff = if create_event.timestamp > remove_event.timestamp {
-			create_event
-				.timestamp
-				.duration_since(remove_event.timestamp)
+			create_event.timestamp.duration_since(remove_event.timestamp)
 		} else {
-			remove_event
-				.timestamp
-				.duration_since(create_event.timestamp)
+			remove_event.timestamp.duration_since(create_event.timestamp)
 		};
 
 		let time_factor = if time_diff <= config.timeout {
@@ -210,8 +200,7 @@ impl MoveMatching {
 
 	/// Determine the detection method used for the match
 	pub fn determine_detection_method(
-		remove_event: &PendingEvent,
-		create_event: &PendingEvent,
+		remove_event: &PendingEvent, create_event: &PendingEvent,
 	) -> MoveDetectionMethod {
 		// Check inode first (most reliable)
 		#[cfg(unix)]
@@ -242,9 +231,7 @@ impl MoveMatching {
 	}
 	/// Find the best match among candidates
 	fn find_best_match_in_candidates(
-		remove_event: &PendingEvent,
-		candidates: &[PendingEvent],
-		config: &MoveDetectorConfig,
+		remove_event: &PendingEvent, candidates: &[PendingEvent], config: &MoveDetectorConfig,
 	) -> Option<PendingEvent> {
 		candidates
 			.iter()
@@ -264,9 +251,7 @@ impl MoveMatching {
 	}
 	/// Find the best match among candidates for create events
 	fn find_best_match_in_candidates_for_create(
-		create_event: &PendingEvent,
-		candidates: &[PendingEvent],
-		config: &MoveDetectorConfig,
+		create_event: &PendingEvent, candidates: &[PendingEvent], config: &MoveDetectorConfig,
 	) -> Option<PendingEvent> {
 		candidates
 			.iter()
@@ -312,12 +297,9 @@ impl MetadataExtractor {
 		{
 			if let Ok(metadata) = std::fs::metadata(path) {
 				// Use creation time (nanoseconds) combined with size for uniqueness
-				let creation_time = metadata
-					.created()
-					.ok()?
-					.duration_since(std::time::UNIX_EPOCH)
-					.ok()?
-					.as_nanos() as u64;
+				let creation_time =
+					metadata.created().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos()
+						as u64;
 				let size = metadata.len();
 				Some((creation_time << 32) | (size & 0xFFFFFFFF))
 			} else {

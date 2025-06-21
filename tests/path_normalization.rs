@@ -144,7 +144,7 @@ mod path_normalization {
 
 		// Add many nested directories
 		for i in 0..50 {
-			long_path = long_path.join(format!("very_long_directory_name_{:03}", i));
+			long_path = long_path.join(format!("very_long_directory_name_{i:03}"));
 		}
 
 		// Try to create as much as the filesystem allows
@@ -157,7 +157,7 @@ mod path_normalization {
 				// If we hit filesystem limits, create a shorter version
 				let mut shorter_path = temp_dir.path().to_path_buf();
 				for i in 0..20 {
-					shorter_path = shorter_path.join(format!("dir_{}", i));
+					shorter_path = shorter_path.join(format!("dir_{i}"));
 				}
 				fs::create_dir_all(&shorter_path).unwrap();
 				fs::write(shorter_path.join("file.txt"), "content").unwrap();
@@ -169,9 +169,7 @@ mod path_normalization {
 		let nodes = scan_directory_tree(temp_dir.path()).expect("Failed to scan long paths");
 
 		// Should find the file we created
-		let file_found = nodes
-			.iter()
-			.any(|n| !n.is_directory && n.path.starts_with(&created_path));
+		let file_found = nodes.iter().any(|n| !n.is_directory && n.path.starts_with(&created_path));
 		assert!(file_found, "Long path file not found in scan");
 	}
 
@@ -255,12 +253,11 @@ mod path_normalization {
 			let path = temp_dir.path().join(name);
 			let result = std::fs::File::create(&path);
 			if result.is_ok() {
-				eprintln!("Warning: Reserved name {} was created successfully. This may be an environment quirk.", name);
+				eprintln!("Warning: Reserved name {name} was created successfully. This may be an environment quirk.");
 			} else {
 				assert!(
 					result.is_err(),
-					"Should not be able to create reserved name: {}",
-					name
+					"Should not be able to create reserved name: {name}"
 				);
 			}
 		}
@@ -408,9 +405,7 @@ mod cross_platform {
 			assert_eq!(
 				path.is_absolute(),
 				should_be_absolute,
-				"Windows path: {} expected absolute: {}",
-				path_str,
-				should_be_absolute
+				"Windows path: {path_str} expected absolute: {should_be_absolute}"
 			);
 		}
 	}

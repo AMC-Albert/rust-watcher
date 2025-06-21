@@ -31,7 +31,7 @@ async fn test_performance_small_dataset() {
 		result.query_time
 	);
 
-	println!("Small dataset performance: {}", result);
+	println!("Small dataset performance: {result}");
 }
 
 /// Test database performance with medium dataset (5K events)
@@ -51,7 +51,7 @@ async fn test_performance_medium_dataset() {
 		result.query_time
 	);
 
-	println!("Medium dataset performance: {}", result);
+	println!("Medium dataset performance: {result}");
 }
 
 /// Test database performance with large dataset (10K events)
@@ -73,7 +73,7 @@ async fn test_performance_large_dataset() {
 		result.query_time
 	);
 
-	println!("Large dataset performance: {}", result);
+	println!("Large dataset performance: {result}");
 }
 
 /// Test multimap table scalability with deep directory hierarchies
@@ -86,9 +86,7 @@ async fn test_multimap_scalability() {
 		..Default::default()
 	};
 
-	let adapter = DatabaseAdapter::new(config)
-		.await
-		.expect("Failed to create adapter");
+	let adapter = DatabaseAdapter::new(config).await.expect("Failed to create adapter");
 
 	let start = Instant::now();
 
@@ -99,18 +97,15 @@ async fn test_multimap_scalability() {
 
 			// Build deep path
 			for level in 0..depth {
-				path_components.push(format!("level_{}", level));
+				path_components.push(format!("level_{level}"));
 			}
-			path_components.push(format!("file_{}_{}.txt", depth, breadth));
+			path_components.push(format!("file_{depth}_{breadth}.txt"));
 
 			let path = PathBuf::from("/root").join(path_components.join("/"));
 
 			let event = FileSystemEvent::new(EventType::Create, path, false, Some(1024));
 
-			adapter
-				.store_event(&event)
-				.await
-				.expect("Failed to store event");
+			adapter.store_event(&event).await.expect("Failed to store event");
 		}
 	}
 
@@ -123,8 +118,8 @@ async fn test_multimap_scalability() {
 
 	println!("Multimap scalability test:");
 	println!("  Events stored: {}", stats.total_events);
-	println!("  Storage time: {:?}", storage_time);
-	println!("  Query time: {:?}", query_time);
+	println!("  Storage time: {storage_time:?}");
+	println!("  Query time: {query_time:?}");
 
 	// Should handle 2000 events (20 levels * 100 files) efficiently
 	assert_eq!(stats.total_events, 2000);
@@ -145,9 +140,7 @@ async fn test_memory_usage_patterns() {
 		..Default::default()
 	};
 
-	let adapter = DatabaseAdapter::new(config)
-		.await
-		.expect("Failed to create adapter");
+	let adapter = DatabaseAdapter::new(config).await.expect("Failed to create adapter");
 	// Simulate a large directory tree with varied file sizes
 	let mut total_size = 0u64;
 
@@ -171,10 +164,7 @@ async fn test_memory_usage_patterns() {
 
 		let event = FileSystemEvent::new(EventType::Create, path, false, Some(file_size));
 
-		adapter
-			.store_event(&event)
-			.await
-			.expect("Failed to store event");
+		adapter.store_event(&event).await.expect("Failed to store event");
 		// Periodically check that we can still query efficiently
 		if i % 2_500 == 0 && i > 0 {
 			// Check every 2.5K instead of 10K
@@ -182,23 +172,16 @@ async fn test_memory_usage_patterns() {
 			let stats = adapter.get_stats().await.expect("Failed to get stats");
 			let query_time = query_start.elapsed();
 
-			println!("Memory check at {} events: query time {:?}", i, query_time);
-			assert!(
-				query_time.as_millis() < 200,
-				"Query degraded at {} events",
-				i
-			);
+			println!("Memory check at {i} events: query time {query_time:?}");
+			assert!(query_time.as_millis() < 200, "Query degraded at {i} events");
 			assert_eq!(stats.total_events as usize, i + 1);
 		}
 	}
 
-	let final_stats = adapter
-		.get_stats()
-		.await
-		.expect("Failed to get final stats");
+	let final_stats = adapter.get_stats().await.expect("Failed to get final stats");
 	println!("Final memory test stats:");
 	println!("  Total events: {}", final_stats.total_events);
-	println!("  Expected total size: {} bytes", total_size);
+	println!("  Expected total size: {total_size} bytes");
 
 	assert_eq!(final_stats.total_events, 10_000);
 }
@@ -207,20 +190,18 @@ async fn test_memory_usage_patterns() {
 async fn test_dataset_performance(name: &str, size: usize) -> PerformanceResult {
 	let temp_dir = TempDir::new().expect("Failed to create temp dir");
 	let config = DatabaseConfig {
-		database_path: temp_dir.path().join(format!("{}_dataset.db", name)),
+		database_path: temp_dir.path().join(format!("{name}_dataset.db")),
 		event_retention: Duration::from_secs(3600),
 		..Default::default()
 	};
 
-	let adapter = DatabaseAdapter::new(config)
-		.await
-		.expect("Failed to create adapter");
+	let adapter = DatabaseAdapter::new(config).await.expect("Failed to create adapter");
 
 	// Measure storage performance
 	let storage_start = Instant::now();
 
 	for i in 0..size {
-		let path = PathBuf::from(format!("/test/dataset/{}/file_{}.txt", name, i));
+		let path = PathBuf::from(format!("/test/dataset/{name}/file_{i}.txt"));
 		let event = FileSystemEvent::new(
 			EventType::Create,
 			path,
@@ -228,10 +209,7 @@ async fn test_dataset_performance(name: &str, size: usize) -> PerformanceResult 
 			Some(1024 + (i as u64 * 100)), // Varied file sizes
 		);
 
-		adapter
-			.store_event(&event)
-			.await
-			.expect("Failed to store event");
+		adapter.store_event(&event).await.expect("Failed to store event");
 		// Add some variety with different event types
 		if i % 3 == 0 {
 			let path = PathBuf::from(format!(
@@ -240,10 +218,7 @@ async fn test_dataset_performance(name: &str, size: usize) -> PerformanceResult 
 				i / 3
 			));
 			let modify_event = FileSystemEvent::new(EventType::Write, path, false, Some(2048));
-			adapter
-				.store_event(&modify_event)
-				.await
-				.expect("Failed to store modify event");
+			adapter.store_event(&modify_event).await.expect("Failed to store modify event");
 		}
 	}
 
@@ -256,10 +231,7 @@ async fn test_dataset_performance(name: &str, size: usize) -> PerformanceResult 
 
 	// Cleanup performance test
 	let cleanup_start = Instant::now();
-	let cleaned = adapter
-		.cleanup_old_events()
-		.await
-		.expect("Failed to cleanup");
+	let cleaned = adapter.cleanup_old_events().await.expect("Failed to cleanup");
 	let cleanup_time = cleanup_start.elapsed();
 
 	PerformanceResult {

@@ -23,7 +23,7 @@ async fn test_watcher_invalid_path() {
 		WatcherError::InvalidPath { path } => {
 			assert!(path.contains("nonexistent"));
 		}
-		other => panic!("Expected InvalidPath error, got: {:?}", other),
+		other => panic!("Expected InvalidPath error, got: {other:?}"),
 	}
 }
 
@@ -58,14 +58,13 @@ async fn test_watcher_multiple_start_stop() {
 		};
 
 		let (handle, _receiver) = start(config)
-			.unwrap_or_else(|e| panic!("Failed to start watcher on iteration {}: {:?}", i, e));
+			.unwrap_or_else(|e| panic!("Failed to start watcher on iteration {i}: {e:?}"));
 
 		common::wait_for_events().await;
 		let stop_result = handle.stop().await;
 		assert!(
 			stop_result.is_ok(),
-			"Watcher should stop cleanly on iteration {}",
-			i
+			"Watcher should stop cleanly on iteration {i}"
 		);
 	}
 }
@@ -74,11 +73,8 @@ async fn test_watcher_multiple_start_stop() {
 #[tokio::test]
 async fn test_watcher_permission_denied() {
 	// On Unix systems, try to watch /root (usually requires root)
-	let config = WatcherConfig {
-		path: PathBuf::from("/root"),
-		recursive: true,
-		move_detector_config: None,
-	};
+	let config =
+		WatcherConfig { path: PathBuf::from("/root"), recursive: true, move_detector_config: None };
 	let result = start(config);
 
 	// Should either succeed (if running as root) or fail with permission error

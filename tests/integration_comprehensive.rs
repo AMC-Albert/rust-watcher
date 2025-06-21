@@ -51,7 +51,7 @@ async fn test_basic_file_creation_detection() {
 
 	// Note: File creation events can be flaky on some systems,
 	// so we mainly test that the watcher doesn't crash
-	println!("Received event: {}", received_event);
+	println!("Received event: {received_event}");
 }
 
 #[tokio::test]
@@ -103,7 +103,7 @@ async fn test_file_move_detection_with_config() {
 	// Clean shutdown
 	handle.stop().await.unwrap();
 
-	println!("Total events received: {}", events_received);
+	println!("Total events received: {events_received}");
 	// We mainly test that the watcher with move detection doesn't crash
 }
 
@@ -155,10 +155,7 @@ async fn test_recursive_directory_watching() {
 	// Clean shutdown
 	handle.stop().await.unwrap();
 
-	println!(
-		"Events received for recursive watching: {}",
-		events_received
-	);
+	println!("Events received for recursive watching: {events_received}");
 	// Main goal is ensuring no crashes with recursive watching
 }
 

@@ -16,9 +16,7 @@ use std::{sync::Arc, time::SystemTime};
 pub trait IndexingStorage: Send + Sync {
 	/// Find events by time range
 	async fn find_events_by_time_range(
-		&mut self,
-		_start: DateTime<Utc>,
-		_end: DateTime<Utc>,
+		&mut self, _start: DateTime<Utc>, _end: DateTime<Utc>,
 	) -> DatabaseResult<Vec<EventRecord>>;
 
 	/// Clean up expired events
@@ -53,9 +51,7 @@ impl IndexingImpl {
 #[async_trait::async_trait]
 impl IndexingStorage for IndexingImpl {
 	async fn find_events_by_time_range(
-		&mut self,
-		_start: DateTime<Utc>,
-		_end: DateTime<Utc>,
+		&mut self, _start: DateTime<Utc>, _end: DateTime<Utc>,
 	) -> DatabaseResult<Vec<EventRecord>> {
 		// TODO: Implement time-based event queries using indexes
 		// This is a placeholder for Phase 2 implementation
@@ -75,9 +71,7 @@ impl IndexingStorage for IndexingImpl {
 
 /// Find events by time range using the provided database
 pub async fn find_events_by_time_range(
-	database: &Arc<Database>,
-	start: DateTime<Utc>,
-	end: DateTime<Utc>,
+	database: &Arc<Database>, start: DateTime<Utc>, end: DateTime<Utc>,
 ) -> DatabaseResult<Vec<EventRecord>> {
 	use crate::database::storage::tables::EVENTS_LOG_TABLE;
 	use crate::database::types::EventRecord;

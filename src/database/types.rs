@@ -52,11 +52,8 @@ pub struct EventRecord {
 impl EventRecord {
 	/// Create a new event record with automatic expiration
 	pub fn new(
-		event_type: String,
-		path: PathBuf,
-		is_directory: bool,
-		retention_duration: chrono::Duration,
-		sequence_number: u64,
+		event_type: String, path: PathBuf, is_directory: bool,
+		retention_duration: chrono::Duration, sequence_number: u64,
 	) -> Self {
 		let now = Utc::now();
 		Self {
@@ -472,11 +469,7 @@ impl FilesystemNode {
 				depth_from_root: path.components().count() as u16,
 				path_hash,
 				parent_hash,
-				canonical_name: path
-					.file_name()
-					.unwrap_or_default()
-					.to_string_lossy()
-					.to_string(),
+				canonical_name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
 			},
 		}
 	}
@@ -561,11 +554,8 @@ mod tests {
 
 	#[test]
 	fn test_database_stats() {
-		let stats = DatabaseStats {
-			cache_hit_rate: 0.8,
-			avg_query_time_ms: 50.0,
-			..Default::default()
-		};
+		let stats =
+			DatabaseStats { cache_hit_rate: 0.8, avg_query_time_ms: 50.0, ..Default::default() };
 
 		let efficiency = stats.efficiency_score();
 		assert!(efficiency > 0.0 && efficiency <= 1.0);

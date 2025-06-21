@@ -9,23 +9,17 @@ use uuid::Uuid;
 pub trait FilesystemCacheStorage: Send + Sync {
 	/// Store a filesystem node for a specific watch
 	async fn store_filesystem_node(
-		&mut self,
-		watch_id: &Uuid,
-		node: &FilesystemNode,
+		&mut self, watch_id: &Uuid, node: &FilesystemNode,
 	) -> DatabaseResult<()>;
 
 	/// Retrieve a filesystem node for a specific watch
 	async fn get_filesystem_node(
-		&mut self,
-		watch_id: &Uuid,
-		path: &Path,
+		&mut self, watch_id: &Uuid, path: &Path,
 	) -> DatabaseResult<Option<FilesystemNode>>;
 
 	/// List all nodes in a directory for a specific watch
 	async fn list_directory_for_watch(
-		&mut self,
-		watch_id: &Uuid,
-		parent_path: &Path,
+		&mut self, watch_id: &Uuid, parent_path: &Path,
 	) -> DatabaseResult<Vec<FilesystemNode>>;
 
 	/// Store watch metadata
@@ -33,8 +27,7 @@ pub trait FilesystemCacheStorage: Send + Sync {
 
 	/// Retrieve watch metadata
 	async fn get_watch_metadata(
-		&mut self,
-		watch_id: &Uuid,
+		&mut self, watch_id: &Uuid,
 	) -> DatabaseResult<Option<WatchMetadata>>;
 
 	/// Remove all data for a watch
@@ -48,16 +41,12 @@ pub trait FilesystemCacheStorage: Send + Sync {
 
 	/// Batch store multiple filesystem nodes
 	async fn batch_store_filesystem_nodes(
-		&mut self,
-		watch_id: &Uuid,
-		nodes: &[FilesystemNode],
+		&mut self, watch_id: &Uuid, nodes: &[FilesystemNode],
 	) -> DatabaseResult<()>;
 
 	/// Find nodes by path prefix (for efficient subtree operations)
 	async fn find_nodes_by_prefix(
-		&mut self,
-		watch_id: &Uuid,
-		prefix: &Path,
+		&mut self, watch_id: &Uuid, prefix: &Path,
 	) -> DatabaseResult<Vec<FilesystemNode>>;
 
 	/// Get cache statistics for a watch
@@ -65,9 +54,7 @@ pub trait FilesystemCacheStorage: Send + Sync {
 
 	/// Clean up stale cache entries
 	async fn cleanup_stale_cache(
-		&mut self,
-		watch_id: &Uuid,
-		max_age_seconds: u64,
+		&mut self, watch_id: &Uuid, max_age_seconds: u64,
 	) -> DatabaseResult<usize>;
 
 	// === Phase 3: Unified and Hierarchical Queries ===
@@ -77,8 +64,7 @@ pub trait FilesystemCacheStorage: Send + Sync {
 	/// Returns all nodes that are direct children of the given path, regardless of watch.
 	/// TODO: Implement efficient cross-watch lookup and deduplication.
 	async fn list_directory_unified(
-		&mut self,
-		_parent_path: &std::path::Path,
+		&mut self, _parent_path: &std::path::Path,
 	) -> DatabaseResult<Vec<FilesystemNode>> {
 		// Not yet implemented. This will require cross-watch index scans and deduplication logic.
 		// Edge cases: overlapping watches, shared nodes, permission filtering.
@@ -90,8 +76,7 @@ pub trait FilesystemCacheStorage: Send + Sync {
 	/// Returns the most relevant node (shared or watch-specific) for the path.
 	/// TODO: Implement cross-watch node resolution and conflict handling.
 	async fn get_unified_node(
-		&mut self,
-		_path: &std::path::Path,
+		&mut self, _path: &std::path::Path,
 	) -> DatabaseResult<Option<FilesystemNode>> {
 		// Not yet implemented. This will require merging shared and watch-specific nodes.
 		// Edge cases: conflicting metadata, permissions, and node types.
@@ -103,8 +88,7 @@ pub trait FilesystemCacheStorage: Send + Sync {
 	/// Returns the chain of parent nodes, for hierarchical queries.
 	/// TODO: Implement efficient ancestor traversal using prefix or hierarchy tables.
 	async fn list_ancestors(
-		&mut self,
-		_path: &std::path::Path,
+		&mut self, _path: &std::path::Path,
 	) -> DatabaseResult<Vec<FilesystemNode>> {
 		// Not yet implemented. This will require walking up the hierarchy and resolving nodes.
 		// Edge cases: missing parents, cross-watch ancestry, symlink loops.
@@ -116,8 +100,7 @@ pub trait FilesystemCacheStorage: Send + Sync {
 	/// Returns all nodes under the given path, recursively.
 	/// TODO: Implement efficient subtree traversal using prefix or hierarchy tables.
 	async fn list_descendants(
-		&mut self,
-		_path: &std::path::Path,
+		&mut self, _path: &std::path::Path,
 	) -> DatabaseResult<Vec<FilesystemNode>> {
 		// Not yet implemented. This will require recursive or batched traversal.
 		// Edge cases: large subtrees, cycles, permission filtering.

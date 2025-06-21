@@ -23,8 +23,8 @@ pub fn create_test_file(path: &std::path::Path, content: &str) -> std::io::Resul
 pub fn create_test_files(dir: &std::path::Path, count: usize) -> std::io::Result<Vec<PathBuf>> {
 	let mut files = Vec::new();
 	for i in 0..count {
-		let file_path = dir.join(format!("test_file_{}.txt", i));
-		create_test_file(&file_path, &format!("Content for file {}", i))?;
+		let file_path = dir.join(format!("test_file_{i}.txt"));
+		create_test_file(&file_path, &format!("Content for file {i}"))?;
 		files.push(file_path);
 	}
 	Ok(files)
@@ -60,7 +60,7 @@ pub fn create_test_events(count: usize) -> Vec<rust_watcher::FileSystemEvent> {
 			} else {
 				rust_watcher::EventType::Remove
 			},
-			path: PathBuf::from(format!("/test/file_{}.txt", i)),
+			path: PathBuf::from(format!("/test/file_{i}.txt")),
 			is_directory: false,
 			size: Some((i % 100) as u64 * 1024),
 			timestamp: chrono::Utc::now(),
@@ -90,11 +90,7 @@ pub mod database {
 
 	/// Create a test event record with specified parameters
 	pub fn create_test_event(
-		event_type: &str,
-		path: PathBuf,
-		is_directory: bool,
-		size: Option<u64>,
-		inode: Option<u64>,
+		event_type: &str, path: PathBuf, is_directory: bool, size: Option<u64>, inode: Option<u64>,
 		windows_id: Option<u64>,
 	) -> EventRecord {
 		// Use sequence_number=0 for test events unless a specific value is required by the test logic.
@@ -113,10 +109,7 @@ pub mod database {
 
 	/// Create a test metadata record
 	pub fn create_test_metadata(
-		path: PathBuf,
-		is_directory: bool,
-		size: Option<u64>,
-		inode: Option<u64>,
+		path: PathBuf, is_directory: bool, size: Option<u64>, inode: Option<u64>,
 	) -> MetadataRecord {
 		let mut metadata = MetadataRecord::new(path, is_directory);
 		metadata.size = size;
@@ -130,7 +123,7 @@ pub mod database {
 			.map(|i| {
 				create_test_event(
 					"Create",
-					PathBuf::from(format!("{}/file_{}.txt", base_path, i)),
+					PathBuf::from(format!("{base_path}/file_{i}.txt")),
 					false,
 					Some((i as u64) * 1024), // Varying file sizes
 					Some(i as u64 + 10000),  // Sequential inodes
@@ -143,9 +136,7 @@ pub mod database {
 	pub async fn measure_database_operation<F, T>(
 		operation: F,
 	) -> Result<(T, std::time::Duration), Box<dyn std::error::Error>>
-	where
-		F: std::future::Future<Output = Result<T, Box<dyn std::error::Error>>>,
-	{
+	where F: std::future::Future<Output = Result<T, Box<dyn std::error::Error>>> {
 		let start = std::time::Instant::now();
 		let result = operation.await?;
 		let duration = start.elapsed();

@@ -23,11 +23,7 @@ async fn test_store_and_get_shared_node() {
 	let path_hash = rust_watcher::database::types::calculate_path_hash(&path);
 	let node = FilesystemNode {
 		path: path.clone(),
-		node_type: NodeType::File {
-			size: 42,
-			content_hash: None,
-			mime_type: None,
-		},
+		node_type: NodeType::File { size: 42, content_hash: None, mime_type: None },
 		metadata: NodeMetadata {
 			modified_time: SystemTime::now(),
 			created_time: None,
@@ -56,14 +52,8 @@ async fn test_store_and_get_shared_node() {
 		last_shared_update: Utc::now(),
 	};
 
-	multi_watch
-		.store_shared_node(&shared_info)
-		.await
-		.expect("store_shared_node");
-	let retrieved = multi_watch
-		.get_shared_node(path_hash)
-		.await
-		.expect("get_shared_node");
+	multi_watch.store_shared_node(&shared_info).await.expect("store_shared_node");
+	let retrieved = multi_watch.get_shared_node(path_hash).await.expect("get_shared_node");
 	assert!(retrieved.is_some());
 	let retrieved = retrieved.unwrap();
 	assert_eq!(retrieved.node.path, node.path);
@@ -83,11 +73,7 @@ async fn test_remove_watch_cleans_up_shared_node() {
 	let path_hash = rust_watcher::database::types::calculate_path_hash(&path);
 	let node = FilesystemNode {
 		path: path.clone(),
-		node_type: NodeType::File {
-			size: 42,
-			content_hash: None,
-			mime_type: None,
-		},
+		node_type: NodeType::File { size: 42, content_hash: None, mime_type: None },
 		metadata: NodeMetadata {
 			modified_time: SystemTime::now(),
 			created_time: None,
@@ -115,37 +101,19 @@ async fn test_remove_watch_cleans_up_shared_node() {
 		reference_count: 1,
 		last_shared_update: Utc::now(),
 	};
-	multi_watch
-		.store_shared_node(&shared_info)
-		.await
-		.expect("store_shared_node");
+	multi_watch.store_shared_node(&shared_info).await.expect("store_shared_node");
 	// Remove the only watch, should delete the shared node
-	multi_watch
-		.remove_watch(&watch_id)
-		.await
-		.expect("remove_watch");
-	let retrieved = multi_watch
-		.get_shared_node(path_hash)
-		.await
-		.expect("get_shared_node");
+	multi_watch.remove_watch(&watch_id).await.expect("remove_watch");
+	let retrieved = multi_watch.get_shared_node(path_hash).await.expect("get_shared_node");
 	assert!(retrieved.is_none());
 
 	// Now test with two watches, only one removed
 	let watch_id2 = Uuid::new_v4();
 	shared_info.watching_scopes = vec![watch_id, watch_id2];
 	shared_info.reference_count = 2;
-	multi_watch
-		.store_shared_node(&shared_info)
-		.await
-		.expect("store_shared_node");
-	multi_watch
-		.remove_watch(&watch_id)
-		.await
-		.expect("remove_watch");
-	let retrieved = multi_watch
-		.get_shared_node(path_hash)
-		.await
-		.expect("get_shared_node");
+	multi_watch.store_shared_node(&shared_info).await.expect("store_shared_node");
+	multi_watch.remove_watch(&watch_id).await.expect("remove_watch");
+	let retrieved = multi_watch.get_shared_node(path_hash).await.expect("get_shared_node");
 	assert!(retrieved.is_some());
 	let retrieved = retrieved.unwrap();
 	assert_eq!(retrieved.reference_count, 1);

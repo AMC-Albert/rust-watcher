@@ -13,18 +13,14 @@ pub struct TransactionUtils;
 impl TransactionUtils {
 	/// Execute a read operation with proper error handling
 	pub async fn with_read_txn<F, R>(database: &Arc<Database>, operation: F) -> DatabaseResult<R>
-	where
-		F: FnOnce(&ReadTransaction) -> DatabaseResult<R>,
-	{
+	where F: FnOnce(&ReadTransaction) -> DatabaseResult<R> {
 		let read_txn = database.begin_read()?;
 		operation(&read_txn)
 	}
 
 	/// Execute a write operation with proper error handling and commit
 	pub async fn with_write_txn<F, R>(database: &Arc<Database>, operation: F) -> DatabaseResult<R>
-	where
-		F: FnOnce(&WriteTransaction) -> DatabaseResult<R>,
-	{
+	where F: FnOnce(&WriteTransaction) -> DatabaseResult<R> {
 		let write_txn = database.begin_write()?;
 		let result = operation(&write_txn)?;
 		write_txn.commit()?;
@@ -33,17 +29,13 @@ impl TransactionUtils {
 
 	/// Serialize data with consistent error handling
 	pub fn serialize<T>(data: &T) -> DatabaseResult<Vec<u8>>
-	where
-		T: serde::Serialize,
-	{
+	where T: serde::Serialize {
 		bincode::serialize(data).map_err(|e| DatabaseError::Serialization(e.to_string()))
 	}
 
 	/// Deserialize data with consistent error handling
 	pub fn deserialize<T>(bytes: &[u8]) -> DatabaseResult<T>
-	where
-		T: serde::de::DeserializeOwned,
-	{
+	where T: serde::de::DeserializeOwned {
 		bincode::deserialize(bytes).map_err(|e| DatabaseError::Deserialization(e.to_string()))
 	}
 
@@ -65,8 +57,7 @@ impl TransactionUtils {
 
 	/// Create a time bucket key for indexing
 	pub fn time_bucket_key(
-		timestamp: chrono::DateTime<chrono::Utc>,
-		bucket_size_seconds: i64,
+		timestamp: chrono::DateTime<chrono::Utc>, bucket_size_seconds: i64,
 	) -> Vec<u8> {
 		let timestamp_seconds = timestamp.timestamp();
 		let bucket = (timestamp_seconds / bucket_size_seconds) * bucket_size_seconds;

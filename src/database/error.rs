@@ -144,7 +144,7 @@ mod tests {
 	#[test]
 	fn test_error_display() {
 		let error = DatabaseError::InitializationFailed("test failure".to_string());
-		let display = format!("{}", error);
+		let display = format!("{error}");
 		assert!(display.contains("Database initialization failed"));
 		assert!(display.contains("test failure"));
 	}

@@ -41,14 +41,8 @@ async fn test_cleanup_redundant_and_orphaned_nodes() {
 	// Register overlapping watches
 	let w1 = make_watch("/a/b");
 	let w2 = make_watch("/a/b/c");
-	multi_watch
-		.register_watch(&w1)
-		.await
-		.expect("register_watch w1");
-	multi_watch
-		.register_watch(&w2)
-		.await
-		.expect("register_watch w2");
+	multi_watch.register_watch(&w1).await.expect("register_watch w1");
+	multi_watch.register_watch(&w2).await.expect("register_watch w2");
 
 	// Insert a redundant watch-specific node (same path as overlap)
 	let node_path = PathBuf::from("/a/b");
@@ -59,8 +53,7 @@ async fn test_cleanup_redundant_and_orphaned_nodes() {
 	let hash_from_node = node.computed.path_hash;
 	let hash_from_util = rust_watcher::database::types::calculate_path_hash(&node_path);
 	println!(
-		"[TEST DEBUG] node.computed.path_hash = {:x}, calculate_path_hash = {:x}",
-		hash_from_node, hash_from_util
+		"[TEST DEBUG] node.computed.path_hash = {hash_from_node:x}, calculate_path_hash = {hash_from_util:x}"
 	);
 	let key = bincode::serialize(&node.computed.path_hash).unwrap();
 	let value = bincode::serialize(&node).unwrap();
@@ -94,9 +87,7 @@ async fn test_cleanup_redundant_and_orphaned_nodes() {
 			let mut table = write_txn
 				.open_table(rust_watcher::database::storage::tables::SHARED_NODES)
 				.unwrap();
-			table
-				.insert(orphan_key.as_slice(), orphan_value.as_slice())
-				.unwrap();
+			table.insert(orphan_key.as_slice(), orphan_value.as_slice()).unwrap();
 		}
 		write_txn.commit().unwrap();
 	}

@@ -44,14 +44,8 @@ async fn test_shared_cache_optimization_creates_shared_nodes() {
 	// Register overlapping watches
 	let w1 = make_watch("/a/b");
 	let w2 = make_watch("/a/b/c");
-	multi_watch
-		.register_watch(&w1)
-		.await
-		.expect("register_watch w1");
-	multi_watch
-		.register_watch(&w2)
-		.await
-		.expect("register_watch w2");
+	multi_watch.register_watch(&w1).await.expect("register_watch w1");
+	multi_watch.register_watch(&w2).await.expect("register_watch w2");
 
 	// Trigger optimization
 	multi_watch.optimize_shared_cache().await;
@@ -66,7 +60,6 @@ async fn test_shared_cache_optimization_creates_shared_nodes() {
 	};
 	assert!(
 		shared_nodes > 0,
-		"Expected at least one shared node to be created, found {}",
-		shared_nodes
+		"Expected at least one shared node to be created, found {shared_nodes}"
 	);
 }

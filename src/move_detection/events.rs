@@ -106,20 +106,12 @@ impl PendingEventsStorage {
 
 	/// Count total pending remove events
 	pub fn count_removes(&self) -> usize {
-		self.removes_by_size
-			.values()
-			.map(|v| v.len())
-			.sum::<usize>()
-			+ self.removes_no_size.len()
+		self.removes_by_size.values().map(|v| v.len()).sum::<usize>() + self.removes_no_size.len()
 	}
 
 	/// Count total pending create events
 	pub fn count_creates(&self) -> usize {
-		self.creates_by_size
-			.values()
-			.map(|v| v.len())
-			.sum::<usize>()
-			+ self.creates_no_size.len()
+		self.creates_by_size.values().map(|v| v.len()).sum::<usize>() + self.creates_no_size.len()
 	}
 	/// Remove a pending create event by its ID
 	pub fn remove_create_by_id(&mut self, event_id: uuid::Uuid) -> bool {
@@ -154,11 +146,7 @@ impl PendingEventsStorage {
 		}
 
 		// Check no-size storage
-		if let Some(pos) = self
-			.creates_no_size
-			.iter()
-			.position(|e| e.event.id == event_id)
-		{
+		if let Some(pos) = self.creates_no_size.iter().position(|e| e.event.id == event_id) {
 			self.creates_no_size.remove(pos);
 			return true;
 		}

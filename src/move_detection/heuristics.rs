@@ -61,9 +61,7 @@ pub struct PathTypeInference;
 impl PathTypeInference {
 	/// Infer whether a removed path was likely a directory based on available context
 	pub fn infer_path_type(
-		path: &Path,
-		metadata_cache: &MetadataCache,
-		pending_events: &PendingEventsStorage,
+		path: &Path, metadata_cache: &MetadataCache, pending_events: &PendingEventsStorage,
 	) -> Option<bool> {
 		// First check if we have cached metadata for this exact path
 		if let Some(metadata) = metadata_cache.get(path) {
@@ -113,9 +111,7 @@ impl PathTypeInference {
 
 	/// Get better heuristics for directory detection on removed paths
 	pub fn get_path_type_heuristics(
-		path: &Path,
-		metadata_cache: &MetadataCache,
-		pending_events: &PendingEventsStorage,
+		path: &Path, metadata_cache: &MetadataCache, pending_events: &PendingEventsStorage,
 	) -> PathTypeHeuristics {
 		let mut heuristics = PathTypeHeuristics::new();
 
@@ -202,11 +198,7 @@ pub fn levenshtein_distance(s1: &str, s2: &str) -> usize {
 
 	for i in 1..=len1 {
 		for j in 1..=len2 {
-			let cost = if s1_chars[i - 1] == s2_chars[j - 1] {
-				0
-			} else {
-				1
-			};
+			let cost = if s1_chars[i - 1] == s2_chars[j - 1] { 0 } else { 1 };
 			matrix[i][j] = std::cmp::min(
 				std::cmp::min(
 					matrix[i - 1][j] + 1, // deletion
@@ -258,10 +250,7 @@ mod tests {
 
 	#[test]
 	fn test_is_likely_directory_low_confidence() {
-		let heuristics = PathTypeHeuristics {
-			confidence: 0.2,
-			..PathTypeHeuristics::new()
-		};
+		let heuristics = PathTypeHeuristics { confidence: 0.2, ..PathTypeHeuristics::new() };
 
 		assert_eq!(heuristics.is_likely_directory(), None);
 	}

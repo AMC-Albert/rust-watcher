@@ -32,11 +32,7 @@ impl DatabaseAdapter {
 	pub async fn new(config: DatabaseConfig) -> DatabaseResult<Self> {
 		let storage: Box<dyn DatabaseStorage> = Box::new(RedbStorage::new(config.clone()).await?);
 
-		Ok(Self {
-			storage: Arc::new(RwLock::new(storage)),
-			config,
-			enabled: true,
-		})
+		Ok(Self { storage: Arc::new(RwLock::new(storage)), config, enabled: true })
 	}
 
 	/// Create a disabled adapter (no-op implementation for when database is not needed)
@@ -74,9 +70,7 @@ impl DatabaseAdapter {
 
 	/// Store metadata for a file or directory
 	pub async fn store_metadata(
-		&self,
-		path: &Path,
-		metadata: &std::fs::Metadata,
+		&self, path: &Path, metadata: &std::fs::Metadata,
 	) -> DatabaseResult<()> {
 		if !self.enabled {
 			return Ok(());
@@ -109,9 +103,7 @@ impl DatabaseAdapter {
 
 	/// Find events in a time range (useful for correlating events)
 	pub async fn find_events_by_time_range(
-		&self,
-		start: DateTime<Utc>,
-		end: DateTime<Utc>,
+		&self, start: DateTime<Utc>, end: DateTime<Utc>,
 	) -> DatabaseResult<Vec<EventRecord>> {
 		if !self.enabled {
 			return Ok(Vec::new());
@@ -142,8 +134,7 @@ impl DatabaseAdapter {
 
 	/// Clean up old events using a configurable retention policy
 	pub async fn cleanup_old_events_with_policy(
-		&self,
-		config: &crate::database::storage::event_retention::EventRetentionConfig,
+		&self, config: &crate::database::storage::event_retention::EventRetentionConfig,
 	) -> DatabaseResult<usize> {
 		if !self.enabled {
 			return Ok(0);
@@ -243,9 +234,7 @@ impl DatabaseStorage for NoOpStorage {
 	}
 
 	async fn find_events_by_time_range(
-		&mut self,
-		_start: DateTime<Utc>,
-		_end: DateTime<Utc>,
+		&mut self, _start: DateTime<Utc>, _end: DateTime<Utc>,
 	) -> DatabaseResult<Vec<EventRecord>> {
 		Ok(Vec::new())
 	}
@@ -267,61 +256,49 @@ impl DatabaseStorage for NoOpStorage {
 	}
 
 	async fn store_filesystem_node(
-		&mut self,
-		_watch_id: &uuid::Uuid,
-		_node: &crate::database::types::FilesystemNode,
+		&mut self, _watch_id: &uuid::Uuid, _node: &crate::database::types::FilesystemNode,
 	) -> crate::database::error::DatabaseResult<()> {
 		Ok(())
 	}
 
 	async fn get_filesystem_node(
-		&mut self,
-		_watch_id: &uuid::Uuid,
-		_path: &std::path::Path,
+		&mut self, _watch_id: &uuid::Uuid, _path: &std::path::Path,
 	) -> crate::database::error::DatabaseResult<Option<crate::database::types::FilesystemNode>> {
 		Ok(None)
 	}
 
 	async fn list_directory_for_watch(
-		&mut self,
-		_watch_id: &uuid::Uuid,
-		_parent_path: &std::path::Path,
+		&mut self, _watch_id: &uuid::Uuid, _parent_path: &std::path::Path,
 	) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>> {
 		Ok(vec![])
 	}
 
 	async fn batch_store_filesystem_nodes(
-		&mut self,
-		_watch_id: &uuid::Uuid,
-		_nodes: &[crate::database::types::FilesystemNode],
+		&mut self, _watch_id: &uuid::Uuid, _nodes: &[crate::database::types::FilesystemNode],
 	) -> crate::database::error::DatabaseResult<()> {
 		Ok(())
 	}
 
 	async fn store_watch_metadata(
-		&mut self,
-		_metadata: &crate::database::types::WatchMetadata,
+		&mut self, _metadata: &crate::database::types::WatchMetadata,
 	) -> crate::database::error::DatabaseResult<()> {
 		Ok(())
 	}
 
 	async fn get_watch_metadata(
-		&mut self,
-		_watch_id: &uuid::Uuid,
+		&mut self, _watch_id: &uuid::Uuid,
 	) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>> {
 		Ok(None)
 	}
 
 	async fn cleanup_events_with_policy(
-		&mut self,
-		_config: &crate::database::storage::event_retention::EventRetentionConfig,
+		&mut self, _config: &crate::database::storage::event_retention::EventRetentionConfig,
 	) -> DatabaseResult<usize> {
 		Ok(0)
 	}
 
 	async fn delete_events_older_than(
-		&mut self,
-		_cutoff: std::time::SystemTime,
+		&mut self, _cutoff: std::time::SystemTime,
 	) -> DatabaseResult<usize> {
 		Ok(0)
 	}
@@ -341,14 +318,13 @@ impl EventRecord {
 	}
 	#[allow(clippy::result_large_err)]
 	pub fn from_event_with_retention(
-		event: &FileSystemEvent,
-		retention: std::time::Duration,
+		event: &FileSystemEvent, retention: std::time::Duration,
 	) -> DatabaseResult<Self> {
 		use chrono::Duration;
 
 		let expires_at = Utc::now()
 			+ Duration::from_std(retention).map_err(|e| {
-				DatabaseError::InitializationFailed(format!("Invalid retention duration: {}", e))
+				DatabaseError::InitializationFailed(format!("Invalid retention duration: {e}"))
 			})?;
 
 		Ok(EventRecord {
@@ -400,9 +376,7 @@ mod tests {
 	use uuid::Uuid;
 
 	fn create_test_event(
-		event_type: EventType,
-		path: PathBuf,
-		size: Option<u64>,
+		event_type: EventType, path: PathBuf, size: Option<u64>,
 	) -> FileSystemEvent {
 		FileSystemEvent {
 			id: Uuid::new_v4(),
@@ -420,10 +394,7 @@ mod tests {
 		let temp_dir = TempDir::new().unwrap();
 		let db_path = temp_dir.path().join("test_adapter_creation_and_config.db");
 
-		let config = DatabaseConfig {
-			database_path: db_path.clone(),
-			..Default::default()
-		};
+		let config = DatabaseConfig { database_path: db_path.clone(), ..Default::default() };
 
 		let adapter = DatabaseAdapter::new(config).await.unwrap();
 		assert!(adapter.is_enabled());
@@ -438,10 +409,7 @@ mod tests {
 		let temp_dir = TempDir::new().unwrap();
 		let db_path = temp_dir.path().join("test_event_storage_and_retrieval.db");
 
-		let config = DatabaseConfig {
-			database_path: db_path,
-			..Default::default()
-		};
+		let config = DatabaseConfig { database_path: db_path, ..Default::default() };
 
 		let adapter = DatabaseAdapter::new(config).await.unwrap();
 		// Use absolute path directly to avoid Windows canonicalize bugs
@@ -478,19 +446,14 @@ mod tests {
 	#[tokio::test]
 	async fn test_metadata_storage_and_retrieval() {
 		let temp_dir = TempDir::new().unwrap();
-		let db_path = temp_dir
-			.path()
-			.join("test_metadata_storage_and_retrieval.db");
+		let db_path = temp_dir.path().join("test_metadata_storage_and_retrieval.db");
 		let test_file = temp_dir.path().join("test.txt");
 		std::fs::write(&test_file, "test").unwrap();
 		// Sleep to avoid race conditions on some filesystems
 		std::thread::sleep(std::time::Duration::from_millis(50));
 		let test_file = test_file.canonicalize().unwrap();
 
-		let config = DatabaseConfig {
-			database_path: db_path,
-			..Default::default()
-		};
+		let config = DatabaseConfig { database_path: db_path, ..Default::default() };
 
 		let adapter = DatabaseAdapter::new(config).await.unwrap();
 		let metadata = std::fs::metadata(&test_file).unwrap();
@@ -510,18 +473,15 @@ mod tests {
 		let temp_dir = TempDir::new().unwrap();
 		let db_path = temp_dir.path().join("test_query_operations.db");
 
-		let config = DatabaseConfig {
-			database_path: db_path,
-			..Default::default()
-		};
+		let config = DatabaseConfig { database_path: db_path, ..Default::default() };
 
 		let adapter = DatabaseAdapter::new(config).await.unwrap();
 		// Store events with different sizes for different paths
 		let mut all_events = Vec::new();
 		let now = Utc::now();
 		for i in 0..5 {
-			let path = temp_dir.path().join(format!("file_{}.txt", i));
-			std::fs::write(&path, format!("test-{}", i)).unwrap();
+			let path = temp_dir.path().join(format!("file_{i}.txt"));
+			std::fs::write(&path, format!("test-{i}")).unwrap();
 			let path = path.canonicalize().unwrap();
 			let mut event =
 				create_test_event(EventType::Create, path.clone(), Some(1000 + i * 100));
@@ -533,10 +493,7 @@ mod tests {
 
 		// Query by time range
 		let hour_ago = now - chrono::Duration::hours(1);
-		let recent_events = adapter
-			.find_events_by_time_range(hour_ago, now)
-			.await
-			.unwrap();
+		let recent_events = adapter.find_events_by_time_range(hour_ago, now).await.unwrap();
 		assert!(
 			recent_events.len() >= all_events.len(),
 			"Should retrieve at least as many events as stored"
@@ -585,10 +542,7 @@ mod tests {
 		let temp_dir = TempDir::new().unwrap();
 		let db_path = temp_dir.path().join("health.db");
 
-		let config = DatabaseConfig {
-			database_path: db_path,
-			..Default::default()
-		};
+		let config = DatabaseConfig { database_path: db_path, ..Default::default() };
 
 		let adapter = DatabaseAdapter::new(config).await.unwrap();
 
@@ -597,7 +551,7 @@ mod tests {
 		assert!(health);
 		// Add some data
 		for i in 0..10 {
-			let path = temp_dir.path().join(format!("file_{}.txt", i));
+			let path = temp_dir.path().join(format!("file_{i}.txt"));
 			let event = create_test_event(EventType::Create, path, Some(1024));
 			adapter.store_event(&event).await.unwrap();
 		}

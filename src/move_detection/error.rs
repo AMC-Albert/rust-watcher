@@ -69,11 +69,7 @@ impl MoveDetectionError {
 
 	/// Create a confidence error
 	pub fn confidence_too_low(confidence: f64, threshold: f64, path: &str) -> Self {
-		MoveDetectionError::ConfidenceTooLow {
-			confidence,
-			threshold,
-			path: path.to_string(),
-		}
+		MoveDetectionError::ConfidenceTooLow { confidence, threshold, path: path.to_string() }
 	}
 
 	/// Create a metadata extraction error
@@ -129,7 +125,7 @@ mod tests {
 	#[test]
 	fn test_error_display() {
 		let error = MoveDetectionError::confidence_too_low(0.25, 0.8, "/test/file.txt");
-		let error_str = format!("{}", error);
+		let error_str = format!("{error}");
 		assert!(error_str.contains("0.25"));
 		assert!(error_str.contains("0.80"));
 		assert!(error_str.contains("/test/file.txt"));

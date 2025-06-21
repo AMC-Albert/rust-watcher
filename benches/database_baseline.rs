@@ -64,7 +64,7 @@ fn bench_batch_event_storage(c: &mut Criterion) {
 						for i in 0..batch_size {
 							let event = FileSystemEvent::new(
 								EventType::Create,
-								PathBuf::from(format!("/test/path_{}.txt", i)),
+								PathBuf::from(format!("/test/path_{i}.txt")),
 								false,
 								Some(1024),
 							);
@@ -99,7 +99,7 @@ fn bench_event_querying(c: &mut Criterion) {
 				for i in 0..100 {
 					let event = FileSystemEvent::new(
 						EventType::Create,
-						PathBuf::from(format!("/test/setup_{}.txt", i)),
+						PathBuf::from(format!("/test/setup_{i}.txt")),
 						false,
 						Some(1024),
 					);
@@ -109,10 +109,7 @@ fn bench_event_querying(c: &mut Criterion) {
 				// Query events by time range (this is what we're benchmarking)
 				let start_time = chrono::Utc::now() - chrono::Duration::minutes(5);
 				let end_time = chrono::Utc::now();
-				let events = adapter
-					.find_events_by_time_range(start_time, end_time)
-					.await
-					.unwrap();
+				let events = adapter.find_events_by_time_range(start_time, end_time).await.unwrap();
 				black_box(events);
 			})
 		})
@@ -139,7 +136,7 @@ fn bench_cleanup_operations(c: &mut Criterion) {
 				for i in 0..50 {
 					let event = FileSystemEvent::new(
 						EventType::Create,
-						PathBuf::from(format!("/test/expired_{}.txt", i)),
+						PathBuf::from(format!("/test/expired_{i}.txt")),
 						false,
 						Some(1024),
 					);
@@ -177,7 +174,7 @@ fn bench_stats_collection(c: &mut Criterion) {
 				for i in 0..100 {
 					let event = FileSystemEvent::new(
 						EventType::Create,
-						PathBuf::from(format!("/test/stats_{}.txt", i)),
+						PathBuf::from(format!("/test/stats_{i}.txt")),
 						false,
 						Some(1024),
 					);

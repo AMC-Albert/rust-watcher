@@ -77,10 +77,7 @@ async fn test_watcher_basic_file_detection() {
 	// Stop the watcher
 	handle.stop().await.unwrap();
 
-	println!(
-		"Integration test completed: received {} events",
-		events_received
-	);
+	println!("Integration test completed: received {events_received} events");
 	// Don't assert on specific count as file events vary by platform
 }
 

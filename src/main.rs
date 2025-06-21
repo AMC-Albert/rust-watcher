@@ -32,17 +32,11 @@ async fn main() -> anyhow::Result<()> {
 	let cli = Cli::parse();
 
 	// Initialize tracing
-	let level = if cli.verbose {
-		Level::DEBUG
-	} else {
-		Level::INFO
-	};
+	let level = if cli.verbose { Level::DEBUG } else { Level::INFO };
 	tracing_subscriber::fmt().with_max_level(level).init();
 	info!("Starting filesystem watcher for path: {:?}", cli.path);
-	let move_config = MoveDetectorConfig {
-		timeout: Duration::from_millis(cli.timeout),
-		..Default::default()
-	};
+	let move_config =
+		MoveDetectorConfig { timeout: Duration::from_millis(cli.timeout), ..Default::default() };
 	let config = WatcherConfig {
 		path: cli.path,
 		recursive: cli.recursive,

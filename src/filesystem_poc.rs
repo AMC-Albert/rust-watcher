@@ -24,11 +24,7 @@ impl FilesystemNode {
 		Ok(FilesystemNode {
 			path: entry.path().to_path_buf(),
 			is_directory: metadata.is_dir(),
-			size: if metadata.is_file() {
-				Some(metadata.len())
-			} else {
-				None
-			},
+			size: if metadata.is_file() { Some(metadata.len()) } else { None },
 			modified_time: metadata.modified().ok(),
 			depth: entry.depth(),
 		})
@@ -61,13 +57,7 @@ pub fn scan_statistics(nodes: &[FilesystemNode]) -> ScanStats {
 	let max_depth = nodes.iter().map(|n| n.depth).max().unwrap_or(0);
 	let total_size = nodes.iter().filter_map(|n| n.size).sum::<u64>();
 
-	ScanStats {
-		total_nodes: nodes.len(),
-		file_count,
-		directory_count,
-		max_depth,
-		total_size,
-	}
+	ScanStats { total_nodes: nodes.len(), file_count, directory_count, max_depth, total_size }
 }
 
 #[derive(Debug)]
@@ -114,10 +104,7 @@ mod tests {
 		let nodes = scan_directory_tree(temp_dir.path()).expect("Failed to scan");
 
 		// Find the file node
-		let file_node = nodes
-			.iter()
-			.find(|n| n.path == file_path)
-			.expect("File node not found");
+		let file_node = nodes.iter().find(|n| n.path == file_path).expect("File node not found");
 
 		assert!(!file_node.is_directory);
 		assert_eq!(file_node.size, Some(12)); // "test content" = 12 bytes
@@ -130,7 +117,7 @@ mod tests {
 
 		// Create a deep directory structure
 		for i in 0..10 {
-			current_path = current_path.join(format!("level_{}", i));
+			current_path = current_path.join(format!("level_{i}"));
 			fs::create_dir_all(&current_path).unwrap();
 		}
 

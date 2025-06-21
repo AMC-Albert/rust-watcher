@@ -33,10 +33,7 @@ async fn test_database_initialization() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
 	let db_path = temp_dir.path().join(format!("test-{}.db", Uuid::new_v4()));
 
-	let config = DatabaseConfig {
-		database_path: db_path.clone(),
-		..Default::default()
-	};
+	let config = DatabaseConfig { database_path: db_path.clone(), ..Default::default() };
 	assert!(config.validate().is_ok());
 
 	// Test that we can create a RedbStorage instance
@@ -207,9 +204,7 @@ async fn test_database_statistics() {
 #[test]
 async fn test_massive_directory_simulation() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir
-		.path()
-		.join(format!("massive_test-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("massive_test-{}.db", Uuid::new_v4()));
 
 	// Use configuration optimized for massive directories
 	let mut config = DatabaseConfig::for_massive_directories();
@@ -255,7 +250,7 @@ async fn test_database_error_scenarios() {
 
 	// Test error display formatting
 	let init_error = DatabaseError::InitializationFailed("test failure".to_string());
-	let error_message = format!("{}", init_error);
+	let error_message = format!("{init_error}");
 	assert!(error_message.contains("Database initialization failed"));
 	assert!(error_message.contains("test failure"));
 }
@@ -268,22 +263,15 @@ async fn test_custom_database_paths() {
 
 	// Test with different custom paths
 	let custom_paths = vec![
-		temp_dir
-			.path()
-			.join(format!("custom-{}.db", Uuid::new_v4())),
+		temp_dir.path().join(format!("custom-{}.db", Uuid::new_v4())),
 		temp_dir
 			.path()
 			.join("subdirectory")
 			.join(format!("nested-{}.db", Uuid::new_v4())),
-		temp_dir
-			.path()
-			.join(format!("watcher_large_scale-{}.db", Uuid::new_v4())),
+		temp_dir.path().join(format!("watcher_large_scale-{}.db", Uuid::new_v4())),
 	];
 	for path in custom_paths {
-		let config = DatabaseConfig {
-			database_path: path.clone(),
-			..Default::default()
-		};
+		let config = DatabaseConfig { database_path: path.clone(), ..Default::default() };
 		assert_eq!(config.database_path, path);
 		assert!(config.validate().is_ok());
 
@@ -305,17 +293,13 @@ async fn test_storage_transition_readiness() {
 	// for integration with the existing move detection system
 
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir
-		.path()
-		.join(format!("transition_test-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("transition_test-{}.db", Uuid::new_v4()));
 
 	// Test with moderate configuration (typical starting point)
 	let mut config = DatabaseConfig::for_moderate_directories();
 	config.database_path = db_path;
 
-	let storage = RedbStorage::new(config)
-		.await
-		.expect("Failed to create storage");
+	let storage = RedbStorage::new(config).await.expect("Failed to create storage");
 
 	// Verify that the storage implements the DatabaseStorage trait
 	// This ensures it can be used as a drop-in replacement for in-memory storage
@@ -374,19 +358,12 @@ async fn test_storage_transition_readiness() {
 #[test]
 async fn test_database_adapter_basic_operations() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir
-		.path()
-		.join(format!("test_adapter-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("test_adapter-{}.db", Uuid::new_v4()));
 
-	let config = DatabaseConfig {
-		database_path: db_path.clone(),
-		..Default::default()
-	};
+	let config = DatabaseConfig { database_path: db_path.clone(), ..Default::default() };
 
 	// Test adapter creation
-	let adapter = DatabaseAdapter::new(config)
-		.await
-		.expect("Failed to create adapter");
+	let adapter = DatabaseAdapter::new(config).await.expect("Failed to create adapter");
 	assert!(adapter.is_enabled());
 	assert_eq!(adapter.database_path(), Some(db_path.as_path()));
 
@@ -407,9 +384,7 @@ async fn test_watcher_with_database_integration() {
 	let watch_dir = temp_dir.path().join("watch");
 	std::fs::create_dir_all(&watch_dir).expect("Failed to create watch directory");
 
-	let db_path = temp_dir
-		.path()
-		.join(format!("watcher-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("watcher-{}.db", Uuid::new_v4()));
 	let db_config = DatabaseConfig {
 		database_path: db_path.clone(),
 		memory_buffer_size: 1000,
@@ -453,27 +428,17 @@ async fn test_watcher_with_database_integration() {
 #[test]
 async fn test_database_persistence_and_retrieval() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir
-		.path()
-		.join(format!("persistence_test-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("persistence_test-{}.db", Uuid::new_v4()));
 	let test_file = temp_dir.path().join("test_file.txt");
 
-	let config = DatabaseConfig {
-		database_path: db_path.clone(),
-		..Default::default()
-	};
+	let config = DatabaseConfig { database_path: db_path.clone(), ..Default::default() };
 
-	let adapter = DatabaseAdapter::new(config)
-		.await
-		.expect("Failed to create adapter");
+	let adapter = DatabaseAdapter::new(config).await.expect("Failed to create adapter");
 	// Create a mock event
 	let event = create_test_event(EventType::Create, test_file.clone(), Some(1024));
 
 	// Store the event
-	adapter
-		.store_event(&event)
-		.await
-		.expect("Failed to store event");
+	adapter.store_event(&event).await.expect("Failed to store event");
 
 	// Store metadata
 	let mock_metadata = std::fs::File::create(&test_file)
@@ -493,10 +458,8 @@ async fn test_database_persistence_and_retrieval() {
 	assert!(!retrieved_events.is_empty());
 
 	// Retrieve metadata
-	let retrieved_metadata = adapter
-		.get_metadata(&test_file)
-		.await
-		.expect("Failed to retrieve metadata");
+	let retrieved_metadata =
+		adapter.get_metadata(&test_file).await.expect("Failed to retrieve metadata");
 	assert!(retrieved_metadata.is_some());
 
 	// Test database stats
@@ -513,9 +476,7 @@ async fn test_database_persistence_and_retrieval() {
 /// This test will pass once event cleanup is implemented in the database backend.
 async fn test_database_cleanup_and_maintenance() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir
-		.path()
-		.join(format!("cleanup_test-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("cleanup_test-{}.db", Uuid::new_v4()));
 
 	let config = DatabaseConfig {
 		database_path: db_path.clone(),
@@ -523,28 +484,20 @@ async fn test_database_cleanup_and_maintenance() {
 		..Default::default()
 	};
 
-	let adapter = DatabaseAdapter::new(config)
-		.await
-		.expect("Failed to create adapter");
+	let adapter = DatabaseAdapter::new(config).await.expect("Failed to create adapter");
 
 	// Store some events
 	for i in 0..5 {
-		let test_path = temp_dir.path().join(format!("file_{}.txt", i));
+		let test_path = temp_dir.path().join(format!("file_{i}.txt"));
 		let event = FileSystemEvent::new(EventType::Create, test_path, false, Some(1024));
-		adapter
-			.store_event(&event)
-			.await
-			.expect("Failed to store event");
+		adapter.store_event(&event).await.expect("Failed to store event");
 	}
 
 	// Wait for events to expire
 	sleep(TokioDuration::from_millis(200)).await;
 
 	// Run cleanup
-	let cleaned = adapter
-		.cleanup_old_events()
-		.await
-		.expect("Failed to cleanup");
+	let cleaned = adapter.cleanup_old_events().await.expect("Failed to cleanup");
 	assert!(cleaned > 0, "Should have cleaned up some events");
 
 	// Test compaction
@@ -559,9 +512,7 @@ async fn test_database_cleanup_and_maintenance() {
 #[test]
 async fn test_database_under_load() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir
-		.path()
-		.join(format!("load_test-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("load_test-{}.db", Uuid::new_v4()));
 
 	let config = DatabaseConfig {
 		database_path: db_path.clone(),
@@ -569,19 +520,14 @@ async fn test_database_under_load() {
 		..Default::default()
 	};
 
-	let adapter = DatabaseAdapter::new(config)
-		.await
-		.expect("Failed to create adapter");
+	let adapter = DatabaseAdapter::new(config).await.expect("Failed to create adapter");
 
 	// Store many events quickly
 	let event_count = 100;
 	for i in 0..event_count {
-		let test_path = temp_dir.path().join(format!("load_file_{}.txt", i));
+		let test_path = temp_dir.path().join(format!("load_file_{i}.txt"));
 		let event = FileSystemEvent::new(EventType::Create, test_path, false, Some(1024 + i));
-		adapter
-			.store_event(&event)
-			.await
-			.expect("Failed to store event");
+		adapter.store_event(&event).await.expect("Failed to store event");
 	}
 
 	// Verify all events were stored
@@ -644,28 +590,18 @@ async fn test_database_error_handling() {
 #[test]
 async fn test_multi_event_append_only_log() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir
-		.path()
-		.join(format!("multi_event_test-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("multi_event_test-{}.db", Uuid::new_v4()));
 	let test_file = temp_dir.path().join("test_file.txt");
 
-	let config = DatabaseConfig {
-		database_path: db_path.clone(),
-		..Default::default()
-	};
+	let config = DatabaseConfig { database_path: db_path.clone(), ..Default::default() };
 
-	let adapter = DatabaseAdapter::new(config)
-		.await
-		.expect("Failed to create adapter");
+	let adapter = DatabaseAdapter::new(config).await.expect("Failed to create adapter");
 
 	// Store multiple events for the same path
 	let mut events = Vec::new();
 	for i in 0..3 {
 		let event = create_test_event(EventType::Write, test_file.clone(), Some(100 + i));
-		adapter
-			.store_event(&event)
-			.await
-			.expect("Failed to store event");
+		adapter.store_event(&event).await.expect("Failed to store event");
 		events.push(event);
 	}
 
@@ -741,16 +677,11 @@ async fn test_persistent_per_event_type_stats() {
 			Duration::minutes(5),
 			0,
 		);
-		storage
-			.store_event(&record)
-			.await
-			.expect("Failed to store event");
+		storage.store_event(&record).await.expect("Failed to store event");
 	}
 
 	// Query stats
-	let stats = get_database_stats(storage.database())
-		.await
-		.expect("Failed to get stats");
+	let stats = get_database_stats(storage.database()).await.expect("Failed to get stats");
 	assert_eq!(stats.total_events, events.len() as u64);
 	assert_eq!(stats.per_type_counts.get("Create"), Some(&2));
 	assert_eq!(stats.per_type_counts.get("Delete"), Some(&2));

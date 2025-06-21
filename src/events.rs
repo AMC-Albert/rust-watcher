@@ -31,7 +31,7 @@ impl From<notify::EventKind> for EventType {
 			notify::EventKind::Remove(_) => EventType::Remove,
 			notify::EventKind::Access(_) => EventType::Other("Access".to_string()),
 			notify::EventKind::Other => EventType::Other("Unknown".to_string()),
-			_ => EventType::Other(format!("{:?}", kind)),
+			_ => EventType::Other(format!("{kind:?}")),
 		}
 	}
 }
@@ -81,10 +81,7 @@ pub enum MoveDetectionMethod {
 
 impl FileSystemEvent {
 	pub fn new(
-		event_type: EventType,
-		path: PathBuf,
-		is_directory: bool,
-		size: Option<u64>,
+		event_type: EventType, path: PathBuf, is_directory: bool, size: Option<u64>,
 	) -> Self {
 		Self {
 			id: Uuid::new_v4(),

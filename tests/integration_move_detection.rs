@@ -14,128 +14,105 @@ struct DummyCache;
 #[async_trait::async_trait]
 impl FilesystemCacheStorage for DummyCache {
 	async fn store_filesystem_node(
-		&mut self,
-		_: &uuid::Uuid,
-		_: &rust_watcher::database::types::FilesystemNode,
+		&mut self, _: &uuid::Uuid, _: &rust_watcher::database::types::FilesystemNode,
 	) -> rust_watcher::database::error::DatabaseResult<()> {
 		Ok(())
 	}
 	async fn get_filesystem_node(
-		&mut self,
-		_: &uuid::Uuid,
-		_: &std::path::Path,
+		&mut self, _: &uuid::Uuid, _: &std::path::Path,
 	) -> rust_watcher::database::error::DatabaseResult<
 		Option<rust_watcher::database::types::FilesystemNode>,
 	> {
 		Ok(None)
 	}
 	async fn list_directory_for_watch(
-		&mut self,
-		_: &uuid::Uuid,
-		_: &std::path::Path,
+		&mut self, _: &uuid::Uuid, _: &std::path::Path,
 	) -> rust_watcher::database::error::DatabaseResult<
 		Vec<rust_watcher::database::types::FilesystemNode>,
 	> {
 		Ok(vec![])
 	}
 	async fn store_watch_metadata(
-		&mut self,
-		_: &rust_watcher::database::types::WatchMetadata,
+		&mut self, _: &rust_watcher::database::types::WatchMetadata,
 	) -> rust_watcher::database::error::DatabaseResult<()> {
 		Ok(())
 	}
 	async fn get_watch_metadata(
-		&mut self,
-		_: &uuid::Uuid,
+		&mut self, _: &uuid::Uuid,
 	) -> rust_watcher::database::error::DatabaseResult<
 		Option<rust_watcher::database::types::WatchMetadata>,
 	> {
 		Ok(None)
 	}
 	async fn remove_watch(
-		&mut self,
-		_: &uuid::Uuid,
+		&mut self, _: &uuid::Uuid,
 	) -> rust_watcher::database::error::DatabaseResult<()> {
 		Ok(())
 	}
 	async fn store_shared_node(
-		&mut self,
-		_: &rust_watcher::database::types::SharedNodeInfo,
+		&mut self, _: &rust_watcher::database::types::SharedNodeInfo,
 	) -> rust_watcher::database::error::DatabaseResult<()> {
 		Ok(())
 	}
 	async fn get_shared_node(
-		&mut self,
-		_: u64,
+		&mut self, _: u64,
 	) -> rust_watcher::database::error::DatabaseResult<
 		Option<rust_watcher::database::types::SharedNodeInfo>,
 	> {
 		Ok(None)
 	}
 	async fn batch_store_filesystem_nodes(
-		&mut self,
-		_: &uuid::Uuid,
-		_: &[rust_watcher::database::types::FilesystemNode],
+		&mut self, _: &uuid::Uuid, _: &[rust_watcher::database::types::FilesystemNode],
 	) -> rust_watcher::database::error::DatabaseResult<()> {
 		Ok(())
 	}
 	async fn find_nodes_by_prefix(
-		&mut self,
-		_: &uuid::Uuid,
-		_: &std::path::Path,
+		&mut self, _: &uuid::Uuid, _: &std::path::Path,
 	) -> rust_watcher::database::error::DatabaseResult<
 		Vec<rust_watcher::database::types::FilesystemNode>,
 	> {
 		Ok(vec![])
 	}
 	async fn get_cache_stats(
-		&mut self,
-		_: &uuid::Uuid,
+		&mut self, _: &uuid::Uuid,
 	) -> rust_watcher::database::error::DatabaseResult<CacheStats> {
 		Ok(Default::default())
 	}
 	async fn cleanup_stale_cache(
-		&mut self,
-		_: &uuid::Uuid,
-		_: u64,
+		&mut self, _: &uuid::Uuid, _: u64,
 	) -> rust_watcher::database::error::DatabaseResult<usize> {
 		Ok(0)
 	}
 	async fn list_directory_unified(
-		&mut self,
-		_: &std::path::Path,
+		&mut self, _: &std::path::Path,
 	) -> rust_watcher::database::error::DatabaseResult<
 		Vec<rust_watcher::database::types::FilesystemNode>,
 	> {
 		Ok(vec![])
 	}
 	async fn get_unified_node(
-		&mut self,
-		_: &std::path::Path,
+		&mut self, _: &std::path::Path,
 	) -> rust_watcher::database::error::DatabaseResult<
 		Option<rust_watcher::database::types::FilesystemNode>,
 	> {
 		Ok(None)
 	}
 	async fn list_ancestors(
-		&mut self,
-		_: &std::path::Path,
+		&mut self, _: &std::path::Path,
 	) -> rust_watcher::database::error::DatabaseResult<
 		Vec<rust_watcher::database::types::FilesystemNode>,
 	> {
 		Ok(vec![])
 	}
 	async fn list_descendants(
-		&mut self,
-		_: &std::path::Path,
+		&mut self, _: &std::path::Path,
 	) -> rust_watcher::database::error::DatabaseResult<
 		Vec<rust_watcher::database::types::FilesystemNode>,
 	> {
 		Ok(vec![])
 	}
 	async fn search_nodes(
-		&mut self,
-		_: &str,
+		&mut self, _: &str,
 	) -> rust_watcher::database::error::DatabaseResult<
 		Vec<rust_watcher::database::types::FilesystemNode>,
 	> {
@@ -205,7 +182,7 @@ async fn test_move_detector_event_processing() {
 
 	// Check if any moves were detected (optional, varies by implementation)
 	let has_moves = result1.iter().chain(result2.iter()).any(|e| e.is_move());
-	println!("Move detection test: moves detected = {}", has_moves);
+	println!("Move detection test: moves detected = {has_moves}");
 }
 
 #[test]

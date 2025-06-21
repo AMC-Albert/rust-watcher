@@ -39,7 +39,7 @@ impl WatcherConfig {
 						parameter: "path".to_string(),
 						reason: "Path is neither a file nor a directory".to_string(),
 						expected: "directory or file".to_string(),
-						actual: format!("{:?}", metadata.file_type()),
+						actual: format!("{actual:?}", actual = metadata.file_type()),
 					});
 				}
 			}
@@ -94,9 +94,7 @@ pub struct WatcherHandle {
 
 impl WatcherHandle {
 	pub async fn stop(self) -> Result<()> {
-		self.stop_sender
-			.send(())
-			.map_err(|_| WatcherError::StopSignal)
+		self.stop_sender.send(()).map_err(|_| WatcherError::StopSignal)
 	}
 }
 
@@ -107,9 +105,7 @@ pub fn start(config: WatcherConfig) -> Result<(WatcherHandle, mpsc::Receiver<Fil
 	let (event_tx, event_rx) = mpsc::channel(100);
 	let (stop_tx, stop_rx) = oneshot::channel();
 
-	let handle = WatcherHandle {
-		stop_sender: stop_tx,
-	};
+	let handle = WatcherHandle { stop_sender: stop_tx };
 
 	tokio::spawn(run_watcher(config, event_tx, stop_rx));
 
@@ -117,8 +113,7 @@ pub fn start(config: WatcherConfig) -> Result<(WatcherHandle, mpsc::Receiver<Fil
 }
 
 async fn run_watcher(
-	config: WatcherConfig,
-	event_tx: mpsc::Sender<FileSystemEvent>,
+	config: WatcherConfig, event_tx: mpsc::Sender<FileSystemEvent>,
 	mut stop_rx: oneshot::Receiver<()>,
 ) {
 	// Initialize database adapter if configured
@@ -147,9 +142,8 @@ async fn run_watcher(
 	} else {
 		// Use a unique dummy DB file per watcher instance to avoid concurrency issues
 		let tempdir = TempDir::new().expect("Failed to create tempdir for dummy DB");
-		let dummy_db_path = tempdir
-			.path()
-			.join(format!("dummy-{}.db", uuid::Uuid::new_v4()));
+		let dummy_db_path =
+			tempdir.path().join(format!("dummy-{id}.db", id = uuid::Uuid::new_v4()));
 		let cache =
 			RedbFilesystemCache::new(Arc::new(redb::Database::create(&dummy_db_path).unwrap()));
 		_dummy_tempdir = Some(tempdir); // Hold tempdir so file is deleted on drop
@@ -252,8 +246,7 @@ async fn create_filesystem_watcher(path: &std::path::Path) -> Result<Recommended
 
 /// Setup watcher callback and start watching
 async fn setup_watcher_callback(
-	watcher: &mut RecommendedWatcher,
-	path: &std::path::Path,
+	watcher: &mut RecommendedWatcher, path: &std::path::Path,
 	notify_tx: std::sync::mpsc::Sender<notify::Event>,
 ) -> Result<()> {
 	// Replace the watcher callback
@@ -301,9 +294,7 @@ async fn setup_watcher_callback(
 
 /// Process a single filesystem event with proper error handling
 async fn process_single_event<'a>(
-	event: notify::Event,
-	move_detector: &mut MoveDetector<'a>,
-	database: &DatabaseAdapter,
+	event: notify::Event, move_detector: &mut MoveDetector<'a>, database: &DatabaseAdapter,
 	event_tx: &mpsc::Sender<FileSystemEvent>,
 ) -> Result<()> {
 	debug!(
@@ -349,9 +340,7 @@ async fn process_single_event<'a>(
 }
 
 fn convert_notify_event(
-	kind: &EventKind,
-	path: PathBuf,
-	move_detector: &MoveDetector<'_>,
+	kind: &EventKind, path: PathBuf, move_detector: &MoveDetector<'_>,
 ) -> FileSystemEvent {
 	let event_type = EventType::from(*kind);
 	debug!(
@@ -489,7 +478,7 @@ mod tests {
 			WatcherError::InvalidPath { path } => {
 				assert!(path.contains("nonexistent"));
 			}
-			other => panic!("Expected InvalidPath error, got: {:?}", other),
+			other => panic!("Expected InvalidPath error, got: {other:?}"),
 		}
 	}
 

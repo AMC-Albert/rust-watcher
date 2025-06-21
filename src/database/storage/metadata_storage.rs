@@ -155,8 +155,7 @@ impl MetadataStorage for MetadataStorageImpl {
 
 /// Store metadata record using the provided database
 pub async fn store_metadata(
-	database: &Arc<Database>,
-	record: &MetadataRecord,
+	database: &Arc<Database>, record: &MetadataRecord,
 ) -> DatabaseResult<()> {
 	let write_txn = database.begin_write()?;
 	{
@@ -173,8 +172,7 @@ pub async fn store_metadata(
 
 /// Retrieve metadata by path using the provided database
 pub async fn get_metadata(
-	database: &Arc<Database>,
-	path: &Path,
+	database: &Arc<Database>, path: &Path,
 ) -> DatabaseResult<Option<MetadataRecord>> {
 	let read_txn = database.begin_read()?;
 	let metadata_table = read_txn.open_table(super::tables::METADATA_TABLE)?;

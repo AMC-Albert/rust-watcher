@@ -30,8 +30,7 @@ impl ResourceStats {
 
 	/// Calculate estimated memory usage based on data structures
 	pub fn calculate_memory_estimate(
-		pending_events: &PendingEventsStorage,
-		metadata_cache: &MetadataCache,
+		pending_events: &PendingEventsStorage, metadata_cache: &MetadataCache,
 	) -> usize {
 		// Rough estimates based on typical struct sizes
 		let pending_event_size = 200; // bytes per PendingEvent
@@ -48,9 +47,7 @@ impl ResourceStats {
 
 	/// Update statistics based on current state
 	pub fn update(
-		&mut self,
-		pending_events: &PendingEventsStorage,
-		metadata_cache: &MetadataCache,
+		&mut self, pending_events: &PendingEventsStorage, metadata_cache: &MetadataCache,
 	) {
 		self.pending_removes = pending_events.count_removes();
 		self.pending_creates = pending_events.count_creates();

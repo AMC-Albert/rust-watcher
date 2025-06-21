@@ -120,8 +120,7 @@ impl<'a> MoveDetector<'a> {
 
 	/// Get better heuristics for directory detection on removed paths
 	pub fn get_path_type_heuristics(
-		&self,
-		path: &Path,
+		&self, path: &Path,
 	) -> crate::move_detection::heuristics::PathTypeHeuristics {
 		PathTypeInference::get_path_type_heuristics(
 			path,
@@ -132,8 +131,7 @@ impl<'a> MoveDetector<'a> {
 
 	/// Get resource usage statistics
 	pub fn get_resource_stats(&mut self) -> ResourceStats {
-		self.stats
-			.update(&self.pending_events, &self.metadata_cache);
+		self.stats.update(&self.pending_events, &self.metadata_cache);
 		self.stats.clone()
 	}
 
@@ -145,16 +143,11 @@ impl<'a> MoveDetector<'a> {
 	/// Cache metadata for a file path
 	async fn cache_file_metadata(&mut self, path: &Path) {
 		if let Ok(metadata) = std::fs::metadata(path) {
-			let size = if metadata.is_file() {
-				Some(metadata.len())
-			} else {
-				None
-			};
+			let size = if metadata.is_file() { Some(metadata.len()) } else { None };
 			let windows_id = MetadataExtractor::get_windows_id(path).await;
 
 			let file_metadata = FileMetadata::new(size, windows_id);
-			self.metadata_cache
-				.insert(path.to_path_buf(), file_metadata);
+			self.metadata_cache.insert(path.to_path_buf(), file_metadata);
 		}
 	}
 	async fn handle_remove_event(&mut self, mut event: FileSystemEvent) -> Vec<FileSystemEvent> {
@@ -193,9 +186,8 @@ impl<'a> MoveDetector<'a> {
 			inode, windows_id
 		);
 
-		let pending = PendingEvent::new(event.clone())
-			.with_inode(inode)
-			.with_windows_id(windows_id);
+		let pending =
+			PendingEvent::new(event.clone()).with_inode(inode).with_windows_id(windows_id);
 
 		// Check if this removal matches a recent create (reverse move detection)
 		debug!("Searching for matching create event...");
@@ -230,8 +222,7 @@ impl<'a> MoveDetector<'a> {
 			move_event_fs = move_event_fs.with_move_data(move_event);
 
 			// Remove the matching create from pending
-			self.pending_events
-				.remove_create_by_id(matching_create.event.id);
+			self.pending_events.remove_create_by_id(matching_create.event.id);
 
 			debug!(
 				"Detected move: {:?} -> {:?} (confidence: {:.2})",
@@ -466,122 +457,99 @@ mod tests {
 		#[async_trait::async_trait]
 		impl FilesystemCacheStorage for DummyCache {
 			async fn store_filesystem_node(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &crate::database::types::FilesystemNode,
+				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_filesystem_node(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::FilesystemNode>,
 			> {
 				Ok(None)
 			}
 			async fn list_directory_for_watch(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn store_watch_metadata(
-				&mut self,
-				_: &crate::database::types::WatchMetadata,
+				&mut self, _: &crate::database::types::WatchMetadata,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_watch_metadata(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>>
 			{
 				Ok(None)
 			}
 			async fn remove_watch(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn store_shared_node(
-				&mut self,
-				_: &crate::database::types::SharedNodeInfo,
+				&mut self, _: &crate::database::types::SharedNodeInfo,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_shared_node(
-				&mut self,
-				_: u64,
+				&mut self, _: u64,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::SharedNodeInfo>,
 			> {
 				Ok(None)
 			}
 			async fn batch_store_filesystem_nodes(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &[crate::database::types::FilesystemNode],
+				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode],
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn find_nodes_by_prefix(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn get_cache_stats(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<CacheStats> {
 				Ok(Default::default())
 			}
 			async fn cleanup_stale_cache(
-				&mut self,
-				_: &uuid::Uuid,
-				_: u64,
+				&mut self, _: &uuid::Uuid, _: u64,
 			) -> crate::database::error::DatabaseResult<usize> {
 				Ok(0)
 			}
 			async fn list_directory_unified(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn get_unified_node(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::FilesystemNode>,
 			> {
 				Ok(None)
 			}
 			async fn list_ancestors(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn list_descendants(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn search_nodes(
-				&mut self,
-				_: &str,
+				&mut self, _: &str,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
@@ -604,122 +572,99 @@ mod tests {
 		#[async_trait::async_trait]
 		impl FilesystemCacheStorage for DummyCache {
 			async fn store_filesystem_node(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &crate::database::types::FilesystemNode,
+				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_filesystem_node(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::FilesystemNode>,
 			> {
 				Ok(None)
 			}
 			async fn list_directory_for_watch(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn store_watch_metadata(
-				&mut self,
-				_: &crate::database::types::WatchMetadata,
+				&mut self, _: &crate::database::types::WatchMetadata,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_watch_metadata(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>>
 			{
 				Ok(None)
 			}
 			async fn remove_watch(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn store_shared_node(
-				&mut self,
-				_: &crate::database::types::SharedNodeInfo,
+				&mut self, _: &crate::database::types::SharedNodeInfo,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_shared_node(
-				&mut self,
-				_: u64,
+				&mut self, _: u64,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::SharedNodeInfo>,
 			> {
 				Ok(None)
 			}
 			async fn batch_store_filesystem_nodes(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &[crate::database::types::FilesystemNode],
+				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode],
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn find_nodes_by_prefix(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn get_cache_stats(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<CacheStats> {
 				Ok(Default::default())
 			}
 			async fn cleanup_stale_cache(
-				&mut self,
-				_: &uuid::Uuid,
-				_: u64,
+				&mut self, _: &uuid::Uuid, _: u64,
 			) -> crate::database::error::DatabaseResult<usize> {
 				Ok(0)
 			}
 			async fn list_directory_unified(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn get_unified_node(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::FilesystemNode>,
 			> {
 				Ok(None)
 			}
 			async fn list_ancestors(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn list_descendants(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn search_nodes(
-				&mut self,
-				_: &str,
+				&mut self, _: &str,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
@@ -738,122 +683,99 @@ mod tests {
 		#[async_trait::async_trait]
 		impl FilesystemCacheStorage for DummyCache {
 			async fn store_filesystem_node(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &crate::database::types::FilesystemNode,
+				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_filesystem_node(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::FilesystemNode>,
 			> {
 				Ok(None)
 			}
 			async fn list_directory_for_watch(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn store_watch_metadata(
-				&mut self,
-				_: &crate::database::types::WatchMetadata,
+				&mut self, _: &crate::database::types::WatchMetadata,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_watch_metadata(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>>
 			{
 				Ok(None)
 			}
 			async fn remove_watch(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn store_shared_node(
-				&mut self,
-				_: &crate::database::types::SharedNodeInfo,
+				&mut self, _: &crate::database::types::SharedNodeInfo,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_shared_node(
-				&mut self,
-				_: u64,
+				&mut self, _: u64,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::SharedNodeInfo>,
 			> {
 				Ok(None)
 			}
 			async fn batch_store_filesystem_nodes(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &[crate::database::types::FilesystemNode],
+				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode],
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn find_nodes_by_prefix(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn get_cache_stats(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<CacheStats> {
 				Ok(Default::default())
 			}
 			async fn cleanup_stale_cache(
-				&mut self,
-				_: &uuid::Uuid,
-				_: u64,
+				&mut self, _: &uuid::Uuid, _: u64,
 			) -> crate::database::error::DatabaseResult<usize> {
 				Ok(0)
 			}
 			async fn list_directory_unified(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn get_unified_node(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::FilesystemNode>,
 			> {
 				Ok(None)
 			}
 			async fn list_ancestors(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn list_descendants(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn search_nodes(
-				&mut self,
-				_: &str,
+				&mut self, _: &str,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
@@ -873,7 +795,7 @@ mod tests {
 		// Paths without extensions might not be determinable without context
 		let folder_result = detector.infer_path_type(&PathBuf::from("folder"));
 		// This might return None if there's insufficient information
-		println!("Folder inference result: {:?}", folder_result);
+		println!("Folder inference result: {folder_result:?}");
 	}
 	#[test]
 	fn test_get_pending_events_summary() {
@@ -882,122 +804,99 @@ mod tests {
 		#[async_trait::async_trait]
 		impl FilesystemCacheStorage for DummyCache {
 			async fn store_filesystem_node(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &crate::database::types::FilesystemNode,
+				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_filesystem_node(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::FilesystemNode>,
 			> {
 				Ok(None)
 			}
 			async fn list_directory_for_watch(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn store_watch_metadata(
-				&mut self,
-				_: &crate::database::types::WatchMetadata,
+				&mut self, _: &crate::database::types::WatchMetadata,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_watch_metadata(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>>
 			{
 				Ok(None)
 			}
 			async fn remove_watch(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn store_shared_node(
-				&mut self,
-				_: &crate::database::types::SharedNodeInfo,
+				&mut self, _: &crate::database::types::SharedNodeInfo,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_shared_node(
-				&mut self,
-				_: u64,
+				&mut self, _: u64,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::SharedNodeInfo>,
 			> {
 				Ok(None)
 			}
 			async fn batch_store_filesystem_nodes(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &[crate::database::types::FilesystemNode],
+				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode],
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn find_nodes_by_prefix(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn get_cache_stats(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<CacheStats> {
 				Ok(Default::default())
 			}
 			async fn cleanup_stale_cache(
-				&mut self,
-				_: &uuid::Uuid,
-				_: u64,
+				&mut self, _: &uuid::Uuid, _: u64,
 			) -> crate::database::error::DatabaseResult<usize> {
 				Ok(0)
 			}
 			async fn list_directory_unified(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn get_unified_node(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::FilesystemNode>,
 			> {
 				Ok(None)
 			}
 			async fn list_ancestors(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn list_descendants(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn search_nodes(
-				&mut self,
-				_: &str,
+				&mut self, _: &str,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
@@ -1019,122 +918,99 @@ mod tests {
 		#[async_trait::async_trait]
 		impl FilesystemCacheStorage for DummyCache {
 			async fn store_filesystem_node(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &crate::database::types::FilesystemNode,
+				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_filesystem_node(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::FilesystemNode>,
 			> {
 				Ok(None)
 			}
 			async fn list_directory_for_watch(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn store_watch_metadata(
-				&mut self,
-				_: &crate::database::types::WatchMetadata,
+				&mut self, _: &crate::database::types::WatchMetadata,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_watch_metadata(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<Option<crate::database::types::WatchMetadata>>
 			{
 				Ok(None)
 			}
 			async fn remove_watch(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn store_shared_node(
-				&mut self,
-				_: &crate::database::types::SharedNodeInfo,
+				&mut self, _: &crate::database::types::SharedNodeInfo,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn get_shared_node(
-				&mut self,
-				_: u64,
+				&mut self, _: u64,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::SharedNodeInfo>,
 			> {
 				Ok(None)
 			}
 			async fn batch_store_filesystem_nodes(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &[crate::database::types::FilesystemNode],
+				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode],
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn find_nodes_by_prefix(
-				&mut self,
-				_: &uuid::Uuid,
-				_: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn get_cache_stats(
-				&mut self,
-				_: &uuid::Uuid,
+				&mut self, _: &uuid::Uuid,
 			) -> crate::database::error::DatabaseResult<CacheStats> {
 				Ok(Default::default())
 			}
 			async fn cleanup_stale_cache(
-				&mut self,
-				_: &uuid::Uuid,
-				_: u64,
+				&mut self, _: &uuid::Uuid, _: u64,
 			) -> crate::database::error::DatabaseResult<usize> {
 				Ok(0)
 			}
 			async fn list_directory_unified(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn get_unified_node(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<
 				Option<crate::database::types::FilesystemNode>,
 			> {
 				Ok(None)
 			}
 			async fn list_ancestors(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn list_descendants(
-				&mut self,
-				_: &std::path::Path,
+				&mut self, _: &std::path::Path,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])
 			}
 			async fn search_nodes(
-				&mut self,
-				_: &str,
+				&mut self, _: &str,
 			) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>
 			{
 				Ok(vec![])

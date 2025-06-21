@@ -301,10 +301,7 @@ impl WatcherError {
 
 	/// Create a filesystem error with path context
 	pub fn filesystem_error_with_path(
-		operation: &str,
-		path: &str,
-		cause: &str,
-		error_code: Option<i32>,
+		operation: &str, path: &str, cause: &str, error_code: Option<i32>,
 	) -> Self {
 		WatcherError::FilesystemError {
 			operation: operation.to_string(),
@@ -326,10 +323,7 @@ impl WatcherError {
 
 	/// Create a resource exhausted error with usage details
 	pub fn resource_exhausted_with_usage(
-		resource: &str,
-		details: &str,
-		current_usage: &str,
-		limit: &str,
+		resource: &str, details: &str, current_usage: &str, limit: &str,
 	) -> Self {
 		WatcherError::ResourceExhausted {
 			resource: resource.to_string(),
@@ -342,19 +336,12 @@ impl WatcherError {
 	/// Create a timeout error
 	pub fn timeout(operation: &str, timeout: Duration) -> Self {
 		let start_time = format!("{:?}", std::time::SystemTime::now());
-		WatcherError::Timeout {
-			operation: operation.to_string(),
-			timeout,
-			start_time,
-		}
+		WatcherError::Timeout { operation: operation.to_string(), timeout, start_time }
 	}
 
 	/// Create a configuration error
 	pub fn configuration_error(
-		parameter: &str,
-		reason: &str,
-		expected: &str,
-		actual: &str,
+		parameter: &str, reason: &str, expected: &str, actual: &str,
 	) -> Self {
 		WatcherError::ConfigurationError {
 			parameter: parameter.to_string(),
@@ -412,9 +399,7 @@ mod tests {
 		// Test that core error variants can be created
 		let io_error = WatcherError::Io(io::Error::new(io::ErrorKind::NotFound, "file not found"));
 		let channel_error = WatcherError::ChannelSend;
-		let invalid_path = WatcherError::InvalidPath {
-			path: "/invalid".to_string(),
-		};
+		let invalid_path = WatcherError::InvalidPath { path: "/invalid".to_string() };
 
 		// Test error messages
 		assert!(io_error.to_string().contains("IO error"));

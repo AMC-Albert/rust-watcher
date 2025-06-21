@@ -15,8 +15,7 @@ use uuid::Uuid;
 pub trait MultiWatchStorage: Send + Sync {
 	async fn store_watch_metadata(&mut self, metadata: &WatchMetadata) -> DatabaseResult<()>;
 	async fn get_watch_metadata(
-		&mut self,
-		watch_id: &Uuid,
+		&mut self, watch_id: &Uuid,
 	) -> DatabaseResult<Option<WatchMetadata>>;
 	async fn remove_watch(&mut self, watch_id: &Uuid) -> DatabaseResult<()>;
 	async fn store_shared_node(&mut self, shared_info: &SharedNodeInfo) -> DatabaseResult<()>;
@@ -65,8 +64,7 @@ impl MultiWatchDatabase {
 	}
 
 	pub async fn get_watch_metadata(
-		&self,
-		watch_id: &Uuid,
+		&self, watch_id: &Uuid,
 	) -> DatabaseResult<Option<WatchMetadata>> {
 		let read_txn = self.database.begin_read()?;
 		let table = read_txn.open_table(crate::database::storage::tables::WATCH_REGISTRY)?;
@@ -154,9 +152,7 @@ impl MultiWatchDatabase {
 	/// - TODO: Add journaling or two-phase commit for true atomicity if needed.
 	/// - TODO: Validate all input nodes before merge to avoid data loss.
 	pub async fn merge_nodes_to_shared(
-		&self,
-		path: &std::path::Path,
-		watch_ids: &[uuid::Uuid],
+		&self, path: &std::path::Path, watch_ids: &[uuid::Uuid],
 	) -> Result<(), String> {
 		use crate::database::types::{FilesystemNode, SharedNodeInfo, UnifiedNode};
 		use chrono::Utc;
@@ -206,12 +202,8 @@ impl MultiWatchDatabase {
 			let table = read_txn
 				.open_table(crate::database::storage::tables::WATCH_REGISTRY)
 				.map_err(|e| e.to_string())?;
-			if table
-				.get(&node_key[..])
-				.map_err(|e| e.to_string())?
-				.is_none()
-			{
-				return Err(format!("Watch ID not found: {}", watch_id));
+			if table.get(&node_key[..]).map_err(|e| e.to_string())?.is_none() {
+				return Err(format!("Watch ID not found: {watch_id}"));
 			}
 		}
 
@@ -221,9 +213,7 @@ impl MultiWatchDatabase {
 			let mut table = write_txn
 				.open_table(crate::database::storage::tables::SHARED_NODES)
 				.map_err(|e| e.to_string())?;
-			table
-				.insert(key.as_slice(), value.as_slice())
-				.map_err(|e| e.to_string())?;
+			table.insert(key.as_slice(), value.as_slice()).map_err(|e| e.to_string())?;
 		}
 		write_txn.commit().map_err(|e| e.to_string())?;
 		Ok(())
@@ -231,8 +221,7 @@ impl MultiWatchDatabase {
 
 	/// Detect overlap between two watches by root path (compatibility shim for legacy API)
 	pub async fn detect_overlap(
-		&self,
-		watch_a: &crate::database::storage::multi_watch::types::WatchMetadata,
+		&self, watch_a: &crate::database::storage::multi_watch::types::WatchMetadata,
 		watch_b: &crate::database::storage::multi_watch::types::WatchMetadata,
 	) -> crate::database::storage::multi_watch::types::WatchOverlap {
 		crate::database::storage::multi_watch::optimization::detect_overlap(watch_a, watch_b)
@@ -249,8 +238,7 @@ impl MultiWatchDatabase {
 	/// - No dynamic scheduling or load-based adaptation (TODO).
 	/// - No integration with performance monitoring (TODO).
 	pub fn start_optimization_scheduler(
-		self: std::sync::Arc<Self>,
-		interval: std::time::Duration,
+		self: std::sync::Arc<Self>, interval: std::time::Duration,
 		mut shutdown: tokio::sync::watch::Receiver<bool>,
 	) {
 		let db = self.clone();
