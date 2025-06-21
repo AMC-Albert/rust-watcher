@@ -38,6 +38,7 @@ async fn main() -> anyhow::Result<()> {
 	let move_config =
 		MoveDetectorConfig { timeout: Duration::from_millis(cli.timeout), ..Default::default() };
 	let config = WatcherConfig {
+		watch_id: uuid::Uuid::new_v4(), // Generate a unique watch ID for this session
 		path: cli.path,
 		recursive: cli.recursive,
 		move_detector_config: Some(move_config),

@@ -9,6 +9,7 @@ mod common;
 async fn test_basic_file_creation_detection() {
 	let temp_dir = common::setup_temp_dir();
 	let config = WatcherConfig {
+		watch_id: uuid::Uuid::new_v4(),
 		path: temp_dir.path().to_path_buf(),
 		recursive: true,
 		move_detector_config: None,
@@ -59,6 +60,7 @@ async fn test_file_move_detection_with_config() {
 	let temp_dir = common::setup_temp_dir();
 	let move_config = MoveDetectorConfig::with_timeout(2000);
 	let config = WatcherConfig {
+		watch_id: uuid::Uuid::new_v4(),
 		path: temp_dir.path().to_path_buf(),
 		recursive: true,
 		move_detector_config: Some(move_config),
@@ -111,6 +113,7 @@ async fn test_file_move_detection_with_config() {
 async fn test_recursive_directory_watching() {
 	let temp_dir = common::setup_temp_dir();
 	let config = WatcherConfig {
+		watch_id: uuid::Uuid::new_v4(),
 		path: temp_dir.path().to_path_buf(),
 		recursive: true,
 		move_detector_config: None,
@@ -163,6 +166,7 @@ async fn test_recursive_directory_watching() {
 async fn test_non_recursive_directory_watching() {
 	let temp_dir = common::setup_temp_dir();
 	let config = WatcherConfig {
+		watch_id: uuid::Uuid::new_v4(),
 		path: temp_dir.path().to_path_buf(),
 		recursive: false, // Non-recursive
 		move_detector_config: None,

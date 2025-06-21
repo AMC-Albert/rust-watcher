@@ -183,7 +183,7 @@ pub struct NodeMetadata {
 }
 
 /// Cache-specific metadata
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CacheInfo {
 	pub cached_at: DateTime<Utc>,
 	pub last_verified: DateTime<Utc>,
@@ -192,7 +192,7 @@ pub struct CacheInfo {
 }
 
 /// Computed properties for performance
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ComputedProperties {
 	pub depth_from_root: u16,
 	pub path_hash: u64,
@@ -501,6 +501,19 @@ impl NodeMetadata {
 			accessed_time: metadata.accessed().ok(),
 			permissions: 0, // Platform-specific implementation needed
 			inode: None,    // Platform-specific implementation needed
+			windows_id: None,
+		}
+	}
+}
+
+impl Default for NodeMetadata {
+	fn default() -> Self {
+		Self {
+			modified_time: std::time::SystemTime::UNIX_EPOCH,
+			created_time: Some(std::time::SystemTime::UNIX_EPOCH),
+			accessed_time: Some(std::time::SystemTime::UNIX_EPOCH),
+			permissions: 0,
+			inode: None,
 			windows_id: None,
 		}
 	}

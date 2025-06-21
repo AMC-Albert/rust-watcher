@@ -1,3 +1,6 @@
+use crate::database::storage::filesystem_cache::synchronizer::{
+	DefaultFilesystemCacheSynchronizer, FilesystemCacheSynchronizer,
+};
 use crate::database::storage::filesystem_cache::RedbFilesystemCache;
 use crate::database::{DatabaseAdapter, DatabaseConfig};
 use crate::error::{ErrorRecoveryConfig, Result, WatcherError};
@@ -14,6 +17,7 @@ use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone)]
 pub struct WatcherConfig {
+	pub watch_id: uuid::Uuid,
 	pub path: PathBuf,
 	pub recursive: bool,
 	pub move_detector_config: Option<MoveDetectorConfig>,
@@ -137,7 +141,7 @@ async fn run_watcher(
 
 	// Initialize persistent filesystem cache
 	let mut _dummy_tempdir = None;
-	let mut fs_cache = if let Some(cache) = database.get_filesystem_cache().await {
+	let fs_cache = if let Some(cache) = database.get_filesystem_cache().await {
 		cache
 	} else {
 		// Use a unique dummy DB file per watcher instance to avoid concurrency issues
@@ -150,8 +154,15 @@ async fn run_watcher(
 		cache
 	};
 
+	// Use a concrete type for the cache, not a trait object
+	let fs_cache = Arc::new(tokio::sync::Mutex::new(fs_cache));
 	let move_detector_config = config.move_detector_config.unwrap_or_default();
-	let mut move_detector = MoveDetector::new(move_detector_config, &mut fs_cache);
+	// Avoid temporary value drop by creating a binding for the lock guard
+	let mut fs_cache_guard = fs_cache.lock().await;
+	let mut move_detector = MoveDetector::new(move_detector_config, &mut *fs_cache_guard);
+	let cache_sync = Arc::new(tokio::sync::Mutex::new(
+		DefaultFilesystemCacheSynchronizer { cache: fs_cache.clone() },
+	));
 
 	// Initialize retry manager
 	let retry_config = config.error_recovery_config.unwrap_or_default();
@@ -198,8 +209,22 @@ async fn run_watcher(
 				break;
 			}
 			Some(event) = raw_event_rx.recv() => {
-				if let Err(e) = process_single_event(event.clone(), &mut move_detector, &database, &event_tx).await {
-					warn!("Failed to process filesystem event: {} - Event: {:?}", e, event);
+				let processed = match process_single_event(
+					&event,
+					&mut move_detector,
+					&database,
+					&event_tx,
+				).await {
+					Ok(events) => events,
+					Err(e) => {
+						warn!("Failed to process filesystem event: {} - Event: {:?}", e, event);
+						Vec::new()
+					}
+				};
+				// Synchronize cache for each processed event
+				let mut cache_sync_guard = cache_sync.lock().await;
+				for fs_event in &processed {
+					cache_sync_guard.handle_event(&config.watch_id, fs_event).await;
 				}
 			}
 			else => {
@@ -294,25 +319,15 @@ async fn setup_watcher_callback(
 
 /// Process a single filesystem event with proper error handling
 async fn process_single_event<'a>(
-	event: notify::Event, move_detector: &mut MoveDetector<'a>, database: &DatabaseAdapter,
+	event: &notify::Event, move_detector: &mut MoveDetector<'a>, database: &DatabaseAdapter,
 	event_tx: &mpsc::Sender<FileSystemEvent>,
-) -> Result<()> {
-	debug!(
-		"Raw filesystem event received: kind={:?}, paths={:?}",
-		event.kind, event.paths
-	);
-
-	for path in event.paths {
-		let fs_event = convert_notify_event(&event.kind, path, move_detector);
-		debug!(
-			"Converted to filesystem event: type={:?}, path={:?}, is_dir={}, size={:?}",
-			fs_event.event_type, fs_event.path, fs_event.is_directory, fs_event.size
-		);
-
-		// Store event in database if enabled
+) -> Result<Vec<FileSystemEvent>> {
+	let mut all_processed = Vec::new();
+	for path in &event.paths {
+		let fs_event = convert_notify_event(&event.kind, path.clone(), move_detector);
+		// Store event in database (needs reference)
 		if let Err(e) = database.store_event(&fs_event).await {
 			warn!("Failed to store event in database: {}", e);
-			// Continue processing even if database storage fails
 		}
 		// Store metadata if this is a create/write event
 		if matches!(fs_event.event_type, EventType::Create | EventType::Write) {
@@ -322,21 +337,18 @@ async fn process_single_event<'a>(
 				}
 			}
 		}
-
-		let processed_events = move_detector.process_event(fs_event).await;
-
+		// Move detector needs ownership
+		let processed_events = move_detector.process_event(fs_event.clone()).await;
 		for processed in processed_events {
-			// Log the final processed event
 			log_processed_event(&processed);
-
-			event_tx.send(processed).await.map_err(|_| {
+			event_tx.send(processed.clone()).await.map_err(|_| {
 				warn!("Event receiver dropped, ending processing loop.");
 				WatcherError::ChannelSend
 			})?;
+			all_processed.push(processed);
 		}
 	}
-
-	Ok(())
+	Ok(all_processed)
 }
 
 fn convert_notify_event(
@@ -434,6 +446,7 @@ mod tests {
 	fn test_watcher_config_creation() {
 		let temp_dir = TempDir::new().unwrap();
 		let config = WatcherConfig {
+			watch_id: uuid::Uuid::new_v4(),
 			path: temp_dir.path().to_path_buf(),
 			recursive: true,
 			move_detector_config: None,
@@ -451,6 +464,7 @@ mod tests {
 		let temp_dir = TempDir::new().unwrap();
 		let move_config = MoveDetectorConfig::default();
 		let config = WatcherConfig {
+			watch_id: uuid::Uuid::new_v4(),
 			path: temp_dir.path().to_path_buf(),
 			recursive: false,
 			move_detector_config: Some(move_config),
@@ -464,6 +478,7 @@ mod tests {
 	#[test]
 	fn test_start_with_invalid_path() {
 		let config = WatcherConfig {
+			watch_id: uuid::Uuid::new_v4(),
 			path: PathBuf::from("/nonexistent/path/that/should/not/exist"),
 			recursive: true,
 			move_detector_config: None,

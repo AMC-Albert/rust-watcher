@@ -10,6 +10,7 @@ mod common;
 async fn test_watcher_creation() {
 	let temp_dir = common::setup_temp_dir();
 	let config = WatcherConfig {
+		watch_id: uuid::Uuid::new_v4(),
 		path: temp_dir.path().to_path_buf(),
 		recursive: true,
 		move_detector_config: None,
@@ -32,6 +33,7 @@ async fn test_watcher_creation() {
 async fn test_watcher_basic_file_detection() {
 	let temp_dir = common::setup_temp_dir();
 	let config = WatcherConfig {
+		watch_id: uuid::Uuid::new_v4(),
 		path: temp_dir.path().to_path_buf(),
 		recursive: true,
 		move_detector_config: None,
@@ -86,6 +88,7 @@ async fn test_watcher_config_validation() {
 	let temp_dir = common::setup_temp_dir();
 	// Test valid config
 	let valid_config = WatcherConfig {
+		watch_id: uuid::Uuid::new_v4(),
 		path: temp_dir.path().to_path_buf(),
 		recursive: true,
 		move_detector_config: None,

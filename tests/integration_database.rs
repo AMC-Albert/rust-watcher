@@ -392,6 +392,7 @@ async fn test_watcher_with_database_integration() {
 	};
 
 	let config = WatcherConfig {
+		watch_id: uuid::Uuid::new_v4(),
 		path: watch_dir.clone(),
 		recursive: true,
 		move_detector_config: None,

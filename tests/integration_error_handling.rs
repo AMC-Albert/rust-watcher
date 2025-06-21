@@ -9,6 +9,7 @@ mod common;
 #[tokio::test]
 async fn test_watcher_invalid_path() {
 	let config = WatcherConfig {
+		watch_id: uuid::Uuid::new_v4(),
 		path: PathBuf::from("/nonexistent/invalid/path/that/should/not/exist"),
 		recursive: true,
 		move_detector_config: None,
@@ -31,6 +32,7 @@ async fn test_watcher_invalid_path() {
 async fn test_watcher_stop_after_start() {
 	let temp_dir = common::setup_temp_dir();
 	let config = WatcherConfig {
+		watch_id: uuid::Uuid::new_v4(),
 		path: temp_dir.path().to_path_buf(),
 		recursive: true,
 		move_detector_config: None,
@@ -50,6 +52,7 @@ async fn test_watcher_multiple_start_stop() {
 	let temp_dir = common::setup_temp_dir();
 	for i in 0..3 {
 		let config = WatcherConfig {
+			watch_id: uuid::Uuid::new_v4(),
 			path: temp_dir.path().to_path_buf(),
 			recursive: true,
 			move_detector_config: None,
