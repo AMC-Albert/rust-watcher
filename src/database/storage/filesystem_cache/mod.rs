@@ -1,13 +1,17 @@
-//! Filesystem cache module: public API and re-exports
+//! Filesystem cache module public API and re-exports
 //!
-//! This module coordinates filesystem cache storage, queries, and synchronization.
+//! This module provides the trait and implementation for the filesystem cache storage.
+//!
+//! Limitations:
+//! - Only ReDB backend is currently implemented.
+//! - Naive search and traversal; not suitable for very large datasets.
+//!
+//! TODO: Add alternative backends and improve search performance.
 
-pub mod implementation;
+mod implementation;
+pub use implementation::RedbFilesystemCache;
+
 pub mod trait_def;
-// pub mod query; // For Phase 3+
-// pub mod sync;  // For Phase 3+
+mod utils;
 
-pub use implementation::*;
-pub use trait_def::*;
-// pub use query::*;
-// pub use sync::*;
+// Tests are in tests.rs

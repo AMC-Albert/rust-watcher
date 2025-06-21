@@ -1,5 +1,15 @@
 //! Implementation of filesystem cache storage using ReDB
+//!
+//! This file contains only the RedbFilesystemCache struct and its impls.
+//! All helpers are imported from utils.rs.
+//!
+//! Limitations:
+//! - Naive search and traversal (O(N)), not suitable for very large datasets.
+//! - No alternative backends implemented yet.
+//!
+//! TODO: Refactor search to use indexed or batched queries for production use.
 
+use super::utils::{deserialize, key_to_bytes, serialize};
 use crate::database::error::DatabaseResult;
 use crate::database::storage::tables::{
 	MULTI_WATCH_FS_CACHE, MULTI_WATCH_HIERARCHY, PATH_PREFIX_TABLE, PATH_TO_WATCHES, SHARED_NODES,
@@ -55,23 +65,6 @@ impl RedbFilesystemCache {
 		path_hash
 	}
 
-	/// Serialize data to bytes
-	fn serialize<T: serde::Serialize>(data: &T) -> DatabaseResult<Vec<u8>> {
-		use crate::database::error::DatabaseError;
-		bincode::serialize(data).map_err(|e| DatabaseError::Serialization(e.to_string()))
-	}
-
-	/// Deserialize bytes to data
-	fn deserialize<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> DatabaseResult<T> {
-		use crate::database::error::DatabaseError;
-		bincode::deserialize(bytes).map_err(|e| DatabaseError::Deserialization(e.to_string()))
-	}
-
-	/// Convert key to bytes for storage
-	fn key_to_bytes(key: &WatchScopedKey) -> Vec<u8> {
-		Self::serialize(key).unwrap_or_default()
-	}
-
 	/// Helper: insert all path prefixes for a node into PATH_PREFIX_TABLE
 	fn index_path_prefixes(
 		write_txn: &redb::WriteTransaction,
@@ -82,7 +75,7 @@ impl RedbFilesystemCache {
 		let path = &node.path;
 		let path_hash = calculate_path_hash(path);
 		let scoped_key = Self::create_scoped_key(watch_id, path_hash);
-		let key_bytes = Self::key_to_bytes(&scoped_key);
+		let key_bytes = key_to_bytes(&scoped_key);
 		// Insert all parent prefixes (e.g., /a, /a/b, /a/b/c)
 		let mut prefix = Path::new("").to_path_buf();
 		for component in path.components() {
@@ -103,8 +96,8 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	) -> DatabaseResult<()> {
 		let path_hash = calculate_path_hash(&node.path);
 		let scoped_key = Self::create_scoped_key(watch_id, path_hash);
-		let key_bytes = Self::serialize(&scoped_key)?;
-		let node_bytes = Self::serialize(node)?;
+		let key_bytes = serialize(&scoped_key)?;
+		let node_bytes = serialize(node)?;
 
 		let write_txn = self.database.begin_write()?;
 		{
@@ -115,7 +108,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			// Update hierarchy relationships
 			if let Some(parent_hash) = node.computed.parent_hash {
 				let parent_key = Self::create_scoped_key(watch_id, parent_hash);
-				let parent_key_bytes = Self::serialize(&parent_key)?;
+				let parent_key_bytes = serialize(&parent_key)?;
 				let mut hierarchy_table = write_txn.open_multimap_table(MULTI_WATCH_HIERARCHY)?;
 				hierarchy_table.insert(parent_key_bytes.as_slice(), key_bytes.as_slice())?;
 			}
@@ -153,9 +146,9 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
 		let path_hash = calculate_path_hash(path);
 		let scoped_key = Self::create_scoped_key(watch_id, path_hash);
-		let key_bytes = Self::serialize(&scoped_key)?;
+		let key_bytes = serialize(&scoped_key)?;
 		let result = match fs_cache_table.get(key_bytes.as_slice())? {
-			Some(bytes) => Some(Self::deserialize(bytes.value())?),
+			Some(bytes) => Some(deserialize(bytes.value())?),
 			None => None,
 		};
 		Ok(result)
@@ -168,7 +161,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	) -> DatabaseResult<Vec<FilesystemNode>> {
 		let parent_hash = calculate_path_hash(parent_path);
 		let parent_key = Self::create_scoped_key(watch_id, parent_hash);
-		let parent_key_bytes = Self::serialize(&parent_key)?;
+		let parent_key_bytes = serialize(&parent_key)?;
 
 		let read_txn = self.database.begin_read()?;
 		let hierarchy_table = read_txn.open_multimap_table(MULTI_WATCH_HIERARCHY)?;
@@ -181,7 +174,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		for child_key_result in child_iter {
 			let child_key = child_key_result?;
 			if let Some(node_bytes) = fs_cache_table.get(child_key.value())? {
-				let node: FilesystemNode = Self::deserialize(node_bytes.value())?;
+				let node: FilesystemNode = deserialize(node_bytes.value())?;
 				nodes.push(node);
 			}
 		}
@@ -194,7 +187,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		{
 			let mut watch_registry = write_txn.open_table(WATCH_REGISTRY)?;
 			let key = metadata.watch_id.as_bytes();
-			watch_registry.insert(key.as_slice(), Self::serialize(metadata)?.as_slice())?;
+			watch_registry.insert(key.as_slice(), serialize(metadata)?.as_slice())?;
 		}
 		write_txn.commit()?;
 		Ok(())
@@ -208,7 +201,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		let watch_registry = read_txn.open_table(WATCH_REGISTRY)?;
 		let key = watch_id.as_bytes();
 		let result = match watch_registry.get(key.as_slice())? {
-			Some(bytes) => Some(Self::deserialize(bytes.value())?),
+			Some(bytes) => Some(deserialize(bytes.value())?),
 			None => None,
 		};
 		Ok(result)
@@ -230,7 +223,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		{
 			let mut shared_table = write_txn.open_table(SHARED_NODES)?;
 			let key = shared_info.node.computed.path_hash.to_le_bytes();
-			shared_table.insert(key.as_slice(), Self::serialize(shared_info)?.as_slice())?;
+			shared_table.insert(key.as_slice(), serialize(shared_info)?.as_slice())?;
 		}
 		write_txn.commit()?;
 		Ok(())
@@ -241,7 +234,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		let shared_table = read_txn.open_table(SHARED_NODES)?;
 		let key = path_hash.to_le_bytes();
 		let result = match shared_table.get(key.as_slice())? {
-			Some(bytes) => Some(Self::deserialize(bytes.value())?),
+			Some(bytes) => Some(deserialize(bytes.value())?),
 			None => None,
 		};
 		Ok(result)
@@ -258,8 +251,8 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			for node in nodes {
 				let path_hash = calculate_path_hash(&node.path);
 				let scoped_key = Self::create_scoped_key(watch_id, path_hash);
-				let key_bytes = Self::serialize(&scoped_key)?;
-				fs_cache_table.insert(key_bytes.as_slice(), Self::serialize(node)?.as_slice())?;
+				let key_bytes = serialize(&scoped_key)?;
+				fs_cache_table.insert(key_bytes.as_slice(), serialize(node)?.as_slice())?;
 				Self::index_path_prefixes(&write_txn, node, watch_id)?;
 			}
 		}
@@ -279,7 +272,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		for entry in path_prefix_table.get(prefix_str.as_bytes())? {
 			let entry = entry?;
 			let value = entry.value();
-			let node: FilesystemNode = Self::deserialize(value)?;
+			let node: FilesystemNode = deserialize(value)?;
 			result.push(node);
 		}
 		Ok(result)
@@ -298,7 +291,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		for entry in fs_cache_table.iter()? {
 			let (key, value) = entry?;
 			total_bytes += key.value().len() as u64 + value.value().len() as u64;
-			let node: FilesystemNode = Self::deserialize(value.value())?;
+			let node: FilesystemNode = deserialize(value.value())?;
 			total_nodes += 1;
 			match node.node_type {
 				crate::database::types::NodeType::Directory { .. } => directories += 1,
@@ -332,7 +325,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			let mut keys_to_delete = Vec::new();
 			for entry in fs_cache_table.iter()? {
 				let (key, value) = entry?;
-				let node: FilesystemNode = Self::deserialize(value.value())?;
+				let node: FilesystemNode = deserialize(value.value())?;
 				let cached_at = node.cache_info.cached_at.timestamp() as u64;
 				if now - cached_at > max_age_seconds {
 					// Clone the key for removal after iteration
@@ -374,7 +367,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 				Err(_) => continue, // skip corrupt entries
 			};
 			let parent_key = Self::create_scoped_key(&watch_id, parent_hash);
-			let parent_key_bytes = Self::serialize(&parent_key)?;
+			let parent_key_bytes = serialize(&parent_key)?;
 			if let Ok(mut child_iter) = hierarchy_table.get(parent_key_bytes.as_slice()) {
 				for child_key_result in &mut child_iter {
 					let child_key = match child_key_result {
@@ -382,7 +375,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 						Err(_) => continue,
 					};
 					if let Some(node_bytes) = fs_cache_table.get(child_key.as_slice())? {
-						let node: FilesystemNode = match Self::deserialize(node_bytes.value()) {
+						let node: FilesystemNode = match deserialize(node_bytes.value()) {
 							Ok(n) => n,
 							Err(_) => continue,
 						};
@@ -395,7 +388,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		}
 
 		// 2. Also scan shared nodes for this parent (legacy support, if any)
-		let shared_key_bytes = Self::serialize(&parent_hash)?;
+		let shared_key_bytes = serialize(&parent_hash)?;
 		if let Ok(mut values) = hierarchy_table.get(shared_key_bytes.as_slice()) {
 			for result in &mut values {
 				let access_guard = match result {
@@ -404,11 +397,10 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 				};
 				let child_key_bytes = access_guard.value();
 				if let Some(child_node_bytes) = fs_cache_table.get(child_key_bytes)? {
-					let child_node: FilesystemNode =
-						match Self::deserialize(child_node_bytes.value()) {
-							Ok(node) => node,
-							Err(_) => continue,
-						};
+					let child_node: FilesystemNode = match deserialize(child_node_bytes.value()) {
+						Ok(node) => node,
+						Err(_) => continue,
+					};
 					if seen_paths.insert(child_node.path.clone()) {
 						children.push(child_node);
 					}
@@ -429,7 +421,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
 		for entry in fs_cache_table.iter()? {
 			let (_key, value) = entry?;
-			let node: FilesystemNode = Self::deserialize(value.value())?;
+			let node: FilesystemNode = deserialize(value.value())?;
 			if node.path == path {
 				return Ok(Some(node));
 			}
@@ -456,7 +448,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 					let mut found = None;
 					for entry in fs_cache_table.iter()? {
 						let (_key, value) = entry?;
-						let candidate: FilesystemNode = Self::deserialize(value.value())?;
+						let candidate: FilesystemNode = deserialize(value.value())?;
 						if candidate.computed.path_hash == hash {
 							found = Some(candidate);
 							break;
@@ -513,7 +505,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		let mut results = Vec::new();
 		for entry in fs_cache_table.iter()? {
 			let (_key, value) = entry?;
-			let node: FilesystemNode = Self::deserialize(value.value())?;
+			let node: FilesystemNode = deserialize(value.value())?;
 			if matcher.is_match(node.path.to_string_lossy().as_ref()) {
 				results.push(node);
 			}
@@ -521,5 +513,3 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		Ok(results)
 	}
 }
-
-// ...move serialization notes and tests to a separate file or keep #[cfg(test)] here if small...
