@@ -8,6 +8,7 @@ use crate::database::storage::tables::{
 use crate::database::types::{
 	calculate_path_hash, FilesystemNode, SharedNodeInfo, WatchMetadata, WatchScopedKey,
 };
+use globset::Glob;
 use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -496,6 +497,28 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			}
 		}
 		Ok(descendants)
+	}
+
+	/// Pattern-based search for nodes (e.g., glob, regex).
+	///
+	/// Returns all nodes matching the given pattern.
+	/// This implementation is naive and scans all nodes. Performance will degrade with large caches.
+	/// TODO: Replace with indexed or batched search for production use.
+	async fn search_nodes(&mut self, pattern: &str) -> DatabaseResult<Vec<FilesystemNode>> {
+		let glob = Glob::new(pattern)
+			.map_err(|e| crate::database::error::DatabaseError::Other(e.to_string()))?;
+		let matcher = glob.compile_matcher();
+		let read_txn = self.database.begin_read()?;
+		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
+		let mut results = Vec::new();
+		for entry in fs_cache_table.iter()? {
+			let (_key, value) = entry?;
+			let node: FilesystemNode = Self::deserialize(value.value())?;
+			if matcher.is_match(node.path.to_string_lossy().as_ref()) {
+				results.push(node);
+			}
+		}
+		Ok(results)
 	}
 }
 

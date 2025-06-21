@@ -57,6 +57,9 @@ pub enum DatabaseError {
 
 	#[error("Invalid configuration: {0}")]
 	InvalidConfiguration(String),
+
+	#[error("Other error: {0}")]
+	Other(String),
 }
 
 impl DatabaseError {

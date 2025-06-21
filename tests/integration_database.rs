@@ -755,10 +755,7 @@ async fn test_persistent_per_event_type_stats() {
 	assert_eq!(stats.per_type_counts.get("Create"), Some(&2));
 	assert_eq!(stats.per_type_counts.get("Delete"), Some(&2));
 	assert_eq!(stats.per_type_counts.get("Modify"), Some(&1));
-}
 
-#[cfg(test)]
-#[tokio::test]
-async fn cleanup_test_artifacts_dir() {
-	crate::common::cleanup_test_artifacts();
+	// Explicitly drop storage before temp_dir goes out of scope to avoid file lock issues
+	drop(storage);
 }
