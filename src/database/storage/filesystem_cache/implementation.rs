@@ -690,6 +690,18 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		// TODO: Implement a file name or extension index if suffix/infix search is a production requirement.
 		Ok(results)
 	}
+
+	async fn list_ancestors(
+		&mut self, path: &std::path::Path,
+	) -> DatabaseResult<Vec<FilesystemNode>> {
+		self.list_ancestors_modular(path).await
+	}
+
+	async fn list_descendants(
+		&mut self, path: &std::path::Path,
+	) -> DatabaseResult<Vec<FilesystemNode>> {
+		self.list_descendants_modular(path).await
+	}
 }
 
 // End of FilesystemCacheStorage trait impl

@@ -128,6 +128,13 @@ impl FilesystemCacheStorage for DummyCache {
 	) -> rust_watcher::database::error::DatabaseResult<()> {
 		Ok(())
 	}
+	async fn get_node(
+		&mut self, _watch_id: &uuid::Uuid, _path: &std::path::Path,
+	) -> rust_watcher::database::error::DatabaseResult<
+		Option<rust_watcher::database::types::FilesystemNode>,
+	> {
+		Ok(None)
+	}
 }
 
 #[test]

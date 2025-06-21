@@ -564,6 +564,13 @@ mod tests {
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
+			async fn get_node(
+				&mut self, _watch_id: &uuid::Uuid, _path: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
+			}
 		}
 		let mut dummy_cache = DummyCache;
 		let detector = MoveDetector::new(config, &mut dummy_cache);
@@ -689,6 +696,13 @@ mod tests {
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
+			async fn get_node(
+				&mut self, _watch_id: &uuid::Uuid, _path: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
+			}
 		}
 		let mut dummy_cache = DummyCache;
 		let detector = MoveDetector::with_timeout(5000, &mut dummy_cache);
@@ -809,6 +823,13 @@ mod tests {
 				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
+			}
+			async fn get_node(
+				&mut self, _watch_id: &uuid::Uuid, _path: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
 			}
 		}
 		let mut dummy_cache = DummyCache;
@@ -941,6 +962,13 @@ mod tests {
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
+			async fn get_node(
+				&mut self, _watch_id: &uuid::Uuid, _path: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
+			}
 		}
 		let mut dummy_cache = DummyCache;
 		let detector = MoveDetector::new(config, &mut dummy_cache);
@@ -1064,6 +1092,13 @@ mod tests {
 				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
+			}
+			async fn get_node(
+				&mut self, _watch_id: &uuid::Uuid, _path: &std::path::Path,
+			) -> crate::database::error::DatabaseResult<
+				Option<crate::database::types::FilesystemNode>,
+			> {
+				Ok(None)
 			}
 		}
 		let mut dummy_cache = DummyCache;

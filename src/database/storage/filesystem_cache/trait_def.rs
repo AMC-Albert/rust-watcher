@@ -60,60 +60,32 @@ pub trait FilesystemCacheStorage: Send + Sync {
 	// === Phase 3: Unified and Hierarchical Queries ===
 
 	/// List directory contents across all watches (unified view).
-	///
-	/// Returns all nodes that are direct children of the given path, regardless of watch.
-	/// Default impl is a stub; see RedbFilesystemCache for production implementation.
 	async fn list_directory_unified(
-		&mut self, _parent_path: &std::path::Path,
-	) -> DatabaseResult<Vec<FilesystemNode>> {
-		unimplemented!("list_directory_unified: not implemented in this backend");
-	}
+		&mut self, parent_path: &std::path::Path,
+	) -> DatabaseResult<Vec<FilesystemNode>>;
 
 	/// Get a unified node view for a given path (across all watches).
-	///
-	/// Returns the most relevant node (shared or watch-specific) for the path.
-	/// Default impl is a stub; see RedbFilesystemCache for production implementation.
 	async fn get_unified_node(
-		&mut self, _path: &std::path::Path,
-	) -> DatabaseResult<Option<FilesystemNode>> {
-		unimplemented!("get_unified_node: not implemented in this backend");
-	}
+		&mut self, path: &std::path::Path,
+	) -> DatabaseResult<Option<FilesystemNode>>;
 
 	/// List all ancestor nodes for a given path (up to root).
-	///
-	/// Returns the chain of parent nodes, for hierarchical queries.
-	/// Default impl is a stub; see RedbFilesystemCache for production implementation.
 	async fn list_ancestors(
-		&mut self, _path: &std::path::Path,
-	) -> DatabaseResult<Vec<FilesystemNode>> {
-		unimplemented!("list_ancestors: not implemented in this backend");
-	}
+		&mut self, path: &std::path::Path,
+	) -> DatabaseResult<Vec<FilesystemNode>>;
 
 	/// List all descendant nodes for a given path (subtree query).
-	///
-	/// Returns all nodes under the given path, recursively.
-	/// Default impl is a stub; see RedbFilesystemCache for production implementation.
 	async fn list_descendants(
-		&mut self, _path: &std::path::Path,
-	) -> DatabaseResult<Vec<FilesystemNode>> {
-		unimplemented!("list_descendants: not implemented in this backend");
-	}
+		&mut self, path: &std::path::Path,
+	) -> DatabaseResult<Vec<FilesystemNode>>;
 
 	/// Pattern-based search for nodes (e.g., glob, regex).
-	///
-	/// Returns all nodes matching the given pattern. Default impl is a stub; see RedbFilesystemCache for production implementation.
-	async fn search_nodes(&mut self, _pattern: &str) -> DatabaseResult<Vec<FilesystemNode>> {
-		unimplemented!("search_nodes: not implemented in this backend");
-	}
+	async fn search_nodes(&mut self, pattern: &str) -> DatabaseResult<Vec<FilesystemNode>>;
 
 	/// Retrieve a single filesystem node for a specific watch (single-node query).
-	///
-	/// Returns the node if present, or None if not found. Default impl is a stub; see RedbFilesystemCache for production implementation.
 	async fn get_node(
-		&mut self, _watch_id: &Uuid, _path: &Path,
-	) -> DatabaseResult<Option<FilesystemNode>> {
-		unimplemented!("get_node: not implemented in this backend");
-	}
+		&mut self, watch_id: &Uuid, path: &Path,
+	) -> DatabaseResult<Option<FilesystemNode>>;
 
 	/// Remove a single filesystem node for a specific watch
 	async fn remove_filesystem_node(
