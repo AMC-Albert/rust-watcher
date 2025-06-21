@@ -90,6 +90,9 @@ const PARENT_LOOKUP_TABLE: TableDefinition<&[u8], &[u8]> =
 // Path prefix index for efficient subtree operations
 const PATH_PREFIX_TABLE: MultimapTableDefinition<&[u8], &[u8]> = 
     MultimapTableDefinition::new("path_prefix");
+
+// Extension index for efficient suffix search
+const EXTENSION_INDEX: MultimapTableDefinition<&[u8], &[u8]> = MultimapTableDefinition::new("extension_index");
 ```
 
 ### Core Data Structures
@@ -240,6 +243,11 @@ pub enum FilesystemKey {
 - **Value**: Path hashes at that depth
 - **Use**: Level-order tree traversal and depth-limited operations
 
+### 6. Extension Index (Multimap)
+- **Key**: File extension (e.g., "txt")
+- **Value**: Full paths with this extension
+- **Use**: Efficient suffix search for file types
+
 ## Query Patterns
 
 ### Directory Listing
@@ -305,6 +313,9 @@ async fn get_path_chain(&self, path: &Path) -> Result<Vec<FilesystemNode>> {
     Ok(chain)
 }
 ```
+
+### Suffix Search
+Efficient suffix (file extension) search is implemented using EXTENSION_INDEX. Patterns like `*.txt` are O(1) for lookup. Only true infix/substring patterns (e.g., `*foo*`) require a full scan.
 
 ## Performance Optimizations
 

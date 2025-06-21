@@ -126,6 +126,13 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 					unified_index
 						.insert(path_hash.to_le_bytes().as_slice(), node_bytes.as_slice())?;
 				}
+
+				// Update extension index for suffix search
+				if let Some(ext) = node.path.extension().and_then(|e| e.to_str()) {
+					let mut ext_index = write_txn
+						.open_multimap_table(crate::database::storage::tables::EXTENSION_INDEX)?;
+					ext_index.insert(ext.as_bytes(), key_bytes.as_slice())?;
+				}
 			} // <-- All table borrows dropped here
 
 			// --- Incremental stats update: per-watch and per-path ---
@@ -495,6 +502,12 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			let mut prefix_table = write_txn.open_multimap_table(PATH_PREFIX_TABLE)?;
 			let prefix_str = canonical.to_string_lossy();
 			prefix_table.remove(prefix_str.as_bytes(), key_bytes.as_slice())?;
+			// Remove from extension index
+			if let Some(ext) = canonical.extension().and_then(|e| e.to_str()) {
+				let mut ext_index = write_txn
+					.open_multimap_table(crate::database::storage::tables::EXTENSION_INDEX)?;
+				ext_index.remove(ext.as_bytes(), key_bytes.as_slice())?;
+			}
 			// All table borrows dropped here
 		}
 		// --- Incremental stats update: per-watch and per-path (removal) ---
@@ -568,6 +581,17 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 				let new_prefix_str = new_canonical.to_string_lossy();
 				prefix_table.remove(old_prefix_str.as_bytes(), old_key_bytes.as_slice())?;
 				prefix_table.insert(new_prefix_str.as_bytes(), new_key_bytes.as_slice())?;
+				// Update extension index: remove old, add new if changed
+				if let Some(old_ext) = old_canonical.extension().and_then(|e| e.to_str()) {
+					let mut ext_index = write_txn
+						.open_multimap_table(crate::database::storage::tables::EXTENSION_INDEX)?;
+					ext_index.remove(old_ext.as_bytes(), old_key_bytes.as_slice())?;
+				}
+				if let Some(new_ext) = new_canonical.extension().and_then(|e| e.to_str()) {
+					let mut ext_index = write_txn
+						.open_multimap_table(crate::database::storage::tables::EXTENSION_INDEX)?;
+					ext_index.insert(new_ext.as_bytes(), new_key_bytes.as_slice())?;
+				}
 			}
 		}
 		// --- Incremental stats update: per-watch and per-path (move/rename) ---
@@ -601,8 +625,6 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			.map_err(|e| crate::database::error::DatabaseError::Other(e.to_string()))?;
 		let matcher = glob.compile_matcher();
 
-		// If the pattern is a simple prefix (e.g., "foo*"), use PATH_PREFIX_TABLE for efficiency.
-		// Otherwise, fall back to O(N) scan. This is a pragmatic compromise until a secondary index is implemented.
 		let is_prefix = !pattern.contains('?')
 			&& !pattern.contains('[')
 			&& !pattern.contains(']')
@@ -610,6 +632,13 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			&& !pattern.contains('}')
 			&& pattern.ends_with('*')
 			&& !pattern[..pattern.len() - 1].contains('*');
+		let is_suffix = pattern.starts_with("*.")
+			&& !pattern[2..].contains('*')
+			&& !pattern.contains('?')
+			&& !pattern.contains('[')
+			&& !pattern.contains(']')
+			&& !pattern.contains('{')
+			&& !pattern.contains('}');
 		let mut results = Vec::new();
 		if is_prefix {
 			// Remove trailing '*' for prefix
@@ -619,10 +648,28 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 				let entry = entry?;
 				let value = entry.value();
 				let node: FilesystemNode = utils::deserialize(value)?;
-				// Defensive: still check the pattern in case of false positives
 				if let Some(fname) = node.path.file_name().and_then(OsStr::to_str) {
 					if matcher.is_match(fname) {
 						results.push(node);
+					}
+				}
+			}
+		} else if is_suffix {
+			// Suffix pattern: '*.ext' (no wildcards in ext)
+			let ext = &pattern[2..];
+			let ext_index =
+				read_txn.open_multimap_table(crate::database::storage::tables::EXTENSION_INDEX)?;
+			for entry in ext_index.get(ext.as_bytes())? {
+				let entry = entry?;
+				let key_bytes = entry.value();
+				// Look up the node in the main table
+				let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
+				if let Some(node_bytes) = fs_cache_table.get(key_bytes)? {
+					let node: FilesystemNode = utils::deserialize(node_bytes.value())?;
+					if let Some(fname) = node.path.file_name().and_then(OsStr::to_str) {
+						if matcher.is_match(fname) {
+							results.push(node);
+						}
 					}
 				}
 			}
@@ -639,7 +686,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 				}
 			}
 		}
-		// NOTE: This does not support efficient suffix/infix search. For large datasets, a secondary index on canonical_name or extension is required.
+		// NOTE: True infix/substring search (e.g., '*foo*') is still O(N). A substring index is not implemented due to complexity and questionable value for most workloads.
 		// TODO: Implement a file name or extension index if suffix/infix search is a production requirement.
 		Ok(results)
 	}

@@ -23,6 +23,10 @@ pub const INDEXES_TABLE: MultimapTableDefinition<&[u8], &[u8]> =
 pub const EVENTS_LOG_TABLE: MultimapTableDefinition<&[u8], &[u8]> =
 	MultimapTableDefinition::new("events_log");
 
+/// File extension index for efficient suffix search (extension -> node key)
+pub const EXTENSION_INDEX: redb::MultimapTableDefinition<&[u8], &[u8]> =
+	redb::MultimapTableDefinition::new("extension_index");
+
 // ===== Filesystem Cache Tables =====
 
 /// Primary filesystem cache table (path_hash -> FilesystemNode)
@@ -102,7 +106,7 @@ pub const MULTI_WATCH_TABLES: &[&str] = &[
 	"shared_nodes",
 	"watch_registry",
 	"path_to_watches",
-	"watch_transactions", // Added for transaction coordination
+	"watch_transactions",
 ];
 pub const MAINTENANCE_TABLES: &[&str] = &["stats", "maintenance_log", "watch_stats", "path_stats"];
 
@@ -120,7 +124,7 @@ pub const ALL_TABLES: &[&str] = &[
 	"shared_nodes",
 	"watch_registry",
 	"path_to_watches",
-	"watch_transactions", // Added for transaction coordination
+	"watch_transactions",
 	"stats",
 	"maintenance_log",
 	"watch_stats",
