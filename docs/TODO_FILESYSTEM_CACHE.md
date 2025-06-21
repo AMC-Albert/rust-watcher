@@ -106,10 +106,11 @@
 ## Phase 3: Filesystem Cache API
 
 ### 3.1 Query Interface
-- [ ] Implement single-watch filesystem queries (`list_directory_for_watch`, `get_node`)
-- [ ] Add unified cross-watch queries (`list_directory_unified`, `get_unified_node`) *(partially done, but needs full coverage)*
-- [ ] Create hierarchical operations (ancestors, descendants, subtree) *(partially done)*
-- [ ] Add pattern-based search and filtering
+- [x] Implement single-watch filesystem queries (`list_directory_for_watch`)
+- [ ] Add single-node query (`get_node`)  # TODO: Not yet implemented
+- [x] Add unified cross-watch queries (`list_directory_unified`, `get_unified_node`)
+- [x] Create hierarchical operations (ancestors, descendants, subtree)
+- [ ] Add pattern-based search and filtering  # Partial: stub and partial impl exist, not robust
 
 ### 3.2 Cache Synchronization
 - [ ] Integrate with existing file watcher events
