@@ -74,6 +74,7 @@
 | Multi-watch test infra       | Complete    | Scaffolded and passing basic checks                                                         |
 | Stress tests                 | Complete    | Scaffolded and passing basic checks                                                         |
 | Multi-watch core             | In progress | Persistent transaction coordination, watch creation, permissions, and tree scan implemented |
+| Multi-watch concurrency tests   | Complete    | Integration test for concurrent registration/removal passes (June 2025)                |
 
 ---
 
