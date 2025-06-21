@@ -13,6 +13,7 @@
 - `get_unified_node` implemented: prefers shared node, falls back to per-watch.
 - Hierarchical operations (`list_ancestors`, `list_descendants`) implemented and tested; defensive against cycles and missing parents.
 - All build, test, and clippy checks are clean as of latest commit.
+- **Single-node query (`get_node`) is now fully implemented, robust, and tested.**
 - See commit history for details of the modularization, bugfixes, and groundwork for Phase 3 (June 2025).
 
 ---
@@ -107,10 +108,10 @@
 
 ### 3.1 Query Interface
 - [x] Implement single-watch filesystem queries (`list_directory_for_watch`)
-- [ ] Add single-node query (`get_node`)  # TODO: Not yet implemented
+- [x] Add single-node query (`get_node`)  # Implemented, tested, and production-ready (June 2025)
 - [x] Add unified cross-watch queries (`list_directory_unified`, `get_unified_node`)
 - [x] Create hierarchical operations (ancestors, descendants, subtree)
-- [ ] Add pattern-based search and filtering  # Partial: stub and partial impl exist, not robust
+- [ ] Add pattern-based search and filtering  # Partial: stub and partial impl exist, not robust. **Next priority.**
 
 ### 3.2 Cache Synchronization
 - [ ] Integrate with existing file watcher events

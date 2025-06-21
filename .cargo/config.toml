@@ -2,6 +2,7 @@
 [build]
 # Use moderate parallelism for good build performance
 jobs = 4
+rustc-wrapper = "./sccache.exe"  # Uncomment if you have sccache.exe in the project root
 
 [env]
 # Standard test configuration

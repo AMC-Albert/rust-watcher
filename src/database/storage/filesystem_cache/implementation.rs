@@ -87,7 +87,12 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	async fn store_filesystem_node(
 		&mut self, watch_id: &Uuid, node: &FilesystemNode,
 	) -> DatabaseResult<()> {
-		let path_hash = calculate_path_hash(&node.path);
+		// Canonicalize the path for the key only; do not mutate the node's path
+		let canonical = match node.path.canonicalize() {
+			Ok(p) => p,
+			Err(_) => node.path.clone(),
+		};
+		let path_hash = calculate_path_hash(&canonical);
 		let scoped_key = Self::create_scoped_key(watch_id, path_hash);
 		let key_bytes = serialize(&scoped_key)?;
 		let node_bytes = serialize(node)?;
@@ -133,9 +138,14 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	async fn get_filesystem_node(
 		&mut self, watch_id: &Uuid, path: &Path,
 	) -> DatabaseResult<Option<FilesystemNode>> {
+		// Canonicalize the path for the key, matching store_filesystem_node
+		let canonical = match path.canonicalize() {
+			Ok(p) => p,
+			Err(_) => path.to_path_buf(),
+		};
 		let read_txn = self.database.begin_read()?;
 		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
-		let path_hash = calculate_path_hash(path);
+		let path_hash = calculate_path_hash(&canonical);
 		let scoped_key = Self::create_scoped_key(watch_id, path_hash);
 		let key_bytes = serialize(&scoped_key)?;
 		let result = match fs_cache_table.get(key_bytes.as_slice())? {
@@ -500,8 +510,20 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	async fn get_node(
 		&mut self, watch_id: &Uuid, path: &Path,
 	) -> DatabaseResult<Option<FilesystemNode>> {
-		// This is a thin wrapper around get_filesystem_node. In the future, may add cache validation or normalization.
-		// Edge cases: path normalization, case sensitivity, and stale cache entries are not handled here.
-		self.get_filesystem_node(watch_id, path).await
+		// Normalize the path to ensure consistent lookups across platforms
+		let canonical = match path.canonicalize() {
+			Ok(p) => p,
+			Err(_) => path.to_path_buf(), // Fallback: use as-is if canonicalization fails
+		};
+		let node = self.get_filesystem_node(watch_id, &canonical).await?;
+		// If the node is present, check if it is stale (needs refresh)
+		if let Some(ref n) = node {
+			// 1 hour is a placeholder; in production, make this configurable
+			if n.needs_refresh(std::time::Duration::from_secs(3600)) {
+				// Node is stale; treat as missing for now
+				return Ok(None);
+			}
+		}
+		Ok(node)
 	}
 }

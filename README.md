@@ -240,3 +240,16 @@ See `TODO_FILESYSTEM_CACHE.md` for detailed development roadmap.
 ## License
 
 This project is licensed under the MIT License.
+
+## Optional: Build Acceleration with sccache
+
+This project uses [sccache](https://github.com/mozilla/sccache) by default for faster incremental builds. If `sccache.exe` is present in the project root, it will be used automatically for all Rust builds.
+
+- If you do not want to use `sccache`, comment out or remove the `rustc-wrapper` line in `.cargo/config.toml`.
+- If `sccache.exe` is missing, builds will fail unless you opt out as above.
+- Builds are correct with or without `sccache`, but incremental builds are faster with it.
+
+**Note:**
+- `sccache.exe` is not included in version control (see `.gitignore`).
+- Each maintainer is responsible for installing or downloading `sccache` if they want to use it.
+- This is an optional optimization and not required for correctness.
