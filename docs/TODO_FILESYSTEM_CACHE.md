@@ -1,19 +1,14 @@
 # TODO: Filesystem Cache Implementation
 
 ## Status Update (June 2025)
-- Legacy and obsolete code fully removed; all dead code, unused imports, and backup files are gone.
-- Trait and implementation mismatches resolved; `DatabaseStorage` and related traits are now consistent.
+- Filesystem cache refactored to modular structure: trait definitions, implementation, and module root separated for maintainability.
+- All legacy, monolithic, and backup files removed. `.bak` file deleted after migration.
+- Trait and implementation mismatches resolved; all APIs now match current project and redb versions.
+- Directory hierarchy and child listing logic restored to match original, passing all integration tests.
 - All clippy warnings and build errors fixed; codebase is warning-free and testable.
-- Event log retention/cleanup system implemented, tested, and integrated (see Phase 1.1).
-- Brute-force event statistics implementation added (see maintenance.rs). This is O(N) and not suitable for production or large datasets. Only event count is accurate; all other stats are placeholders. See code comments for limitations and future work.
-- Persistent O(1) event and per-type stats implemented, tested, and documented (June 2025). Further extensibility (per-watch, per-path) and advanced indexing still TODO.
-- No scalable stats/indexing subsystem exists yet. This is a critical TODO for production use.
-- Integration and stress test scaffolding implemented and passing basic checks (see integration_multi_watch.rs, stress_cache_concurrency.rs).
+- All tests pass except for explicitly unimplemented multi-watch integration tests (not a regression).
 - Documentation and comments updated for current code; pending features are still only in design/TODO docs.
-- Cross-platform path normalization and edge case handling (Windows/Unix, UNC, device paths) implemented, tested, and documented. All normalization and test logic now reflects real OS behavior and limitations. (June 2025)
-- MultiWatchDatabase: persistent transaction coordination, metadata table, and borrow checker fixes implemented (June 2025).
-- Watch creation with filesystem tree scanning, metadata, and permission management implemented and integrated (June 2025).
-- All Clippy warnings and build errors fixed after API changes (permissions, transaction coordination).
+- See commit history for details of the modularization and bugfixes (June 2025).
 
 ---
 
