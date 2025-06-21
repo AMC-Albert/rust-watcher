@@ -1,3 +1,4 @@
+use crate::database::path_utils::paths_equal;
 use crate::move_detection::events::PendingEventsStorage;
 use crate::move_detection::metadata::MetadataCache;
 use std::path::Path;
@@ -76,16 +77,26 @@ impl PathTypeInference {
 			.values()
 			.flatten()
 			.chain(pending_events.creates_no_size.iter())
-			.any(|pending| pending.event.path.parent() == Some(path));
+			.any(|pending| {
+				if let Some(parent) = pending.event.path.parent() {
+					paths_equal(parent, path)
+				} else {
+					false
+				}
+			});
 
 		if has_children_in_pending {
 			return Some(true); // Has children, likely a directory
 		}
 
 		// Check recently cached paths for children
-		let has_children_in_cache = metadata_cache
-			.paths()
-			.any(|cached_path| cached_path.parent() == Some(path));
+		let has_children_in_cache = metadata_cache.paths().any(|cached_path| {
+			if let Some(parent) = cached_path.parent() {
+				paths_equal(parent, path)
+			} else {
+				false
+			}
+		});
 
 		if has_children_in_cache {
 			return Some(true); // Has children, likely a directory
@@ -121,16 +132,26 @@ impl PathTypeInference {
 			.values()
 			.flatten()
 			.chain(pending_events.creates_no_size.iter())
-			.any(|pending| pending.event.path.parent() == Some(path));
+			.any(|pending| {
+				if let Some(parent) = pending.event.path.parent() {
+					paths_equal(parent, path)
+				} else {
+					false
+				}
+			});
 
 		if heuristics.has_children_in_pending {
 			heuristics.confidence += 0.7;
 		}
 
 		// Check for child paths in metadata cache
-		heuristics.has_children_in_cache = metadata_cache
-			.paths()
-			.any(|cached_path| cached_path.parent() == Some(path));
+		heuristics.has_children_in_cache = metadata_cache.paths().any(|cached_path| {
+			if let Some(parent) = cached_path.parent() {
+				paths_equal(parent, path)
+			} else {
+				false
+			}
+		});
 
 		if heuristics.has_children_in_cache {
 			heuristics.confidence += 0.6;
