@@ -1,5 +1,45 @@
 # Filesystem Structure Caching Design
 
+## Technical Debt and Limitations (2025 Review)
+
+### Outstanding Issues
+
+- **Event Retention and Cleanup:**
+  - Not implemented. Expired events are not deleted; database will grow unbounded. Tests expecting cleanup are ignored or failing by design.
+  - **Action:** Implement event cleanup logic and ensure all related tests pass.
+
+- **Scalable Statistics/Indexing:**
+  - Only brute-force, O(N) stats exist (see `maintenance.rs`). No scalable, indexed, or cached stats subsystem.
+  - **Impact:** Stats queries are slow and not suitable for large datasets or real-time monitoring.
+  - **Action:** Design and implement a persistent, incrementally updated stats/indexing system.
+
+- **Multi-Watch Database and APIs:**
+  - Only trait stubs and table definitions exist in `multi_watch.rs`. No real implementation.
+  - **Impact:** Multi-watch scenarios (multiple roots, cross-watch queries) are not supported.
+  - **Action:** Flesh out the design, implement the APIs, and add integration tests.
+
+- **Cross-Platform Path Handling (Edge Cases):**
+  - Path normalization is robust for most cases, but edge cases (symlinks, UNC, device paths, short names) are not fully covered.
+  - **Impact:** Subtle bugs may still occur on Windows, especially with network shares or legacy paths.
+  - **Action:** Expand normalization logic and add more comprehensive tests for platform-specific edge cases.
+
+- **Error Handling and Recovery:**
+  - Basic error handling is present, but there’s limited recovery for database corruption, partial writes, or schema drift.
+  - **Impact:** In production, a single corrupt record could break stats or event queries.
+  - **Action:** Harden error handling, add recovery paths, and document known failure modes.
+
+- **Documentation and Design Drift:**
+  - Some code comments and design docs are up to date, but not all edge cases, limitations, or TODOs are documented in one place.
+  - **Impact:** New contributors or future maintainers will have to reverse-engineer some design decisions.
+  - **Action:** Update the design docs and code comments to reflect current reality, known issues, and future plans.
+
+- **Test Coverage Gaps:**
+  - Most core logic is tested, but there are gaps for concurrency, error injection, and platform-specific behavior.
+  - **Impact:** Some regressions or platform-specific bugs may go unnoticed.
+  - **Action:** Expand test coverage, especially for concurrency, error cases, and Windows/Unix differences.
+
+---
+
 ## High-Level Design Goals (2025 Revision)
 
 - Efficiently monitor large filesystems for move and rename operations, with minimal latency and overhead.
@@ -848,62 +888,75 @@ pub struct DatabaseMemoryProfile {
 | Transaction Coordination   | ACID       | Best-effort | Stronger consistency |
 ```
 
-## Configuration Strategy
+# Persistent Stats and Indexing Subsystem (2025)
 
-```rust
-#[derive(Debug, Clone)]
-pub struct MultiWatchConfig {
-    /// Database management strategy
-    pub database_strategy: DatabaseStrategy,
-    
-    /// Overlap optimization settings
-    pub auto_optimize_overlaps: bool,
-    pub overlap_detection_interval: Duration,
-    pub shared_cache_threshold: f64, // 0.0-1.0, minimum overlap to enable sharing
-    
-    /// Performance tuning
-    pub max_concurrent_watches: usize,
-    pub transaction_timeout: Duration,
-    pub background_optimization_interval: Duration,
-    
-    /// Memory management
-    pub per_watch_cache_limit: Option<usize>,
-    pub global_cache_limit: Option<usize>,
-    pub eviction_policy: EvictionPolicy,
-}
+## Problem Statement
 
-#[derive(Debug, Clone)]
-pub enum DatabaseStrategy {
-    /// Single database with watch-scoped keys (recommended)
-    SingleDatabaseScoped {
-        enable_shared_cache: bool,
-        enable_cross_watch_queries: bool,
-    },
-    /// Multiple database files (for isolation requirements)
-    MultipleDatabases {
-        coordination_database: bool,
-        cross_database_queries: bool,
-    },
-    /// Hybrid approach with database pools
-    DatabasePool {
-        max_databases: usize,
-        watches_per_database: usize,
-    },
-}
-```
+Current stats queries (event/metadata counts, per-type stats, etc.) are O(N) and require full table scans. This is not sustainable for large datasets or real-time monitoring. The brute-force implementation is a stopgap; production use requires persistent, incrementally updated, and indexed stats.
 
-## Recommendation
+## Requirements
 
-**Use Single Database with Watch-Scoped Keys** for the following reasons:
+- O(1) or O(log N) stats queries for event/metadata counts, per-type breakdowns, and possibly per-watch or per-path stats.
+- Atomicity: Stats must be updated transactionally with event/metadata mutations.
+- Persistence: Stats must survive restarts and be repairable if corruption or drift is detected.
+- Extensibility: The design must allow for new stat types (e.g., per-watch, per-path, per-event-type) without schema rewrites.
+- Repair/Migration: Legacy/test DBs must be detected and repaired automatically.
 
-1. **Superior Performance**: Eliminates duplicate data for overlapping watches
-2. **ACID Transactions**: Atomic operations across multiple watches
-3. **Memory Efficiency**: Shared caching reduces memory footprint by 30-70%
-4. **Operational Simplicity**: Single database file, single backup, single recovery
-5. **Advanced Features**: Cross-watch queries, overlap optimization, unified views
-6. **ReDB Optimization**: Leverages ReDB's strength in range queries and concurrent reads
+## Design
 
-This approach provides the best balance of performance, consistency, and operational simplicity while fully leveraging ReDB's advanced features.
+### Table Schema
+
+- Dedicated `STATS_TABLE` in redb:
+  - Key: stat identifier (enum or string, e.g., `event_count`, `metadata_count`, `event_type:<type>`, `watch:<id>:event_count`)
+  - Value: u64 (or struct for more complex stats)
+- All event/metadata mutations (insert, delete) must update the relevant stat(s) in the same transaction.
+
+### API
+
+- `get_database_stats()` reads from the persistent stats table.
+- On missing/invalid stats, triggers a repair: full scan, recompute, and persist.
+- Expose a `repair_stats()` API for manual or background repair.
+
+### Migration/Repair
+
+- On DB open, check for missing/legacy stats.
+- If detected, log a warning and trigger repair.
+- Document known failure modes and repair strategies.
+
+### Extensibility
+
+- Use a flexible key scheme (e.g., `event_type:<type>`, `watch:<id>:event_count`) to allow future expansion.
+- Document the stat key format in code and design docs.
+
+## Implementation Steps
+
+1. Schema: Define and document the new stats table and key format.
+2. Mutation Logic: Update all event/metadata insert/delete code paths to increment/decrement stats in the same transaction.
+3. Query Logic: Refactor stats queries to use the persistent table.
+4. Repair Logic: Implement fallback/repair for missing or corrupt stats.
+5. Migration: Add detection and repair for legacy/test DBs.
+6. Tests: Add/expand tests for stats correctness, repair, and edge cases (concurrent updates, corruption, etc.).
+7. Docs: Update design doc and code comments to reflect the new system, limitations, and known issues.
+
+## Limitations and Risks
+
+- Stats are only as accurate as the last successful transaction; partial writes or corruption can cause drift.
+- Repair is O(N) and should be rare, but must be robust.
+- Extending to per-path or per-watch stats may increase write amplification; must be measured and optimized.
+- Concurrency and error injection tests are required to validate atomicity and recovery.
+
+## Example Stat Keys
+
+- `event_count`
+- `metadata_count`
+- `event_type:create`
+- `event_type:delete`
+- `watch:<uuid>:event_count`
+- (future) `path:<hash>:event_count`
+
+---
+
+This subsystem is a prerequisite for production-scale monitoring and must be implemented before scaling up deployment or enabling advanced analytics. See TODO and technical debt sections for current status and next steps.
 
 ## Core Data Model Philosophy
 
