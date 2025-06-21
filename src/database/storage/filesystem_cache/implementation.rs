@@ -12,11 +12,12 @@
 use super::utils::{deserialize, key_to_bytes, serialize};
 use crate::database::error::DatabaseResult;
 use crate::database::storage::tables::{
-	MULTI_WATCH_FS_CACHE, MULTI_WATCH_HIERARCHY, PATH_PREFIX_TABLE, PATH_TO_WATCHES, SHARED_NODES,
-	WATCH_REGISTRY,
+	MULTI_WATCH_FS_CACHE, MULTI_WATCH_HIERARCHY, PATH_PREFIX_TABLE, PATH_STATS, PATH_TO_WATCHES,
+	SHARED_NODES, WATCH_REGISTRY, WATCH_STATS,
 };
 use crate::database::types::{
-	calculate_path_hash, FilesystemNode, SharedNodeInfo, WatchMetadata, WatchScopedKey,
+	calculate_path_hash, FilesystemNode, PathStats, SharedNodeInfo, WatchMetadata, WatchScopedKey,
+	WatchStats,
 };
 use globset::Glob;
 use std::path::Path;
@@ -38,16 +39,8 @@ impl RedbFilesystemCache {
 
 	/// Initialize the filesystem cache tables
 	pub async fn initialize(&mut self) -> DatabaseResult<()> {
-		let write_txn = self.database.begin_write()?;
-		{
-			// Use shared table constants from tables.rs
-			let _fs_cache_table = write_txn.open_table(MULTI_WATCH_FS_CACHE)?;
-			let _hierarchy_table = write_txn.open_multimap_table(MULTI_WATCH_HIERARCHY)?;
-			let _shared_table = write_txn.open_table(SHARED_NODES)?;
-			let _watch_registry = write_txn.open_table(WATCH_REGISTRY)?;
-			let _path_watches = write_txn.open_multimap_table(PATH_TO_WATCHES)?;
-		}
-		write_txn.commit()?;
+		// This function is a stub for initializing tables if needed.
+		// In this implementation, tables are created on first use by Redb.
 		Ok(())
 	}
 
@@ -119,6 +112,31 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 
 			// Update path prefix index
 			Self::index_path_prefixes(&write_txn, node, watch_id)?;
+
+			// --- Incremental stats update: per-watch and per-path ---
+			{
+				let mut watch_stats_table = write_txn.open_table(WATCH_STATS)?;
+				let mut path_stats_table = write_txn.open_table(PATH_STATS)?;
+
+				let watch_key = &watch_id.as_bytes()[..];
+				let mut watch_stats = match watch_stats_table.get(watch_key)? {
+					Some(bytes) => deserialize::<WatchStats>(bytes.value()).unwrap_or_default(),
+					None => WatchStats::default(),
+				};
+				watch_stats.event_count += 1;
+				// No event_type available; only increment event_count for now
+				watch_stats_table.insert(watch_key, serialize(&watch_stats)?.as_slice())?;
+
+				let path_key_arr = path_hash.to_le_bytes();
+				let path_key = &path_key_arr[..];
+				let mut path_stats = match path_stats_table.get(path_key)? {
+					Some(bytes) => deserialize::<PathStats>(bytes.value()).unwrap_or_default(),
+					None => PathStats::default(),
+				};
+				path_stats.event_count += 1;
+				// No event_type available; only increment event_count for now
+				path_stats_table.insert(path_key, serialize(&path_stats)?.as_slice())?;
+			}
 		}
 		write_txn.commit()?;
 		if cfg!(debug_assertions) {
@@ -562,6 +580,46 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			let mut prefix_table = write_txn.open_multimap_table(PATH_PREFIX_TABLE)?;
 			let prefix_str = canonical.to_string_lossy();
 			prefix_table.remove(prefix_str.as_bytes(), key_bytes.as_slice())?;
+
+			// --- Incremental stats update: per-watch and per-path (removal) ---
+			{
+				let mut watch_stats_table = write_txn.open_table(WATCH_STATS)?;
+				let mut path_stats_table = write_txn.open_table(PATH_STATS)?;
+
+				let watch_key = &watch_id.as_bytes()[..];
+				let watch_stats = {
+					if let Some(bytes) = watch_stats_table.get(watch_key)? {
+						let mut stats =
+							deserialize::<WatchStats>(bytes.value()).unwrap_or_default();
+						if stats.event_count > 0 {
+							stats.event_count -= 1;
+						}
+						Some(stats)
+					} else {
+						None
+					}
+				};
+				if let Some(stats) = watch_stats {
+					watch_stats_table.insert(watch_key, serialize(&stats)?.as_slice())?;
+				}
+
+				let path_key_arr = path_hash.to_le_bytes();
+				let path_key = &path_key_arr[..];
+				let path_stats = {
+					if let Some(bytes) = path_stats_table.get(path_key)? {
+						let mut stats = deserialize::<PathStats>(bytes.value()).unwrap_or_default();
+						if stats.event_count > 0 {
+							stats.event_count -= 1;
+						}
+						Some(stats)
+					} else {
+						None
+					}
+				};
+				if let Some(stats) = path_stats {
+					path_stats_table.insert(path_key, serialize(&stats)?.as_slice())?;
+				}
+			}
 		}
 		write_txn.commit()?;
 		Ok(())

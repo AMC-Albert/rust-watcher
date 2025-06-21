@@ -82,6 +82,12 @@ pub const STATS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("sta
 /// Maintenance operations log and scheduling
 pub const MAINTENANCE_LOG: TableDefinition<&[u8], &[u8]> = TableDefinition::new("maintenance_log");
 
+/// Per-watch stats table (watch_id -> serialized WatchStats struct)
+pub const WATCH_STATS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("watch_stats");
+
+/// Per-path stats table (path_hash -> serialized PathStats struct)
+pub const PATH_STATS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("path_stats");
+
 /// Table groups for easier management
 pub const BASIC_TABLES: &[&str] = &["events", "metadata", "indexes"];
 pub const FILESYSTEM_CACHE_TABLES: &[&str] =
@@ -94,7 +100,7 @@ pub const MULTI_WATCH_TABLES: &[&str] = &[
 	"path_to_watches",
 	"watch_transactions", // Added for transaction coordination
 ];
-pub const MAINTENANCE_TABLES: &[&str] = &["stats", "maintenance_log"];
+pub const MAINTENANCE_TABLES: &[&str] = &["stats", "maintenance_log", "watch_stats", "path_stats"];
 
 /// All tables for initialization
 pub const ALL_TABLES: &[&str] = &[
@@ -113,6 +119,8 @@ pub const ALL_TABLES: &[&str] = &[
 	"watch_transactions", // Added for transaction coordination
 	"stats",
 	"maintenance_log",
+	"watch_stats",
+	"path_stats",
 ];
 
 /// Schema version for migration tracking
@@ -160,6 +168,8 @@ pub async fn initialize_tables(database: &Arc<Database>) -> DatabaseResult<()> {
 		// Initialize maintenance tables
 		let _stats_table = write_txn.open_table(STATS_TABLE)?;
 		let _maintenance_log_table = write_txn.open_table(MAINTENANCE_LOG)?;
+		let _watch_stats_table = write_txn.open_table(WATCH_STATS)?;
+		let _path_stats_table = write_txn.open_table(PATH_STATS)?;
 	}
 	write_txn.commit()?;
 	Ok(())

@@ -638,3 +638,19 @@ pub fn event_type_stat_key(event_type: &str) -> Vec<u8> {
 	key.extend_from_slice(event_type.as_bytes());
 	key
 }
+
+/// Per-watch statistics for scalable O(1) queries
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WatchStats {
+	pub event_count: u64,
+	pub metadata_count: u64,
+	pub per_type_counts: std::collections::HashMap<String, u64>,
+}
+
+/// Per-path statistics for scalable O(1) queries
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PathStats {
+	pub event_count: u64,
+	pub metadata_count: u64,
+	pub per_type_counts: std::collections::HashMap<String, u64>,
+}

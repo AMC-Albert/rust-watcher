@@ -19,12 +19,12 @@
 | Event log retention/cleanup        | Complete     | Logic, tests, and integration done                                                                                                            |
 | Event log edge case docs           | Complete     | Documented in code and event_retention.rs                                                                                                     |
 | Brute-force stats impl             | Complete     | O(N), not scalable, see maintenance.rs                                                                                                        |
-| Scalable stats/indexing            | Partial      | O(1) event and per-type stats done; per-watch, per-path, and advanced indexing still TODO                                                     |
+| Scalable stats/indexing            | **PRIORITY** | O(1) event and per-type stats done; per-watch, per-path, and advanced indexing still TODO. Required for scale and production use.             |
 | Cross-platform path handling       | Complete     | Windows/Unix normalization, edge cases                                                                                                        |
 | Multi-watch test infra             | Complete     | Scaffolded and passing basic checks                                                                                                           |
 | Stress tests                       | Complete     | Scaffolded and passing basic checks                                                                                                           |
 | Multi-watch core                   | Complete     | Persistent transaction coordination, watch creation, permissions, and tree scan implemented                                                   |
-| Multi-watch concurrency tests      | Complete     | Integration test for concurrent registration/removal passes (June 2025)                                                                       |
+| Multi-watch concurrency tests      | **PRIORITY** | Integration test for concurrent registration/removal passes (June 2025), but multi-watch correctness and invalidation need more coverage.     |
 | Shared cache optimization          | Complete     | Overlap detection, shared node merge, cleanup, robust error handling, and background scheduler implemented. Remaining limitations documented. |
 | Redundant/orphaned node cleanup    | Complete     | Robust removal of redundant watch-specific and orphaned shared nodes; integration test passes (June 2025)                                     |
 | Unified/cross-watch queries        | Complete     | `list_directory_unified` and `get_unified_node` implemented and tested                                                                        |
@@ -37,11 +37,12 @@
 ## Remaining Work
 
 ### Phase 3: Filesystem Cache API (incomplete)
-- [ ] Scalable stats/indexing: per-watch, per-path, and advanced indexing
+- [ ] **PRIORITY: Scalable stats/indexing: per-watch, per-path, and advanced indexing**
+- [ ] **PRIORITY: Multi-watch correctness: expand integration and stress tests, improve invalidation and consistency for overlapping/shared nodes**
 - [ ] Performance operations: bulk cache warming, background maintenance, statistics/monitoring, memory optimization
 - [ ] Integration with existing systems: watcher integration, cache-aware monitoring, database adapter enhancements
 - [ ] Advanced features: transaction coordination, memory management, performance monitoring
-- [ ] **Testing and validation: expand unit/integration tests for cache synchronization, especially for multi-watch scenarios.**
+- [ ] Testing and validation: expand unit/integration tests for cache synchronization, especially for multi-watch scenarios.
 
 ---
 
