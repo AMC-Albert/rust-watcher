@@ -40,7 +40,7 @@
 - [x] Implement watch-scoped key generation and path hashing.
 - [x] Add batch insert operations for initial tree caching.
 
-## Immediate Next Steps
+## Immediate Next Steps (all complete)
 
 - [x] Document event log edge cases, especially around duplicate events, ordering, and retention policy behavior.  # Complete (see event_retention.rs)
 - [x] Implement brute-force event stats (O(N), not scalable, see maintenance.rs).  # Complete, but not suitable for production
@@ -52,13 +52,13 @@
 
 ### Priority Order (as of June 2025)
 
-1. **Expand and harden MultiWatchDatabase and related APIs**
-   - Implement watch registration, removal, and shared node cache management.
-   - Add watch-scoped transaction coordination and metadata management.
-2. **Implement real multi-watch integration tests**
-   - Use the scaffolded framework to drive development and catch regressions early.
-3. **Implement real stress/concurrency tests**
-   - Use the scaffolded stress tests to validate cache and database concurrency under load.
+- [x] Expand and harden MultiWatchDatabase and related APIs
+    - [x] Implement watch registration, removal, and shared node cache management.
+    - [x] Add watch-scoped transaction coordination and metadata management.
+- [x] Implement real multi-watch integration tests
+    - [x] Use the scaffolded framework to drive development and catch regressions early.
+- [x] Implement real stress/concurrency tests
+    - [x] Use the scaffolded stress tests to validate cache and database concurrency under load.
 
 ---
 
@@ -107,8 +107,8 @@
 
 ### 3.1 Query Interface
 - [ ] Implement single-watch filesystem queries (`list_directory_for_watch`, `get_node`)
-- [ ] Add unified cross-watch queries (`list_directory_unified`, `get_unified_node`)
-- [ ] Create hierarchical operations (ancestors, descendants, subtree)
+- [ ] Add unified cross-watch queries (`list_directory_unified`, `get_unified_node`) *(partially done, but needs full coverage)*
+- [ ] Create hierarchical operations (ancestors, descendants, subtree) *(partially done)*
 - [ ] Add pattern-based search and filtering
 
 ### 3.2 Cache Synchronization
@@ -189,49 +189,11 @@
 - [ ] Test cache consistency during filesystem stress
 - [ ] Validate production-ready performance characteristics
 
-## Dependencies and Prerequisites
-
-### Code Dependencies
-- Extend existing `database/` module structure
-- Integrate with `events.rs` and `watcher.rs`
-- Enhance `database/adapter.rs` and `database/config.rs`
-
-### External Dependencies
-- ReDB features: multimap tables, range queries, concurrent access
-- Filesystem traversal: `walkdir` or similar for initial caching
-- Path manipulation: enhanced `std::path` operations
-- Hashing: consistent path hashing across platforms
-
-### Configuration Requirements
-- Database schema migration strategy
-- Backward compatibility with existing databases
-- Performance tuning parameters
-- Memory and disk usage limits
-
-## Success Criteria
-
-### Performance Targets
-- 95%+ cache hit rate for monitored directories
-- <1ms average response time for cached directory listings
-- <10MB memory overhead per 10,000 cached filesystem nodes
-- 90%+ reduction in filesystem I/O for repeated operations
-
-### Functionality Requirements
-- Support for 100+ concurrent watch operations
-- Automatic optimization of overlapping watches
-- Real-time cache synchronization with filesystem events
-- Complete backward compatibility with existing watcher functionality
-
-### Operational Goals
-- Zero-downtime cache enable/disable
-- Automatic cache recovery from corruption
-- Comprehensive monitoring and diagnostics
-- Production-ready error handling and logging
-
 ---
 
-**Implementation Priority**: Phases 1-3 are critical path for core functionality. Phases 4-6 can be developed in parallel once core infrastructure is stable.
+## Immediate Next Steps (as of June 2025)
 
-**Estimated Timeline**: 4-6 weeks for full implementation with comprehensive testing.
-
-**Risk Mitigation**: Maintain backward compatibility throughout implementation. Each phase should be independently testable and deployable.
+1. **Finish Phase 3 API**: Complete all single-watch and cross-watch query methods, ensure hierarchical and pattern-based queries are robust and tested.
+2. **Cache Synchronization**: Integrate cache with watcher event stream for real-time updates and invalidation.
+3. **Expand Tests**: Add/expand tests for all new API features, especially for edge cases and concurrency.
+4. **Begin Phase 4 Integration**: Start wiring cache options into `WatcherConfig` and CLI, and add health/diagnostic endpoints.
