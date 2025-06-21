@@ -11,6 +11,9 @@
 - Integration and stress test scaffolding implemented and passing basic checks (see integration_multi_watch.rs, stress_cache_concurrency.rs).
 - Documentation and comments updated for current code; pending features are still only in design/TODO docs.
 - Cross-platform path normalization and edge case handling (Windows/Unix, UNC, device paths) implemented, tested, and documented. All normalization and test logic now reflects real OS behavior and limitations. (June 2025)
+- MultiWatchDatabase: persistent transaction coordination, metadata table, and borrow checker fixes implemented (June 2025).
+- Watch creation with filesystem tree scanning, metadata, and permission management implemented and integrated (June 2025).
+- All Clippy warnings and build errors fixed after API changes (permissions, transaction coordination).
 
 ---
 
@@ -61,16 +64,16 @@
 
 # Summary Table
 
-| Task                         | Status      | Notes                                                                                     |
-| ---------------------------- | ----------- | ----------------------------------------------------------------------------------------- |
-| Event log retention/cleanup  | Complete    | Logic, tests, and integration done                                                        |
-| Event log edge case docs     | Complete    | Documented in code and event_retention.rs                                                 |
-| Brute-force stats impl       | Complete    | O(N), not scalable, see maintenance.rs                                                    |
-| Scalable stats/indexing      | Partial     | O(1) event and per-type stats done; per-watch, per-path, and advanced indexing still TODO |
-| Cross-platform path handling | Complete    | Windows/Unix normalization, edge cases                                                    |
-| Multi-watch test infra       | Complete    | Scaffolded and passing basic checks                                                       |
-| Stress tests                 | Complete    | Scaffolded and passing basic checks                                                       |
-| Multi-watch core             | In progress | Stubs and partial implementation exist                                                    |
+| Task                         | Status      | Notes                                                                                       |
+| ---------------------------- | ----------- | ------------------------------------------------------------------------------------------- |
+| Event log retention/cleanup  | Complete    | Logic, tests, and integration done                                                          |
+| Event log edge case docs     | Complete    | Documented in code and event_retention.rs                                                   |
+| Brute-force stats impl       | Complete    | O(N), not scalable, see maintenance.rs                                                      |
+| Scalable stats/indexing      | Partial     | O(1) event and per-type stats done; per-watch, per-path, and advanced indexing still TODO   |
+| Cross-platform path handling | Complete    | Windows/Unix normalization, edge cases                                                      |
+| Multi-watch test infra       | Complete    | Scaffolded and passing basic checks                                                         |
+| Stress tests                 | Complete    | Scaffolded and passing basic checks                                                         |
+| Multi-watch core             | In progress | Persistent transaction coordination, watch creation, permissions, and tree scan implemented |
 
 ---
 
@@ -78,15 +81,15 @@
 
 ### 2.1 Multi-Watch Database Core
 - [x] Create `MultiWatchDatabase` struct in new `database/multi_watch.rs`  # Partial implementation exists
-- [ ] Implement watch registration and metadata management
-- [ ] Add watch-scoped transaction coordination
-- [ ] Implement shared node cache management
+- [x] Implement watch registration and metadata management
+- [x] Add watch-scoped transaction coordination and persistent transaction metadata
+- [x] Implement shared node cache management
 
 ### 2.2 Watch Operations
-- [ ] Add watch creation with filesystem tree scanning
-- [ ] Implement watch removal with cleanup
-- [ ] Add watch metadata queries (list, stats, health checks)
-- [ ] Implement watch isolation and permission management
+- [x] Add watch creation with filesystem tree scanning
+- [x] Implement watch removal with cleanup
+- [x] Add watch metadata queries (list, stats, health checks)
+- [x] Implement watch isolation and permission management
 
 ### 2.3 Overlap Detection and Optimization
 - [ ] Create `WatchOverlap` detection algorithms

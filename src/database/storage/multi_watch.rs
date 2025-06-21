@@ -3,6 +3,7 @@
 //! This module handles coordination between multiple filesystem watches,
 //! shared resource management, and cross-watch operations.
 
+use crate::database::types::WatchPermissions;
 use crate::database::{
 	error::DatabaseResult,
 	types::{SharedNodeInfo, WatchMetadata},
@@ -10,8 +11,11 @@ use crate::database::{
 use chrono::{DateTime, Utc};
 use redb::{Database, ReadableTable};
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 use uuid::Uuid;
+use walkdir::WalkDir;
 
 /// Transaction status for coordination
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -350,6 +354,40 @@ impl MultiWatchDatabase {
 		}
 		write_txn.commit()?;
 		Ok(())
+	}
+
+	/// Create a new watch, scan the filesystem tree, and initialize metadata and permissions.
+	/// Returns the created WatchMetadata.
+	pub async fn create_watch_with_scan(
+		&self,
+		root_path: PathBuf,
+		permissions: Option<WatchPermissions>,
+	) -> DatabaseResult<WatchMetadata> {
+		let watch_id = Uuid::new_v4();
+		let created_at = Utc::now();
+		let mut node_count = 0u64;
+		// Scan the filesystem tree and count nodes (could be extended to cache nodes)
+		for entry in WalkDir::new(&root_path).into_iter().filter_map(Result::ok) {
+			let path = entry.path();
+			if let Ok(metadata) = fs::metadata(path) {
+				let _node =
+					crate::database::types::FilesystemNode::new(path.to_path_buf(), &metadata);
+				node_count += 1;
+				// TODO: Optionally insert node into cache here
+			}
+		}
+		let meta = WatchMetadata {
+			watch_id,
+			root_path: root_path.clone(),
+			created_at,
+			last_scan: Some(created_at),
+			node_count,
+			is_active: true,
+			config_hash: 0, // TODO: Compute from config if needed
+			permissions,
+		};
+		self.register_watch(&meta).await?;
+		Ok(meta)
 	}
 }
 

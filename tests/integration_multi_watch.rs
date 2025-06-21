@@ -27,6 +27,7 @@ async fn test_register_and_list_watches() {
 		node_count: 0,
 		is_active: true,
 		config_hash: 123,
+		permissions: None,
 	};
 	let watch2 = WatchMetadata {
 		watch_id: Uuid::new_v4(),
@@ -36,6 +37,7 @@ async fn test_register_and_list_watches() {
 		node_count: 0,
 		is_active: true,
 		config_hash: 456,
+		permissions: None,
 	};
 	multi_watch
 		.register_watch(&watch1)

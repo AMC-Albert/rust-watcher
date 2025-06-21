@@ -398,6 +398,15 @@ pub struct SharedNodeInfo {
 	pub last_shared_update: DateTime<Utc>,
 }
 
+/// Watch permissions for per-watch access control
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WatchPermissions {
+	pub can_read: bool,
+	pub can_write: bool,
+	pub can_delete: bool,
+	pub can_manage: bool, // e.g., add/remove watches
+}
+
 /// Watch metadata for multi-watch management
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WatchMetadata {
@@ -408,6 +417,7 @@ pub struct WatchMetadata {
 	pub node_count: u64,
 	pub is_active: bool,
 	pub config_hash: u64,
+	pub permissions: Option<WatchPermissions>, // Optional for backward compatibility
 }
 
 /// Unified node that can represent shared or watch-specific data

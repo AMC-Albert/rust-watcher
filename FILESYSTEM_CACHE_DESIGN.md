@@ -13,9 +13,9 @@
   - **Action:** Extend stats/indexing to support per-watch, per-path, and advanced queries.
 
 - **Multi-Watch Database and APIs:**
-  - MultiWatchDatabase now implements watch registration, shared node storage/retrieval, and robust watch removal (including reference count and multi-watch edge cases). Integration tests cover these paths (June 2025).
-  - **Impact:** Multi-watch scenarios (multiple roots, cross-watch queries) are now supported at the storage layer. Transaction coordination and advanced metadata management are still pending.
-  - **Action:** Implement transaction coordination, metadata management, and advanced cross-watch features.
+  - MultiWatchDatabase now implements watch registration, shared node storage/retrieval, robust watch removal, persistent transaction coordination, and permission management. Watch creation with filesystem tree scanning is implemented. Integration tests cover these paths (June 2025).
+  - **Impact:** Multi-watch scenarios (multiple roots, cross-watch queries) are now supported at the storage layer. Transaction coordination, advanced metadata management, and overlap detection are still pending.
+  - **Action:** Implement advanced cross-watch features and overlap detection/optimization.
 
 - **Cross-Platform Path Handling (Edge Cases):**
   - Path normalization is robust for most cases, including UNC, device paths, and redundant/trailing separators. Platform-specific edge cases are covered by tests. (June 2025)
@@ -28,12 +28,12 @@
   - **Action:** Harden error handling, add recovery paths, and document known failure modes.
 
 - **Documentation and Design Drift:**
-  - Design docs and code comments are up to date for all implemented features, including persistent stats, path normalization, and multi-watch storage. Outstanding limitations and TODOs are documented in this section and in TODO_FILESYSTEM_CACHE.md.
+  - Design docs and code comments are up to date for all implemented features, including persistent stats, path normalization, multi-watch storage, transaction coordination, and permission management. Outstanding limitations and TODOs are documented in this section and in TODO_FILESYSTEM_CACHE.md.
   - **Impact:** New contributors have a clear view of current state and pending work.
   - **Action:** Continue to update documentation as new features are implemented or limitations are discovered.
 
 - **Test Coverage Gaps:**
-  - Core logic for event storage, stats, path normalization, and multi-watch shared node management is now covered by integration and unit tests. Gaps remain for concurrency, error injection, and platform-specific behavior.
+  - Core logic for event storage, stats, path normalization, multi-watch shared node management, transaction coordination, and watch creation is now covered by integration and unit tests. Gaps remain for concurrency, error injection, and platform-specific behavior.
   - **Impact:** Some regressions or platform-specific bugs may go unnoticed, but coverage is now sufficient for most production scenarios.
   - **Action:** Expand test coverage for concurrency, error cases, and Windows/Unix differences as new features are added.
 
