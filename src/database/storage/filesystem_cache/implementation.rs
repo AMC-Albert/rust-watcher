@@ -327,6 +327,64 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		write_txn.commit()?;
 		Ok(deleted_count)
 	}
+
+	async fn list_directory_unified(
+		&mut self,
+		parent_path: &Path,
+	) -> DatabaseResult<Vec<FilesystemNode>> {
+		// Aggregate all direct children of parent_path across all watches
+		let read_txn = self.database.begin_read()?;
+		let hierarchy_table = read_txn.open_multimap_table(MULTI_WATCH_HIERARCHY)?;
+		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
+		let mut children = Vec::new();
+		let mut seen_paths = std::collections::HashSet::new();
+
+		// Compute all possible parent keys (shared and per-watch)
+		// TODO: This currently only supports shared nodes; extend for all watches if needed
+		let parent_hash = calculate_path_hash(parent_path);
+		let shared_key_bytes = Self::serialize(&parent_hash)?;
+		if let Ok(mut values) = hierarchy_table.get(shared_key_bytes.as_slice()) {
+			// MultimapValue<'_, &[u8]>: must iterate, extract each child key
+			for result in &mut values {
+				let access_guard = match result {
+					Ok(guard) => guard,
+					Err(_) => continue, // skip corrupt entries
+				};
+				let child_key_bytes = access_guard.value();
+				if let Some(child_node_bytes) = fs_cache_table.get(child_key_bytes)? {
+					let child_node: FilesystemNode =
+						match Self::deserialize(child_node_bytes.value()) {
+							Ok(node) => node,
+							Err(_) => continue, // skip corrupt nodes
+						};
+					if seen_paths.insert(child_node.path.clone()) {
+						children.push(child_node);
+					}
+				}
+			}
+		}
+		// TODO: Add per-watch parent key support for full cross-watch queries
+		Ok(children)
+	}
+
+	async fn get_unified_node(&mut self, path: &Path) -> DatabaseResult<Option<FilesystemNode>> {
+		// Prefer shared node if present, else any watch-specific node
+		let path_hash = calculate_path_hash(path);
+		if let Some(shared) = self.get_shared_node(path_hash).await? {
+			return Ok(Some(shared.node));
+		}
+		// Fallback: scan all watches for a node
+		let read_txn = self.database.begin_read()?;
+		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
+		for entry in fs_cache_table.iter()? {
+			let (_key, value) = entry?;
+			let node: FilesystemNode = Self::deserialize(value.value())?;
+			if node.path == path {
+				return Ok(Some(node));
+			}
+		}
+		Ok(None)
+	}
 }
 
 // ...move serialization notes and tests to a separate file or keep #[cfg(test)] here if small...

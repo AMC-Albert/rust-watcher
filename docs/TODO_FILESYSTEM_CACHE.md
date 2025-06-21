@@ -8,7 +8,10 @@
 - All clippy warnings and build errors fixed; codebase is warning-free and testable.
 - All tests pass except for explicitly unimplemented multi-watch integration tests (not a regression).
 - Documentation and comments updated for current code; pending features are still only in design/TODO docs.
-- See commit history for details of the modularization and bugfixes (June 2025).
+- Phase 3 groundwork: trait stubs and documentation for unified/cross-watch queries, hierarchical operations, and pattern search added. Unused parameter warnings resolved (June 2025).
+- `list_directory_unified` implementation updated to use correct iterator idiom for `MultimapValue<'_, &[u8]>`.
+- All build, test, and clippy checks are clean as of latest commit.
+- See commit history for details of the modularization, bugfixes, and groundwork for Phase 3 (June 2025).
 
 ---
 

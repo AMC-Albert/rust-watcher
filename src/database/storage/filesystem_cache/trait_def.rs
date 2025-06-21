@@ -69,6 +69,70 @@ pub trait FilesystemCacheStorage: Send + Sync {
 		watch_id: &Uuid,
 		max_age_seconds: u64,
 	) -> DatabaseResult<usize>;
+
+	// === Phase 3: Unified and Hierarchical Queries ===
+
+	/// List directory contents across all watches (unified view).
+	///
+	/// Returns all nodes that are direct children of the given path, regardless of watch.
+	/// TODO: Implement efficient cross-watch lookup and deduplication.
+	async fn list_directory_unified(
+		&mut self,
+		_parent_path: &std::path::Path,
+	) -> DatabaseResult<Vec<FilesystemNode>> {
+		// Not yet implemented. This will require cross-watch index scans and deduplication logic.
+		// Edge cases: overlapping watches, shared nodes, permission filtering.
+		unimplemented!("list_directory_unified not yet implemented");
+	}
+
+	/// Get a unified node view for a given path (across all watches).
+	///
+	/// Returns the most relevant node (shared or watch-specific) for the path.
+	/// TODO: Implement cross-watch node resolution and conflict handling.
+	async fn get_unified_node(
+		&mut self,
+		_path: &std::path::Path,
+	) -> DatabaseResult<Option<FilesystemNode>> {
+		// Not yet implemented. This will require merging shared and watch-specific nodes.
+		// Edge cases: conflicting metadata, permissions, and node types.
+		unimplemented!("get_unified_node not yet implemented");
+	}
+
+	/// List all ancestor nodes for a given path (up to root).
+	///
+	/// Returns the chain of parent nodes, for hierarchical queries.
+	/// TODO: Implement efficient ancestor traversal using prefix or hierarchy tables.
+	async fn list_ancestors(
+		&mut self,
+		_path: &std::path::Path,
+	) -> DatabaseResult<Vec<FilesystemNode>> {
+		// Not yet implemented. This will require walking up the hierarchy and resolving nodes.
+		// Edge cases: missing parents, cross-watch ancestry, symlink loops.
+		unimplemented!("list_ancestors not yet implemented");
+	}
+
+	/// List all descendant nodes for a given path (subtree query).
+	///
+	/// Returns all nodes under the given path, recursively.
+	/// TODO: Implement efficient subtree traversal using prefix or hierarchy tables.
+	async fn list_descendants(
+		&mut self,
+		_path: &std::path::Path,
+	) -> DatabaseResult<Vec<FilesystemNode>> {
+		// Not yet implemented. This will require recursive or batched traversal.
+		// Edge cases: large subtrees, cycles, permission filtering.
+		unimplemented!("list_descendants not yet implemented");
+	}
+
+	/// Pattern-based search for nodes (e.g., glob, regex).
+	///
+	/// Returns all nodes matching the given pattern.
+	/// TODO: Implement pattern matching and efficient filtering.
+	async fn search_nodes(&mut self, _pattern: &str) -> DatabaseResult<Vec<FilesystemNode>> {
+		// Not yet implemented. This will require pattern parsing and index scans.
+		// Edge cases: performance, escaping, cross-platform path semantics.
+		unimplemented!("search_nodes not yet implemented");
+	}
 }
 
 /// Cache statistics for monitoring
