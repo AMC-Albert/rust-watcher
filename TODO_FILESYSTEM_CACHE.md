@@ -10,6 +10,7 @@
 - No scalable stats/indexing subsystem exists yet. This is a critical TODO for production use.
 - Integration and stress test scaffolding implemented and passing basic checks (see integration_multi_watch.rs, stress_cache_concurrency.rs).
 - Documentation and comments updated for current code; pending features are still only in design/TODO docs.
+- Cross-platform path normalization and edge case handling (Windows/Unix, UNC, device paths) implemented, tested, and documented. All normalization and test logic now reflects real OS behavior and limitations. (June 2025)
 
 ---
 
@@ -30,7 +31,7 @@
 ### 0.3 Architecture Validation
 - [x] ~~Create proof-of-concept filesystem scanning with `walkdir`~~ (POC implemented with tests)
 - [x] ~~Test path normalization edge cases (symlinks, junction points, UNC paths)~~ (basic validation done)
-- [ ] Validate cross-platform path handling (Windows vs Unix)
+- [x] Validate cross-platform path handling (Windows vs Unix)  # Complete (see path_utils.rs, path_normalization.rs)
 - [x] ~~Test memory usage patterns with large directory trees (>1M files)~~ (10K file test validates patterns)
 
 ### 0.4 Testing Infrastructure
@@ -47,7 +48,7 @@
     - [x] Implement append-only store logic (multiple events per key/path).
     - [x] Implement retrieval logic to return all events for a key/path, ordered by time.  # (ordering is now handled in tests)
     - [x] Add retention/cleanup logic for old events.  # Implemented and tested June 2025
-    - [ ] Document edge cases: duplicate events, ordering, retention.  # TODO: Add technical documentation
+    - [x] Document edge cases: duplicate events, ordering, retention.  # Complete (see event_retention.rs)
 - [x] Update all event storage access patterns to match new schema.
 - [x] Only after the above is stable, revisit and update tests to match new semantics.
 
@@ -67,43 +68,42 @@
 - [x] Document event log edge cases, especially around duplicate events, ordering, and retention policy behavior.  # Complete (see event_retention.rs)
 - [x] Implement brute-force event stats (O(N), not scalable, see maintenance.rs).  # Complete, but not suitable for production
 - [x] Design and implement a scalable, indexed, and robust stats subsystem.  # Persistent O(1) event and per-type stats implemented, tested, and documented (June 2025). Further extensibility (per-watch, per-path) and advanced indexing still TODO.
-- [ ] Validate cross-platform path handling (Windows vs Unix).
+- [x] Validate cross-platform path handling (Windows vs Unix).  # Complete (see path_utils.rs, path_normalization.rs)
 - [x] Create integration test framework for multi-watch scenarios.  # Scaffolded and passing basic checks (integration_multi_watch.rs)
 - [x] Add stress tests for concurrent cache access patterns.  # Scaffolded and passing basic checks (stress_cache_concurrency.rs)
-- [ ] Design and stub out the `MultiWatchDatabase` and related APIs for Phase 2.  # Initial stubs exist, but needs further design and implementation
+- [x] Design and stub out the `MultiWatchDatabase` and related APIs for Phase 2.  # Initial stubs and partial implementation exist (multi_watch.rs, storage/multi_watch.rs)
 
 ### Priority Order (as of June 2025)
 
-1. **Validate cross-platform path handling (Windows vs Unix)**
-   - This is a known source of subtle bugs and must be addressed before multi-watch or cache features can be considered robust.
-2. **Design and implement `MultiWatchDatabase` and related APIs**
-   - The foundation for all multi-watch and advanced cache features. Stubs exist, but real design and partial implementation are needed.
-3. **Implement real multi-watch integration tests**
+1. **Expand and harden MultiWatchDatabase and related APIs**
+   - Implement watch registration, removal, and shared node cache management.
+   - Add watch-scoped transaction coordination and metadata management.
+2. **Implement real multi-watch integration tests**
    - Use the scaffolded framework to drive development and catch regressions early.
-4. **Implement real stress/concurrency tests**
+3. **Implement real stress/concurrency tests**
    - Use the scaffolded stress tests to validate cache and database concurrency under load.
 
 ---
 
 # Summary Table
 
-| Task                         | Status      | Notes                                     |
-| ---------------------------- | ----------- | ----------------------------------------- |
-| Event log retention/cleanup  | Complete    | Logic, tests, and integration done        |
-| Event log edge case docs     | Complete    | Documented in code and event_retention.rs |
-| Brute-force stats impl       | Complete    | O(N), not scalable, see maintenance.rs    |
-| Scalable stats/indexing      | TODO        | Needed for production, not started        |
-| Cross-platform path handling | Pending     | Windows/Unix normalization                |
-| Multi-watch test infra       | Complete    | Scaffolded and passing basic checks       |
-| Stress tests                 | Complete    | Scaffolded and passing basic checks       |
-| Multi-watch core             | Not started | Next major feature                        |
+| Task                         | Status      | Notes                                                                                     |
+| ---------------------------- | ----------- | ----------------------------------------------------------------------------------------- |
+| Event log retention/cleanup  | Complete    | Logic, tests, and integration done                                                        |
+| Event log edge case docs     | Complete    | Documented in code and event_retention.rs                                                 |
+| Brute-force stats impl       | Complete    | O(N), not scalable, see maintenance.rs                                                    |
+| Scalable stats/indexing      | Partial     | O(1) event and per-type stats done; per-watch, per-path, and advanced indexing still TODO |
+| Cross-platform path handling | Complete    | Windows/Unix normalization, edge cases                                                    |
+| Multi-watch test infra       | Complete    | Scaffolded and passing basic checks                                                       |
+| Stress tests                 | Complete    | Scaffolded and passing basic checks                                                       |
+| Multi-watch core             | In progress | Stubs and partial implementation exist                                                    |
 
 ---
 
 ## Phase 2: Multi-Watch and Relationship Tracking
 
 ### 2.1 Multi-Watch Database Core
-- [ ] Create `MultiWatchDatabase` struct in new `database/multi_watch.rs`
+- [x] Create `MultiWatchDatabase` struct in new `database/multi_watch.rs`  # Partial implementation exists
 - [ ] Implement watch registration and metadata management
 - [ ] Add watch-scoped transaction coordination
 - [ ] Implement shared node cache management
