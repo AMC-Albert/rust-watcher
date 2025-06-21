@@ -2,7 +2,7 @@ pub mod database;
 mod error;
 mod events;
 pub mod filesystem_poc;
-mod move_detection;
+pub mod move_detection;
 mod retry;
 mod watcher;
 
@@ -12,6 +12,9 @@ pub use events::{EventType, FileSystemEvent, MoveDetectionMethod, MoveEvent};
 pub use move_detection::{MoveDetector, MoveDetectorConfig};
 pub use retry::{RetryConfigBuilder, RetryManager, RetryableOperation};
 pub use watcher::{start, WatcherConfig, WatcherHandle};
+
+#[cfg(test)]
+pub use crate::move_detection::test_helpers::DummyCache;
 
 #[cfg(test)]
 mod tests {

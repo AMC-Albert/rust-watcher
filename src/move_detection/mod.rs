@@ -23,6 +23,7 @@ pub mod heuristics;
 pub mod matching;
 pub mod metadata;
 pub mod monitoring;
+pub mod test_helpers;
 
 // Re-export main types for convenience
 pub use config::MoveDetectorConfig;
