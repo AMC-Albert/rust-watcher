@@ -13,7 +13,8 @@ use super::utils::{deserialize, key_to_bytes, serialize};
 use crate::database::error::DatabaseResult;
 use crate::database::storage::filesystem_cache::utils;
 use crate::database::storage::tables::{
-	MULTI_WATCH_FS_CACHE, MULTI_WATCH_HIERARCHY, PATH_PREFIX_TABLE, SHARED_NODES, WATCH_REGISTRY,
+	MULTI_WATCH_FS_CACHE, MULTI_WATCH_HIERARCHY, PATH_PREFIX_TABLE, PATH_STATS, SHARED_NODES,
+	STATS_TABLE, WATCH_REGISTRY, WATCH_STATS,
 };
 use crate::database::types::{
 	calculate_path_hash, FilesystemNode, SharedNodeInfo, WatchMetadata, WatchScopedKey,
@@ -623,14 +624,73 @@ impl RedbFilesystemCache {
 
 	/// Repairs or recomputes all stats counters for a given watch or path.
 	///
-	/// This is a stub: it currently does nothing and always returns Ok(0).
-	/// In a real implementation, this would rescan the relevant subset of the DB and recompute counters.
-	/// Failure modes: If the DB is very large, this may be slow or OOM. Use with caution.
-	/// TODO: Implement actual rescan and repair logic.
+	/// This implementation scans all nodes in the cache, recomputes per-watch, per-path, and per-type stats,
+	/// and updates the stats tables in a single transaction. For large datasets, this may be slow and memory-intensive.
+	/// If both watch_id and path are None, repairs the entire database. If either is Some, restricts to that scope.
 	pub async fn repair_stats_counters(
-		&mut self, _watch_id: Option<&Uuid>, _path: Option<&Path>,
+		&mut self, watch_id: Option<&Uuid>, path: Option<&Path>,
 	) -> DatabaseResult<usize> {
-		// Plan: enumerate all nodes for the given watch/path, recompute stats, and update tables atomically.
-		Ok(0)
+		use crate::database::types::{PathStats, WatchStats};
+		use std::collections::HashMap;
+		let write_txn = self.database.begin_write()?;
+		let mut total = 0;
+		{
+			let fs_cache_table = write_txn.open_table(MULTI_WATCH_FS_CACHE)?;
+			let mut watch_stats: HashMap<Uuid, WatchStats> = HashMap::new();
+			let mut path_stats: HashMap<u64, PathStats> = HashMap::new();
+			let mut per_type_counts: HashMap<String, u64> = HashMap::new();
+			for entry in fs_cache_table.iter()? {
+				let (key_bytes, value) = entry?;
+				let node: FilesystemNode = utils::deserialize(value.value())?;
+				let scoped_key: WatchScopedKey = utils::deserialize(key_bytes.value())?;
+				// Filter by watch_id/path if requested
+				if let Some(wid) = watch_id {
+					if &scoped_key.watch_id != wid {
+						continue;
+					}
+				}
+				if let Some(filter_path) = path {
+					if node.path != *filter_path {
+						continue;
+					}
+				}
+				// Event type is not stored on node; assume "create" for all nodes (limitation)
+				let event_type = "create";
+				// Update per-watch
+				let ws = watch_stats.entry(scoped_key.watch_id).or_default();
+				ws.event_count += 1;
+				*ws.per_type_counts.entry(event_type.to_string()).or_insert(0) += 1;
+				// Update per-path
+				let ps = path_stats.entry(scoped_key.path_hash).or_default();
+				ps.event_count += 1;
+				*ps.per_type_counts.entry(event_type.to_string()).or_insert(0) += 1;
+				// Update global per-type stats
+				*per_type_counts.entry(event_type.to_string()).or_insert(0) += 1;
+				total += 1;
+			}
+			// Write watch stats
+			let mut watch_stats_table = write_txn.open_table(WATCH_STATS)?;
+			for (wid, stats) in watch_stats {
+				watch_stats_table
+					.insert(wid.as_bytes().as_slice(), serialize(&stats)?.as_slice())?;
+			}
+			// Write path stats
+			let mut path_stats_table = write_txn.open_table(PATH_STATS)?;
+			for (phash, stats) in path_stats {
+				path_stats_table.insert(
+					(&phash.to_le_bytes()) as &[u8],
+					serialize(&stats)?.as_slice(),
+				)?;
+			}
+			// Write global per-type stats
+			let mut stats_table = write_txn.open_table(STATS_TABLE)?;
+			for (etype, count) in per_type_counts {
+				let stat_key = crate::database::types::event_type_stat_key(&etype);
+				stats_table.insert(stat_key.as_slice(), count.to_le_bytes().as_slice())?;
+			}
+			// All table borrows dropped here
+		}
+		write_txn.commit()?;
+		Ok(total)
 	}
-}
+} // End of impl RedbFilesystemCache

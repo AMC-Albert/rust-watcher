@@ -1,7 +1,7 @@
 # Scalable Stats and Indexing Design
 
 ## Overview
-This document tracks the design and implementation of scalable statistics and indexing in the filesystem cache, with explicit support for multi-watch correctness. The schema and stats struct work are complete; the codebase is now modular, maintainable, and implements robust, incremental updates and correctness for all event types, including overlapping watches and shared nodes. All code and tests are clippy-clean and up to date with the new API. Recent work includes a functional glob-based search_nodes implementation and expanded integration test coverage.
+This document tracks the design and implementation of scalable statistics and indexing in the filesystem cache, with explicit support for multi-watch correctness. The schema and stats struct work are complete; the codebase is now modular, maintainable, and implements robust, incremental updates and correctness for all event types, including overlapping watches and shared nodes. All code and tests are clippy-clean and up to date with the new API. Recent work includes a functional glob-based search_nodes implementation, a working repair_stats_counters tool, and expanded integration test coverage.
 
 ## Schema (Complete)
 
@@ -47,7 +47,8 @@ This document tracks the design and implementation of scalable statistics and in
 - [x] Apply the same logic as above for metadata counters.
 
 ### Consistency and Repair
-- [ ] On startup or if a counter is missing/corrupt, rescan only the relevant subset (per-watch or per-path) to repair, not the entire dataset. (Stub exists, not implemented)
+- [x] Repair tool implemented: scans all nodes, recomputes stats, and updates tables. Limitation: event type is not stored on nodes, so all are counted as 'create'.
+- [ ] For full event-type accuracy, event type must be stored or indexed with each node.
 
 ## Multi-Watch Correctness (Mostly Complete)
 - [x] All stats updates must be aware of shared nodes and overlapping watches.
@@ -62,10 +63,10 @@ This document tracks the design and implementation of scalable statistics and in
 - Incremental update logic must be robust against partial failures and transaction rollbacks.
 - Edge cases (e.g., watch overlap, node move between watches) are a source of subtle bugs and must be covered by integration tests.
 - `search_nodes` is not optimized for large datasets; performance will degrade with scale.
-- Repair tooling is stubbed but not implemented; counter desynchronization must be fixed manually if it occurs.
+- Repair tooling assumes all nodes are 'create' events; event-type-accurate repair requires schema changes.
 
 ## Next Steps
-1. Implement or optimize repair tools for counter desynchronization.
+1. Store or index event type with each node to enable fully accurate repair.
 2. Optimize search/indexing for large datasets if needed.
 3. Continue expanding integration tests for new edge cases as they are discovered.
 4. Document known limitations and workarounds as new features are added.
