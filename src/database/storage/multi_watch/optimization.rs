@@ -136,102 +136,97 @@ impl MultiWatchDatabase {
 	pub async fn cleanup_redundant_and_orphaned_nodes(&self) -> Result<(), String> {
 		use crate::database::types::{UnifiedNode, WatchScopedKey};
 		let db = self.database.begin_write().map_err(|e| e.to_string())?;
-		{
-			// Remove redundant watch-specific nodes and raw path_hash nodes FIRST
-			{
-				let fs_cache = db
-					.open_table(crate::database::storage::tables::MULTI_WATCH_FS_CACHE)
-					.map_err(|e| e.to_string())?;
-				let shared_nodes = db
-					.open_table(crate::database::storage::tables::SHARED_NODES)
-					.map_err(|e| e.to_string())?;
-				let mut to_remove = Vec::new();
-				for entry in fs_cache.iter().map_err(|e| e.to_string())? {
-					let (key, value) = entry.map_err(|e| e.to_string())?;
-					if let Ok(node) = bincode::deserialize::<crate::database::types::FilesystemNode>(
-						value.value(),
-					) {
-						let path_hash = node.computed.path_hash;
-						if key.value().len() == 8 {
-							let mut arr = [0u8; 8];
-							arr.copy_from_slice(&key.value()[..8]);
-							let raw_path_hash = u64::from_le_bytes(arr);
-							let shared_lookup =
-								shared_nodes.get(raw_path_hash.to_le_bytes().as_slice());
-							if let Ok(Some(_)) = shared_lookup {
-								to_remove.push(key.value().to_vec());
-							}
-						} else {
-							// Try to parse the key as WatchScopedKey
-							if let Ok(watch_scoped_key) =
-								bincode::deserialize::<WatchScopedKey>(key.value())
-							{
-								if let Some(shared_value) = shared_nodes
-									.get(path_hash.to_le_bytes().as_slice())
-									.map_err(|e| e.to_string())?
-								{
-									if let Ok(UnifiedNode::Shared { shared_info }) =
-										bincode::deserialize::<UnifiedNode>(shared_value.value())
-									{
-										if shared_info
-											.watching_scopes
-											.contains(&watch_scoped_key.watch_id)
-										{
-											to_remove.push(key.value().to_vec());
-										}
-									}
-								}
-							} else if key.value().len() == 8 {
-								// Handle legacy/test keys: direct path_hash (u64 LE)
-								let mut arr = [0u8; 8];
-								arr.copy_from_slice(&key.value()[..8]);
-								let raw_path_hash = u64::from_le_bytes(arr);
-								let shared_lookup =
-									shared_nodes.get(raw_path_hash.to_le_bytes().as_slice());
-								if let Ok(Some(_)) = shared_lookup {
-									to_remove.push(key.value().to_vec());
-								}
-							}
-						}
-					}
-				}
-				// Now remove orphaned shared nodes (reference_count == 0 or watching_scopes is empty)
+		// Remove redundant watch-specific nodes and raw path_hash nodes FIRST
+		let (fs_cache_keys_to_remove, shared_nodes_keys_to_remove) = {
+			let fs_cache = db
+				.open_table(crate::database::storage::tables::MULTI_WATCH_FS_CACHE)
+				.map_err(|e| e.to_string())?;
+			let shared_nodes = db
+				.open_table(crate::database::storage::tables::SHARED_NODES)
+				.map_err(|e| e.to_string())?;
+			let mut fs_cache_keys_to_remove = Vec::new();
+			for entry in fs_cache.iter().map_err(|e| e.to_string())? {
+				let (key, value) = entry.map_err(|e| e.to_string())?;
+				if let Ok(node) =
+					bincode::deserialize::<crate::database::types::FilesystemNode>(value.value())
 				{
-					let shared_nodes = db
-						.open_table(crate::database::storage::tables::SHARED_NODES)
-						.map_err(|e| e.to_string())?;
-					let mut to_remove = Vec::new();
-					// Collect debug info and keys to remove in a single pass
-					for entry in shared_nodes.iter().map_err(|e| e.to_string())? {
-						let (key, value) = entry.map_err(|e| e.to_string())?;
-						// Try UnifiedNode first
-						if let Ok(unode) = bincode::deserialize::<UnifiedNode>(value.value()) {
-							if let UnifiedNode::Shared { shared_info: info } = unode {
-								if info.reference_count == 0 || info.watching_scopes.is_empty() {
-									to_remove.push(key.value().to_vec());
+					let path_hash = node.computed.path_hash;
+					if key.value().len() == 8 {
+						let mut arr = [0u8; 8];
+						arr.copy_from_slice(&key.value()[..8]);
+						let raw_path_hash = u64::from_le_bytes(arr);
+						let shared_lookup =
+							shared_nodes.get(raw_path_hash.to_le_bytes().as_slice());
+						if let Ok(Some(_)) = shared_lookup {
+							fs_cache_keys_to_remove.push(key.value().to_vec());
+						}
+					} else if let Ok(watch_scoped_key) =
+						bincode::deserialize::<WatchScopedKey>(key.value())
+					{
+						if let Some(shared_value) = shared_nodes
+							.get(path_hash.to_le_bytes().as_slice())
+							.map_err(|e| e.to_string())?
+						{
+							if let Ok(UnifiedNode::Shared { shared_info }) =
+								bincode::deserialize::<UnifiedNode>(shared_value.value())
+							{
+								if shared_info
+									.watching_scopes
+									.contains(&watch_scoped_key.watch_id)
+								{
+									fs_cache_keys_to_remove.push(key.value().to_vec());
 								}
 							}
-						} else if let Ok(info) = bincode::deserialize::<
-							crate::database::types::SharedNodeInfo,
-						>(value.value())
-						{
-							// Legacy/test: direct SharedNodeInfo
-							if info.reference_count == 0 || info.watching_scopes.is_empty() {
-								to_remove.push(key.value().to_vec());
-							}
+						}
+					} else if key.value().len() == 8 {
+						let mut arr = [0u8; 8];
+						arr.copy_from_slice(&key.value()[..8]);
+						let raw_path_hash = u64::from_le_bytes(arr);
+						let shared_lookup =
+							shared_nodes.get(raw_path_hash.to_le_bytes().as_slice());
+						if let Ok(Some(_)) = shared_lookup {
+							fs_cache_keys_to_remove.push(key.value().to_vec());
 						}
 					}
-					// Drop the iterator before mutating the table
-					drop(shared_nodes);
-					let mut shared_nodes = db
-						.open_table(crate::database::storage::tables::SHARED_NODES)
-						.map_err(|e| e.to_string())?;
-					for key in &to_remove {
-						shared_nodes
-							.remove(key.as_slice())
-							.map_err(|e| e.to_string())?;
+				}
+			}
+			// Now collect orphaned shared nodes (reference_count == 0 or watching_scopes is empty)
+			let mut shared_nodes_keys_to_remove = Vec::new();
+			for entry in shared_nodes.iter().map_err(|e| e.to_string())? {
+				let (key, value) = entry.map_err(|e| e.to_string())?;
+				if let Ok(unode) = bincode::deserialize::<UnifiedNode>(value.value()) {
+					if let UnifiedNode::Shared { shared_info: info } = unode {
+						if info.reference_count == 0 || info.watching_scopes.is_empty() {
+							shared_nodes_keys_to_remove.push(key.value().to_vec());
+						}
+					}
+				} else if let Ok(info) =
+					bincode::deserialize::<crate::database::types::SharedNodeInfo>(value.value())
+				{
+					if info.reference_count == 0 || info.watching_scopes.is_empty() {
+						shared_nodes_keys_to_remove.push(key.value().to_vec());
 					}
 				}
+			}
+			(fs_cache_keys_to_remove, shared_nodes_keys_to_remove)
+		};
+		// Now mutate the tables only once each
+		{
+			let mut fs_cache = db
+				.open_table(crate::database::storage::tables::MULTI_WATCH_FS_CACHE)
+				.map_err(|e| e.to_string())?;
+			for key in &fs_cache_keys_to_remove {
+				fs_cache.remove(key.as_slice()).map_err(|e| e.to_string())?;
+			}
+		}
+		{
+			let mut shared_nodes = db
+				.open_table(crate::database::storage::tables::SHARED_NODES)
+				.map_err(|e| e.to_string())?;
+			for key in &shared_nodes_keys_to_remove {
+				shared_nodes
+					.remove(key.as_slice())
+					.map_err(|e| e.to_string())?;
 			}
 		}
 		db.commit().map_err(|e| e.to_string())?;
