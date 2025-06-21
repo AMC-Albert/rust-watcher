@@ -63,6 +63,10 @@ async fn test_register_and_list_watches() {
 		.expect("get_watch_metadata");
 	assert!(meta.is_some());
 	assert_eq!(meta.unwrap().config_hash, 123);
+
+	// Explicitly drop database before temp_dir goes out of scope to avoid file lock issues
+	drop(multi_watch);
+	drop(db);
 }
 
 #[tokio::test]
@@ -148,6 +152,10 @@ async fn test_remove_watch() {
 		.await
 		.expect("get_shared_node");
 	assert!(shared.is_none() || shared.as_ref().unwrap().reference_count == 0);
+
+	// Explicitly drop database before temp_dir goes out of scope to avoid file lock issues
+	drop(multi_watch);
+	drop(db);
 }
 
 #[tokio::test]
@@ -257,4 +265,8 @@ async fn test_shared_node_management() {
 		.await
 		.expect("get_shared_node");
 	assert!(shared.is_none() || shared.as_ref().unwrap().reference_count == 0);
+
+	// Explicitly drop database before temp_dir goes out of scope to avoid file lock issues
+	drop(multi_watch);
+	drop(db);
 }

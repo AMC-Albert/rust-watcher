@@ -1,5 +1,4 @@
 mod common;
-use common::TEST_ARTIFACTS_DIR;
 // Path normalization and cross-platform compatibility tests
 //
 // These tests validate that filesystem paths are handled correctly
@@ -241,8 +240,11 @@ mod path_normalization {
 	#[cfg(windows)]
 	fn test_reserved_names_and_trailing_dot_space() {
 		// Windows has reserved names and ignores trailing dots/spaces
-		// Use a dedicated subdirectory under test_artifacts for isolation
-		let artifact_dir = std::path::Path::new(TEST_ARTIFACTS_DIR).join("path_normalization");
+		let temp_dir = tempfile::Builder::new()
+			.prefix("path_normalization_")
+			.tempdir()
+			.expect("Failed to create temp dir");
+		let artifact_dir = temp_dir.path().join("path_normalization");
 		std::fs::create_dir_all(&artifact_dir).expect("Failed to create artifact dir");
 		let temp_dir = tempfile::Builder::new()
 			.prefix("trailingdot_test_")
@@ -274,6 +276,8 @@ mod path_normalization {
 			meta.is_ok(),
 			"Windows should treat trailing dot as equivalent"
 		);
+		// Explicitly drop file handle before cleanup to avoid Windows file lock issues
+		drop(file);
 		// Cleanup: temp_dir is deleted when dropped
 	}
 }

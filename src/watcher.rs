@@ -8,11 +8,9 @@ use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher as No
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tempfile::TempDir;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error, info, warn};
-
-// Keep in sync with tests/common/mod.rs
-const TEST_ARTIFACTS_DIR: &str = "tests/test_artifacts";
 
 #[derive(Debug, Clone)]
 pub struct WatcherConfig {
@@ -143,14 +141,19 @@ async fn run_watcher(
 	};
 
 	// Initialize persistent filesystem cache
+	let mut _dummy_tempdir = None;
 	let mut fs_cache = if let Some(cache) = database.get_filesystem_cache().await {
 		cache
 	} else {
 		// Use a unique dummy DB file per watcher instance to avoid concurrency issues
-		let uuid = uuid::Uuid::new_v4();
-		let dummy_db_path =
-			std::path::Path::new(TEST_ARTIFACTS_DIR).join(format!("dummy-{}.db", uuid));
-		RedbFilesystemCache::new(Arc::new(redb::Database::create(dummy_db_path).unwrap()))
+		let tempdir = TempDir::new().expect("Failed to create tempdir for dummy DB");
+		let dummy_db_path = tempdir
+			.path()
+			.join(format!("dummy-{}.db", uuid::Uuid::new_v4()));
+		let cache =
+			RedbFilesystemCache::new(Arc::new(redb::Database::create(&dummy_db_path).unwrap()));
+		_dummy_tempdir = Some(tempdir); // Hold tempdir so file is deleted on drop
+		cache
 	};
 
 	let move_detector_config = config.move_detector_config.unwrap_or_default();
