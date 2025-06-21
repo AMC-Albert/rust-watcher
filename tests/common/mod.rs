@@ -136,7 +136,9 @@ pub mod database {
 	pub async fn measure_database_operation<F, T>(
 		operation: F,
 	) -> Result<(T, std::time::Duration), Box<dyn std::error::Error>>
-	where F: std::future::Future<Output = Result<T, Box<dyn std::error::Error>>> {
+	where
+		F: std::future::Future<Output = Result<T, Box<dyn std::error::Error>>>,
+	{
 		let start = std::time::Instant::now();
 		let result = operation.await?;
 		let duration = start.elapsed();

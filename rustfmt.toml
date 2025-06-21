@@ -31,9 +31,3 @@ single_line_if_else_max_width = 80
 
 # Match formatting
 match_block_trailing_comma = false
-
-# Where clause formatting
-where_single_line = true
-
-# Brace style
-brace_style = "SameLineWhere"

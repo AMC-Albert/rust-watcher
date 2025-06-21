@@ -33,7 +33,9 @@ impl RetryManager {
 impl RetryManager {
 	/// Execute an operation with retry logic
 	pub async fn execute<T, F>(&self, mut operation: F) -> Result<T>
-	where F: RetryableOperation<T> {
+	where
+		F: RetryableOperation<T>,
+	{
 		let mut attempt = 0;
 		let start_time = std::time::Instant::now();
 
