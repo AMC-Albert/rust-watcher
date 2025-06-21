@@ -1,33 +1,26 @@
-//! Integration tests for filesystem cache functionality
-//!
-//! These tests validate the correctness and performance of the filesystem cache layer:
-//! - Node insert and retrieval
-//! - Directory hierarchy queries
-//! - Batch insert
-//! - Prefix/subtree queries
+// Integration tests for filesystem cache functionality
+//
+// These tests validate the correctness and performance of the filesystem cache layer:
+// - Node insert and retrieval
+// - Directory hierarchy queries
+// - Batch insert
+// - Prefix/subtree queries
 
-use rust_watcher::database::types::FilesystemNode;
-use rust_watcher::database::{DatabaseConfig, DatabaseStorage, RedbStorage};
-use tempfile::TempDir;
-use uuid::Uuid;
+#[path = "common/db_integration.rs"]
+mod db_integration;
+use db_integration::{create_and_store_node, setup_test_storage};
+use rust_watcher::database::DatabaseStorage;
 
 #[tokio::test]
 async fn test_filesystem_node_insert_and_retrieve() {
-	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join(format!("fs_cache_test-{}.redb", uuid::Uuid::new_v4()));
-	let config = DatabaseConfig { database_path: db_path, ..Default::default() };
-	let mut storage = RedbStorage::new(config).await.expect("Failed to create storage");
-	let watch_id = Uuid::new_v4();
+	let (temp_dir, _db_path, mut storage, watch_id) =
+		setup_test_storage("node_insert_and_retrieve").await;
 
 	// Create a test node
 	let node_path = temp_dir.path().join("foo.txt");
-	std::fs::write(&node_path, b"test").unwrap();
-	let metadata = std::fs::metadata(&node_path).unwrap();
-	let node =
-		FilesystemNode::new_with_event_type(node_path.clone(), &metadata, Some("test".to_string()));
+	let node = create_and_store_node(&mut storage, &watch_id, &node_path, "test").await;
 
 	// Store and retrieve
-	storage.store_filesystem_node(&watch_id, &node, "test").await.expect("store");
 	let retrieved = storage.get_filesystem_node(&watch_id, &node_path).await.expect("get");
 	assert!(retrieved.is_some());
 	let retrieved = retrieved.unwrap();
@@ -37,41 +30,15 @@ async fn test_filesystem_node_insert_and_retrieve() {
 
 #[tokio::test]
 async fn test_filesystem_hierarchy_and_list_directory() {
-	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir
-		.path()
-		.join(format!("fs_cache_hierarchy-{}.redb", uuid::Uuid::new_v4()));
-	let config = DatabaseConfig { database_path: db_path, ..Default::default() };
-	let mut storage = RedbStorage::new(config).await.expect("Failed to create storage");
-	let watch_id = Uuid::new_v4();
+	let (temp_dir, _db_path, mut storage, watch_id) =
+		setup_test_storage("hierarchy_and_list_directory").await;
 
 	// Create parent and child nodes
 	let parent_path = temp_dir.path().join("parent");
 	let child_path = parent_path.join("child.txt");
 	std::fs::create_dir(&parent_path).unwrap();
-	std::fs::write(&child_path, b"child").unwrap();
-	let parent_meta = std::fs::metadata(&parent_path).unwrap();
-	let child_meta = std::fs::metadata(&child_path).unwrap();
-	let parent_node = FilesystemNode::new_with_event_type(
-		parent_path.clone(),
-		&parent_meta,
-		Some("test".to_string()),
-	);
-	let child_node = FilesystemNode::new_with_event_type(
-		child_path.clone(),
-		&child_meta,
-		Some("test".to_string()),
-	);
-
-	// Store both
-	storage
-		.store_filesystem_node(&watch_id, &parent_node, "test")
-		.await
-		.expect("store parent");
-	storage
-		.store_filesystem_node(&watch_id, &child_node, "test")
-		.await
-		.expect("store child");
+	let _parent_node = create_and_store_node(&mut storage, &watch_id, &parent_path, "test").await;
+	let _child_node = create_and_store_node(&mut storage, &watch_id, &child_path, "test").await;
 
 	// List directory
 	let children = storage.list_directory_for_watch(&watch_id, &parent_path).await.expect("list");
@@ -81,19 +48,11 @@ async fn test_filesystem_hierarchy_and_list_directory() {
 
 #[tokio::test]
 async fn test_get_node_api() {
-	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join(format!("fs_cache_get_node-{}.redb", uuid::Uuid::new_v4()));
-	let config = DatabaseConfig { database_path: db_path, ..Default::default() };
-	let mut storage = RedbStorage::new(config).await.expect("Failed to create storage");
-	let watch_id = Uuid::new_v4();
+	let (temp_dir, _db_path, mut storage, watch_id) = setup_test_storage("get_node_api").await;
 
 	// Create and store a node
 	let node_path = temp_dir.path().join("bar.txt");
-	std::fs::write(&node_path, b"test").unwrap();
-	let metadata = std::fs::metadata(&node_path).unwrap();
-	let node =
-		FilesystemNode::new_with_event_type(node_path.clone(), &metadata, Some("test".to_string()));
-	storage.store_filesystem_node(&watch_id, &node, "test").await.expect("store");
+	let node = create_and_store_node(&mut storage, &watch_id, &node_path, "test").await;
 
 	// get_node should return the same as get_filesystem_node
 	let retrieved = storage.get_node(&watch_id, &node_path).await.expect("get_node");
@@ -110,11 +69,8 @@ async fn test_get_node_api() {
 
 #[tokio::test]
 async fn test_search_nodes_glob_patterns() {
-	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join(format!("fs_cache_search-{}.redb", uuid::Uuid::new_v4()));
-	let config = DatabaseConfig { database_path: db_path, ..Default::default() };
-	let mut storage = RedbStorage::new(config).await.expect("Failed to create storage");
-	let watch_id = Uuid::new_v4();
+	let (temp_dir, _db_path, mut storage, watch_id) =
+		setup_test_storage("search_nodes_glob_patterns").await;
 
 	// Create a set of files and directories
 	let files = [
@@ -124,11 +80,7 @@ async fn test_search_nodes_glob_patterns() {
 		temp_dir.path().join("delta.md"),
 	];
 	for file in &files {
-		std::fs::write(file, b"test").unwrap();
-		let metadata = std::fs::metadata(file).unwrap();
-		let node =
-			FilesystemNode::new_with_event_type(file.clone(), &metadata, Some("test".to_string()));
-		storage.store_filesystem_node(&watch_id, &node, "test").await.expect("store");
+		let _ = create_and_store_node(&mut storage, &watch_id, file, "test").await;
 	}
 
 	// Simple glob: *.txt
@@ -160,30 +112,12 @@ async fn test_search_nodes_glob_patterns() {
 
 #[tokio::test]
 async fn test_stats_and_metadata_event_types() {
-	use rust_watcher::database::types::FilesystemNode;
-	use rust_watcher::database::{DatabaseConfig, DatabaseStorage, RedbStorage};
-	use tempfile::TempDir;
-	use uuid::Uuid;
-
-	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join(format!("fs_cache_stats-{}.redb", uuid::Uuid::new_v4()));
-	let config = DatabaseConfig { database_path: db_path, ..Default::default() };
-	let mut storage = RedbStorage::new(config).await.expect("Failed to create storage");
-	let watch_id = Uuid::new_v4();
+	let (temp_dir, _db_path, mut storage, watch_id) =
+		setup_test_storage("stats_and_metadata_event_types").await;
 
 	// Create and store a node with a metadata event type
 	let node_path = temp_dir.path().join("meta.txt");
-	std::fs::write(&node_path, b"test").unwrap();
-	let metadata = std::fs::metadata(&node_path).unwrap();
-	let node = FilesystemNode::new_with_event_type(
-		node_path.clone(),
-		&metadata,
-		Some("metadata".to_string()),
-	);
-	storage
-		.store_filesystem_node(&watch_id, &node, "metadata")
-		.await
-		.expect("store");
+	let _node = create_and_store_node(&mut storage, &watch_id, &node_path, "metadata").await;
 
 	// Check that the node is present
 	let retrieved = storage.get_filesystem_node(&watch_id, &node_path).await.expect("get");
@@ -203,12 +137,8 @@ async fn test_stats_and_metadata_event_types() {
 
 #[tokio::test]
 async fn test_repair_stats_counters_stub() {
-	use rust_watcher::database::{DatabaseConfig, RedbStorage};
-	use tempfile::TempDir;
-	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join(format!("fs_cache_repair-{}.redb", uuid::Uuid::new_v4()));
-	let config = DatabaseConfig { database_path: db_path, ..Default::default() };
-	let mut storage = RedbStorage::new(config).await.expect("Failed to create storage");
+	let (_temp_dir, _db_path, mut storage, _watch_id) =
+		setup_test_storage("repair_stats_counters_stub").await;
 	// This should not panic or error, but will always return 0 for now
 	let repaired = storage.repair_stats_counters(None, None).await.expect("repair_stats_counters");
 	assert_eq!(repaired, 0);
@@ -217,17 +147,8 @@ async fn test_repair_stats_counters_stub() {
 #[tokio::test]
 async fn test_hierarchy_ancestor_descendant_traversal() {
 	use std::fs;
-	use tempfile::TempDir;
-	use uuid::Uuid;
-
-	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join(format!(
-		"fs_cache_hierarchy_traversal-{}.redb",
-		uuid::Uuid::new_v4()
-	));
-	let config = DatabaseConfig { database_path: db_path, ..Default::default() };
-	let mut storage = RedbStorage::new(config).await.expect("Failed to create storage");
-	let watch_id = Uuid::new_v4();
+	let (temp_dir, _db_path, mut storage, watch_id) =
+		setup_test_storage("hierarchy_ancestor_descendant_traversal").await;
 
 	// Create a deep directory tree: root/level1/level2/leaf.txt
 	let root = temp_dir.path().join("root");
@@ -245,63 +166,14 @@ async fn test_hierarchy_ancestor_descendant_traversal() {
 	let level2 = fs::canonicalize(&level2).unwrap();
 	let leaf = fs::canonicalize(&leaf).unwrap();
 
-	let root_meta = fs::metadata(&root).unwrap();
-	let level1_meta = fs::metadata(&level1).unwrap();
-	let level2_meta = fs::metadata(&level2).unwrap();
-	let leaf_meta = fs::metadata(&leaf).unwrap();
-
-	let root_node =
-		FilesystemNode::new_with_event_type(root.clone(), &root_meta, Some("test".to_string()));
-	let level1_node =
-		FilesystemNode::new_with_event_type(level1.clone(), &level1_meta, Some("test".to_string()));
-	let level2_node =
-		FilesystemNode::new_with_event_type(level2.clone(), &level2_meta, Some("test".to_string()));
-	let leaf_node =
-		FilesystemNode::new_with_event_type(leaf.clone(), &leaf_meta, Some("test".to_string()));
-
-	// Print hashes and parent hashes immediately after node creation
-	eprintln!(
-		"root path: {:?}, hash: {:?}, parent_hash: {:?}",
-		root, root_node.computed.path_hash, root_node.computed.parent_hash
-	);
-	eprintln!(
-		"level1 path: {:?}, hash: {:?}, parent_hash: {:?}",
-		level1, level1_node.computed.path_hash, level1_node.computed.parent_hash
-	);
-	eprintln!(
-		"level2 path: {:?}, hash: {:?}, parent_hash: {:?}",
-		level2, level2_node.computed.path_hash, level2_node.computed.parent_hash
-	);
-	eprintln!(
-		"leaf path: {:?}, hash: {:?}, parent_hash: {:?}",
-		leaf, leaf_node.computed.path_hash, leaf_node.computed.parent_hash
-	);
-
-	storage
-		.store_filesystem_node(&watch_id, &root_node, "test")
-		.await
-		.expect("store root");
-	storage
-		.store_filesystem_node(&watch_id, &level1_node, "test")
-		.await
-		.expect("store l1");
-	storage
-		.store_filesystem_node(&watch_id, &level2_node, "test")
-		.await
-		.expect("store l2");
-	storage
-		.store_filesystem_node(&watch_id, &leaf_node, "test")
-		.await
-		.expect("store leaf");
+	let _root_node = create_and_store_node(&mut storage, &watch_id, &root, "test").await;
+	let _level1_node = create_and_store_node(&mut storage, &watch_id, &level1, "test").await;
+	let _level2_node = create_and_store_node(&mut storage, &watch_id, &level2, "test").await;
+	let _leaf_node = create_and_store_node(&mut storage, &watch_id, &leaf, "test").await;
 
 	// Test ancestor traversal from leaf
 	let ancestors = storage.list_ancestors_modular(&leaf).await.expect("list_ancestors_modular");
 	let ancestor_paths: Vec<_> = ancestors.iter().map(|n| n.path.clone()).collect();
-	println!("Ancestor paths found: {:?}", ancestor_paths);
-	println!(
-		"Expected: level2={:?}, level1={:?}, root={:?}",
-		level2, level1, root
-	);
 	assert!(ancestor_paths.contains(&level2));
 	assert!(ancestor_paths.contains(&level1));
 	assert!(ancestor_paths.contains(&root));

@@ -8,6 +8,8 @@ use rust_watcher::database::{
 use std::path::PathBuf;
 use tempfile::TempDir;
 
+mod db_integration;
+
 /// Create a temporary directory for testing
 pub fn setup_temp_dir() -> TempDir {
 	TempDir::new().expect("Failed to create temp directory")
