@@ -477,7 +477,135 @@ impl MultiWatchDatabase {
 		Ok(overlaps)
 	}
 
-	// TODO: Implement background optimization scheduler and shared cache optimization logic.
+	/// Background optimization scheduler for shared cache optimization.
+	///
+	/// This is a stub. In a production system, this would spawn a background task (tokio or std thread)
+	/// that periodically scans for suboptimal shared node/cache state and triggers optimization routines.
+	///
+	/// Limitations:
+	/// - Not implemented: no actual background task or optimization logic yet.
+	/// - TODO: Integrate with watch registration/removal, transaction coordination, and error handling.
+	/// - TODO: Expose control via API/config (start/stop, interval, diagnostics).
+	pub fn start_optimization_scheduler(&self) {
+		// TODO: Implement background task using tokio::spawn or std::thread::spawn
+		// This should periodically call self.optimize_shared_cache().
+		// For now, this is a no-op.
+	}
+
+	/// Optimize the shared cache by analyzing overlap statistics and node reference counts.
+	///
+	/// This implementation is minimal and only logs detected overlaps. In production, this should
+	/// trigger cache merges/splits and update shared node state as needed.
+	pub async fn optimize_shared_cache(&self) {
+		// Gather overlap statistics
+		let overlaps = match self.compute_overlap_statistics().await {
+			Ok(o) => o,
+			Err(e) => {
+				eprintln!("[MultiWatchDatabase] Failed to compute overlap statistics: {e}");
+				return;
+			}
+		};
+		for overlap in overlaps {
+			match overlap {
+				crate::database::storage::multi_watch::WatchOverlap::Partial {
+					watch_a,
+					watch_b,
+					ref common_prefix,
+				} => {
+					if let Err(e) = self
+						.merge_nodes_to_shared(common_prefix, &[watch_a, watch_b])
+						.await
+					{
+						eprintln!(
+							"[MultiWatchDatabase] Failed to merge nodes at {:?}: {e}",
+							common_prefix
+						);
+					} else {
+						println!("[MultiWatchDatabase] Merged nodes at {:?} into shared node for watches {:?}", common_prefix, [watch_a, watch_b]);
+					}
+				}
+				crate::database::storage::multi_watch::WatchOverlap::Ancestor {
+					ancestor: watch_a,
+					descendant: watch_b,
+				} => {
+					if let Ok(Some(watch)) = self.get_watch_metadata(&watch_b).await {
+						let path = &watch.root_path;
+						if let Err(e) = self.merge_nodes_to_shared(path, &[watch_a, watch_b]).await
+						{
+							eprintln!(
+								"[MultiWatchDatabase] Failed to merge nodes at {:?}: {e}",
+								path
+							);
+						} else {
+							println!("[MultiWatchDatabase] Merged nodes at {:?} into shared node for watches {:?}", path, [watch_a, watch_b]);
+						}
+					}
+				}
+				_ => {}
+			}
+		}
+		// TODO: Remove redundant watch-specific nodes and clean up orphaned shared nodes
+	}
+
+	/// Merge nodes at the given path into a shared node for the specified watches.
+	/// This is a minimal implementation: it creates/updates a SharedNodeInfo entry in SHARED_NODES.
+	async fn merge_nodes_to_shared(
+		&self,
+		path: &std::path::Path,
+		watch_ids: &[uuid::Uuid],
+	) -> Result<(), String> {
+		use crate::database::types::{FilesystemNode, SharedNodeInfo, UnifiedNode};
+		use chrono::Utc;
+		let node = FilesystemNode {
+			path: path.to_path_buf(),
+			node_type: crate::database::types::NodeType::Directory {
+				child_count: 0,
+				total_size: 0,
+				max_depth: 0,
+			},
+			metadata: crate::database::types::NodeMetadata {
+				modified_time: std::time::SystemTime::now(),
+				created_time: None,
+				accessed_time: None,
+				permissions: 0,
+				inode: None,
+				windows_id: None,
+			},
+			cache_info: crate::database::types::CacheInfo {
+				cached_at: Utc::now(),
+				last_verified: Utc::now(),
+				cache_version: 1,
+				needs_refresh: false,
+			},
+			computed: crate::database::types::ComputedProperties {
+				depth_from_root: 0,
+				path_hash: 0,
+				parent_hash: None,
+				canonical_name: path.to_string_lossy().to_string(),
+			},
+		};
+		let shared_info = SharedNodeInfo {
+			node,
+			watching_scopes: watch_ids.to_vec(),
+			reference_count: watch_ids.len() as u32,
+			last_shared_update: Utc::now(),
+		};
+		// Store in SHARED_NODES table (synchronously for now)
+		let key = crate::database::types::StorageKey::PathHash(0).to_bytes(); // TODO: use real hash
+		let value =
+			bincode::serialize(&UnifiedNode::Shared { shared_info }).map_err(|e| e.to_string())?;
+		let db = self.database.begin_write().map_err(|e| e.to_string())?;
+		{
+			let mut table = db
+				.open_table(crate::database::storage::tables::SHARED_NODES)
+				.map_err(|e| e.to_string())?;
+			table
+				.insert(key.as_slice(), value.as_slice())
+				.map_err(|e| e.to_string())?;
+		}
+		db.commit().map_err(|e| e.to_string())?;
+		Ok(())
+	}
 }
 
 // TODO: In a real implementation, transaction metadata should be persisted in a dedicated table (e.g., WATCH_TRANSACTIONS),
