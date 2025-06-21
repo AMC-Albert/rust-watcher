@@ -332,30 +332,62 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		&mut self,
 		parent_path: &Path,
 	) -> DatabaseResult<Vec<FilesystemNode>> {
-		// Aggregate all direct children of parent_path across all watches
+		// Aggregate all direct children of parent_path across all watches and shared nodes
 		let read_txn = self.database.begin_read()?;
 		let hierarchy_table = read_txn.open_multimap_table(MULTI_WATCH_HIERARCHY)?;
 		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
+		let watch_registry = read_txn.open_table(WATCH_REGISTRY)?;
 		let mut children = Vec::new();
 		let mut seen_paths = std::collections::HashSet::new();
 
-		// Compute all possible parent keys (shared and per-watch)
-		// TODO: This currently only supports shared nodes; extend for all watches if needed
 		let parent_hash = calculate_path_hash(parent_path);
+
+		// 1. Scan all watches for direct children
+		for entry in watch_registry.iter()? {
+			let (watch_id_guard, _) = entry?;
+			let watch_id_bytes = watch_id_guard.value();
+			if watch_id_bytes.len() != 16 {
+				continue;
+			}
+			let watch_id = match uuid::Uuid::from_slice(watch_id_bytes) {
+				Ok(id) => id,
+				Err(_) => continue, // skip corrupt entries
+			};
+			let parent_key = Self::create_scoped_key(&watch_id, parent_hash);
+			let parent_key_bytes = Self::serialize(&parent_key)?;
+			if let Ok(mut child_iter) = hierarchy_table.get(parent_key_bytes.as_slice()) {
+				for child_key_result in &mut child_iter {
+					let child_key = match child_key_result {
+						Ok(guard) => guard.value().to_vec(),
+						Err(_) => continue,
+					};
+					if let Some(node_bytes) = fs_cache_table.get(child_key.as_slice())? {
+						let node: FilesystemNode = match Self::deserialize(node_bytes.value()) {
+							Ok(n) => n,
+							Err(_) => continue,
+						};
+						if seen_paths.insert(node.path.clone()) {
+							children.push(node);
+						}
+					}
+				}
+			}
+		}
+
+		// 2. Also scan shared nodes for this parent (legacy support, if any)
 		let shared_key_bytes = Self::serialize(&parent_hash)?;
 		if let Ok(mut values) = hierarchy_table.get(shared_key_bytes.as_slice()) {
-			// MultimapValue<'_, &[u8]>: must iterate, extract each child key
 			for result in &mut values {
 				let access_guard = match result {
 					Ok(guard) => guard,
-					Err(_) => continue, // skip corrupt entries
+					Err(_) => continue,
 				};
 				let child_key_bytes = access_guard.value();
 				if let Some(child_node_bytes) = fs_cache_table.get(child_key_bytes)? {
 					let child_node: FilesystemNode =
 						match Self::deserialize(child_node_bytes.value()) {
 							Ok(node) => node,
-							Err(_) => continue, // skip corrupt nodes
+							Err(_) => continue,
 						};
 					if seen_paths.insert(child_node.path.clone()) {
 						children.push(child_node);
@@ -363,7 +395,6 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 				}
 			}
 		}
-		// TODO: Add per-watch parent key support for full cross-watch queries
 		Ok(children)
 	}
 
@@ -384,6 +415,68 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			}
 		}
 		Ok(None)
+	}
+
+	// List all ancestor nodes for a given path (up to root).
+	async fn list_ancestors(&mut self, path: &Path) -> DatabaseResult<Vec<FilesystemNode>> {
+		let mut ancestors = Vec::new();
+		let mut current_path = path.to_path_buf();
+		let mut seen_hashes = std::collections::HashSet::new();
+		while let Some(node) = self.get_unified_node(&current_path).await? {
+			let parent_hash = node.computed.parent_hash;
+			if let Some(hash) = parent_hash {
+				if !seen_hashes.insert(hash) {
+					// Defensive: cycle detected
+					break;
+				}
+				// Find parent node by hash (scan all nodes, not efficient, but safe for now)
+				let parent_node = {
+					let read_txn = self.database.begin_read()?;
+					let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
+					let mut found = None;
+					for entry in fs_cache_table.iter()? {
+						let (_key, value) = entry?;
+						let candidate: FilesystemNode = Self::deserialize(value.value())?;
+						if candidate.computed.path_hash == hash {
+							found = Some(candidate);
+							break;
+						}
+					}
+					found
+				};
+				if let Some(parent) = parent_node {
+					ancestors.push(parent.clone());
+					current_path = parent.path.clone();
+				} else {
+					break;
+				}
+			} else {
+				break;
+			}
+		}
+		Ok(ancestors)
+	}
+
+	// List all descendant nodes for a given path (subtree query).
+	async fn list_descendants(&mut self, path: &Path) -> DatabaseResult<Vec<FilesystemNode>> {
+		let mut descendants = Vec::new();
+		let mut stack = vec![path.to_path_buf()];
+		let mut seen = std::collections::HashSet::new();
+		while let Some(current) = stack.pop() {
+			let children = self.list_directory_unified(&current).await?;
+			for child in children {
+				if seen.insert(child.computed.path_hash) {
+					descendants.push(child.clone());
+					if matches!(
+						child.node_type,
+						crate::database::types::NodeType::Directory { .. }
+					) {
+						stack.push(child.path.clone());
+					}
+				}
+			}
+		}
+		Ok(descendants)
 	}
 }
 

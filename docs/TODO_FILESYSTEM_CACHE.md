@@ -9,7 +9,9 @@
 - All tests pass except for explicitly unimplemented multi-watch integration tests (not a regression).
 - Documentation and comments updated for current code; pending features are still only in design/TODO docs.
 - Phase 3 groundwork: trait stubs and documentation for unified/cross-watch queries, hierarchical operations, and pattern search added. Unused parameter warnings resolved (June 2025).
-- `list_directory_unified` implementation updated to use correct iterator idiom for `MultimapValue<'_, &[u8]>`.
+- `list_directory_unified` now performs a true cross-watch aggregation and deduplication.
+- `get_unified_node` implemented: prefers shared node, falls back to per-watch.
+- Hierarchical operations (`list_ancestors`, `list_descendants`) implemented and tested; defensive against cycles and missing parents.
 - All build, test, and clippy checks are clean as of latest commit.
 - See commit history for details of the modularization, bugfixes, and groundwork for Phase 3 (June 2025).
 
@@ -75,6 +77,8 @@
 | Multi-watch concurrency tests   | Complete | Integration test for concurrent registration/removal passes (June 2025)                                                                       |
 | Shared cache optimization       | Complete | Overlap detection, shared node merge, cleanup, robust error handling, and background scheduler implemented. Remaining limitations documented. |
 | Redundant/orphaned node cleanup | Complete | Robust removal of redundant watch-specific and orphaned shared nodes; integration test passes (June 2025)                                     |
+| Unified/cross-watch queries     | Complete | `list_directory_unified` and `get_unified_node` implemented and tested                                                                        |
+| Hierarchical operations         | Complete | `list_ancestors` and `list_descendants` implemented and tested                                                                                |
 
 ---
 
