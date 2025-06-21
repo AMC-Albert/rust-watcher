@@ -62,67 +62,57 @@ pub trait FilesystemCacheStorage: Send + Sync {
 	/// List directory contents across all watches (unified view).
 	///
 	/// Returns all nodes that are direct children of the given path, regardless of watch.
-	/// See RedbFilesystemCache for the actual implementation. This default is a stub.
+	/// Default impl is a stub; see RedbFilesystemCache for production implementation.
 	async fn list_directory_unified(
 		&mut self, _parent_path: &std::path::Path,
 	) -> DatabaseResult<Vec<FilesystemNode>> {
-		unimplemented!("list_directory_unified not yet implemented; see RedbFilesystemCache for implementation");
+		unimplemented!("list_directory_unified: not implemented in this backend");
 	}
 
 	/// Get a unified node view for a given path (across all watches).
 	///
 	/// Returns the most relevant node (shared or watch-specific) for the path.
-	/// TODO: Implement cross-watch node resolution and conflict handling.
+	/// Default impl is a stub; see RedbFilesystemCache for production implementation.
 	async fn get_unified_node(
 		&mut self, _path: &std::path::Path,
 	) -> DatabaseResult<Option<FilesystemNode>> {
-		// Not yet implemented. This will require merging shared and watch-specific nodes.
-		// Edge cases: conflicting metadata, permissions, and node types.
-		unimplemented!("get_unified_node not yet implemented");
+		unimplemented!("get_unified_node: not implemented in this backend");
 	}
 
 	/// List all ancestor nodes for a given path (up to root).
 	///
 	/// Returns the chain of parent nodes, for hierarchical queries.
-	/// TODO: Implement efficient ancestor traversal using prefix or hierarchy tables.
+	/// Default impl is a stub; see RedbFilesystemCache for production implementation.
 	async fn list_ancestors(
 		&mut self, _path: &std::path::Path,
 	) -> DatabaseResult<Vec<FilesystemNode>> {
-		// Not yet implemented. This will require walking up the hierarchy and resolving nodes.
-		// Edge cases: missing parents, cross-watch ancestry, symlink loops.
-		unimplemented!("list_ancestors not yet implemented");
+		unimplemented!("list_ancestors: not implemented in this backend");
 	}
 
 	/// List all descendant nodes for a given path (subtree query).
 	///
 	/// Returns all nodes under the given path, recursively.
-	/// TODO: Implement efficient subtree traversal using prefix or hierarchy tables.
+	/// Default impl is a stub; see RedbFilesystemCache for production implementation.
 	async fn list_descendants(
 		&mut self, _path: &std::path::Path,
 	) -> DatabaseResult<Vec<FilesystemNode>> {
-		// Not yet implemented. This will require recursive or batched traversal.
-		// Edge cases: large subtrees, cycles, permission filtering.
-		unimplemented!("list_descendants not yet implemented");
+		unimplemented!("list_descendants: not implemented in this backend");
 	}
 
 	/// Pattern-based search for nodes (e.g., glob, regex).
 	///
-	/// Returns all nodes matching the given pattern. WARNING: Current implementation is a naive full scan and will not scale for large caches. Use only for testing or small datasets.
-	/// TODO: Implement efficient indexed search for production use. Edge cases: escaping, cross-platform path semantics, and performance bottlenecks.
+	/// Returns all nodes matching the given pattern. Default impl is a stub; see RedbFilesystemCache for production implementation.
 	async fn search_nodes(&mut self, _pattern: &str) -> DatabaseResult<Vec<FilesystemNode>> {
-		// Not yet implemented. This will require pattern parsing and index scans.
-		// Edge cases: performance, escaping, cross-platform path semantics.
-		unimplemented!("search_nodes not yet implemented");
+		unimplemented!("search_nodes: not implemented in this backend");
 	}
 
 	/// Retrieve a single filesystem node for a specific watch (single-node query).
 	///
-	/// Returns the node if present, or None if not found. This is a fundamental API for cache lookups.
-	/// TODO: Implement in all backends. Edge cases: path normalization, cross-platform semantics, and stale cache entries.
+	/// Returns the node if present, or None if not found. Default impl is a stub; see RedbFilesystemCache for production implementation.
 	async fn get_node(
 		&mut self, _watch_id: &Uuid, _path: &Path,
 	) -> DatabaseResult<Option<FilesystemNode>> {
-		unimplemented!("get_node not yet implemented");
+		unimplemented!("get_node: not implemented in this backend");
 	}
 
 	/// Remove a single filesystem node for a specific watch
