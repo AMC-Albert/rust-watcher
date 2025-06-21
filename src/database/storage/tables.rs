@@ -60,6 +60,10 @@ pub const WATCH_REGISTRY: TableDefinition<&[u8], &[u8]> = TableDefinition::new("
 pub const PATH_TO_WATCHES: MultimapTableDefinition<&[u8], &[u8]> =
 	MultimapTableDefinition::new("path_to_watches");
 
+/// Table for persistent watch-scoped transaction metadata (transaction_id -> WatchTransaction)
+pub const WATCH_TRANSACTIONS: TableDefinition<&[u8], &[u8]> =
+	TableDefinition::new("watch_transactions");
+
 // ===== Performance and Maintenance Tables =====
 
 /// Database statistics and health metrics
@@ -88,6 +92,7 @@ pub const MULTI_WATCH_TABLES: &[&str] = &[
 	"shared_nodes",
 	"watch_registry",
 	"path_to_watches",
+	"watch_transactions", // Added for transaction coordination
 ];
 pub const MAINTENANCE_TABLES: &[&str] = &["stats", "maintenance_log"];
 
@@ -105,6 +110,7 @@ pub const ALL_TABLES: &[&str] = &[
 	"shared_nodes",
 	"watch_registry",
 	"path_to_watches",
+	"watch_transactions", // Added for transaction coordination
 	"stats",
 	"maintenance_log",
 ];

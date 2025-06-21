@@ -7,9 +7,28 @@ use crate::database::{
 	error::DatabaseResult,
 	types::{SharedNodeInfo, WatchMetadata},
 };
+use chrono::{DateTime, Utc};
 use redb::{Database, ReadableTable};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
+
+/// Transaction status for coordination
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TransactionStatus {
+	InProgress,
+	Committed,
+	Aborted,
+}
+
+/// Metadata for a watch-scoped transaction
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WatchTransaction {
+	pub transaction_id: Uuid,
+	pub watch_id: Uuid,
+	pub started_at: DateTime<Utc>,
+	pub status: TransactionStatus,
+}
 
 /// Trait for multi-watch storage operations
 #[async_trait::async_trait]
@@ -246,4 +265,93 @@ impl MultiWatchDatabase {
 		write_txn.commit()?;
 		Ok(())
 	}
+
+	/// Begin a new transaction for a watch and persist it
+	pub async fn begin_transaction(&self, watch_id: &Uuid) -> DatabaseResult<WatchTransaction> {
+		let txn = WatchTransaction {
+			transaction_id: Uuid::new_v4(),
+			watch_id: *watch_id,
+			started_at: Utc::now(),
+			status: TransactionStatus::InProgress,
+		};
+		self.persist_transaction(&txn).await?;
+		Ok(txn)
+	}
+
+	/// Commit a transaction and update its status
+	pub async fn commit_transaction(&self, txn: &WatchTransaction) -> DatabaseResult<()> {
+		self.update_transaction_status(&txn.transaction_id, TransactionStatus::Committed)
+			.await
+	}
+
+	/// Abort a transaction and update its status
+	pub async fn abort_transaction(&self, txn: &WatchTransaction) -> DatabaseResult<()> {
+		self.update_transaction_status(&txn.transaction_id, TransactionStatus::Aborted)
+			.await
+	}
+
+	/// Persist a new transaction for a watch
+	pub async fn persist_transaction(&self, txn: &WatchTransaction) -> DatabaseResult<()> {
+		let write_txn = self.database.begin_write()?;
+		{
+			let mut table = write_txn.open_table(super::tables::WATCH_TRANSACTIONS)?;
+			let key = txn.transaction_id.as_bytes();
+			let value = bincode::serialize(txn)
+				.map_err(|e| crate::database::error::DatabaseError::Serialization(e.to_string()))?;
+			table.insert(key.as_slice(), value.as_slice())?;
+		}
+		write_txn.commit()?;
+		Ok(())
+	}
+
+	pub async fn get_transaction(
+		&self,
+		transaction_id: &Uuid,
+	) -> DatabaseResult<Option<WatchTransaction>> {
+		let read_txn = self.database.begin_read()?;
+		let table = read_txn.open_table(super::tables::WATCH_TRANSACTIONS)?;
+		if let Some(value) = table.get(transaction_id.as_bytes().as_slice())? {
+			let txn = bincode::deserialize::<WatchTransaction>(value.value()).ok();
+			Ok(txn)
+		} else {
+			Ok(None)
+		}
+	}
+
+	pub async fn update_transaction_status(
+		&self,
+		transaction_id: &Uuid,
+		status: TransactionStatus,
+	) -> DatabaseResult<()> {
+		let write_txn = self.database.begin_write()?;
+		// First, read and update the transaction in a separate scope
+		let updated = {
+			let table = write_txn.open_table(super::tables::WATCH_TRANSACTIONS)?;
+			let value_bytes = table
+				.get(transaction_id.as_bytes().as_slice())?
+				.map(|v| v.value().to_vec()); // Copy bytes to break borrow
+			if let Some(value_bytes) = value_bytes {
+				if let Ok(mut txn) = bincode::deserialize::<WatchTransaction>(&value_bytes) {
+					txn.status = status;
+					Some(bincode::serialize(&txn).map_err(|e| {
+						crate::database::error::DatabaseError::Serialization(e.to_string())
+					})?)
+				} else {
+					None
+				}
+			} else {
+				None
+			}
+		};
+		// Now, perform the write if needed
+		if let Some(updated) = updated {
+			let mut table = write_txn.open_table(super::tables::WATCH_TRANSACTIONS)?;
+			table.insert(transaction_id.as_bytes().as_slice(), updated.as_slice())?;
+		}
+		write_txn.commit()?;
+		Ok(())
+	}
 }
+
+// TODO: In a real implementation, transaction metadata should be persisted in a dedicated table (e.g., WATCH_TRANSACTIONS),
+// and all watch-scoped mutations should be coordinated through this mechanism. This stub is for API completeness and future expansion.
