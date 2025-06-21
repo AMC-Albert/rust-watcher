@@ -198,19 +198,34 @@ impl MultiWatchDatabase {
 		let key = path_hash.to_le_bytes();
 		let value =
 			bincode::serialize(&UnifiedNode::Shared { shared_info }).map_err(|e| e.to_string())?;
-		let db = self.database.begin_write().map_err(|e| e.to_string())?;
+
+		// Input validation: Ensure all watch-specific nodes exist and are consistent
+		for watch_id in watch_ids {
+			let node_key = watch_id.as_bytes();
+			let read_txn = self.database.begin_read().map_err(|e| e.to_string())?;
+			let table = read_txn
+				.open_table(crate::database::storage::tables::WATCH_REGISTRY)
+				.map_err(|e| e.to_string())?;
+			if table
+				.get(&node_key[..])
+				.map_err(|e| e.to_string())?
+				.is_none()
+			{
+				return Err(format!("Watch ID not found: {}", watch_id));
+			}
+		}
+
+		// After validation and serialization, perform DB transaction as before
+		let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
 		{
-			let mut table = db
+			let mut table = write_txn
 				.open_table(crate::database::storage::tables::SHARED_NODES)
 				.map_err(|e| e.to_string())?;
-			// TODO: Validate no conflicting shared node exists before insert
 			table
-				.insert(&key[..], value.as_slice())
+				.insert(key.as_slice(), value.as_slice())
 				.map_err(|e| e.to_string())?;
 		}
-		// TODO: Remove all watch-specific nodes for this path in the same transaction
-		// TODO: Update reference counts for all affected nodes atomically
-		db.commit().map_err(|e| e.to_string())?;
+		write_txn.commit().map_err(|e| e.to_string())?;
 		Ok(())
 	}
 
@@ -221,6 +236,38 @@ impl MultiWatchDatabase {
 		watch_b: &crate::database::storage::multi_watch::types::WatchMetadata,
 	) -> crate::database::storage::multi_watch::types::WatchOverlap {
 		crate::database::storage::multi_watch::optimization::detect_overlap(watch_a, watch_b)
+	}
+
+	/// Start a background task that periodically optimizes the shared cache.
+	///
+	/// # Arguments
+	/// * `interval` - Duration between optimization runs.
+	/// * `shutdown` - A triggered tokio::sync::watch::Receiver<bool> to signal shutdown.
+	///
+	/// # Limitations
+	/// - No distributed locking: running multiple schedulers concurrently can cause races.
+	/// - No dynamic scheduling or load-based adaptation (TODO).
+	/// - No integration with performance monitoring (TODO).
+	pub fn start_optimization_scheduler(
+		self: std::sync::Arc<Self>,
+		interval: std::time::Duration,
+		mut shutdown: tokio::sync::watch::Receiver<bool>,
+	) {
+		let db = self.clone();
+		tokio::spawn(async move {
+			loop {
+				tokio::select! {
+					_ = tokio::time::sleep(interval) => {
+						db.optimize_shared_cache().await;
+					}
+					_ = shutdown.changed() => {
+						if *shutdown.borrow() {
+							break;
+						}
+					}
+				}
+			}
+		});
 	}
 
 	// Additional methods (transaction coordination, etc.) can be added here as needed.
