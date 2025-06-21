@@ -64,19 +64,19 @@
 
 # Summary Table
 
-| Task                            | Status      | Notes                                                                                                                                                           |
-| ------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Event log retention/cleanup     | Complete    | Logic, tests, and integration done                                                                                                                              |
-| Event log edge case docs        | Complete    | Documented in code and event_retention.rs                                                                                                                       |
-| Brute-force stats impl          | Complete    | O(N), not scalable, see maintenance.rs                                                                                                                          |
-| Scalable stats/indexing         | Partial     | O(1) event and per-type stats done; per-watch, per-path, and advanced indexing still TODO                                                                       |
-| Cross-platform path handling    | Complete    | Windows/Unix normalization, edge cases                                                                                                                          |
-| Multi-watch test infra          | Complete    | Scaffolded and passing basic checks                                                                                                                             |
-| Stress tests                    | Complete    | Scaffolded and passing basic checks                                                                                                                             |
-| Multi-watch core                | In progress | Persistent transaction coordination, watch creation, permissions, and tree scan implemented                                                                     |
-| Multi-watch concurrency tests   | Complete    | Integration test for concurrent registration/removal passes (June 2025)                                                                                         |
-| Shared cache optimization       | Partial     | Minimal implementation: shared nodes created for overlaps, integration test passes (June 2025). Full merge/split logic, cleanup, and error handling still TODO. |
-| Redundant/orphaned node cleanup | Complete    | Robust removal of redundant watch-specific and orphaned shared nodes; integration test passes (June 2025)                                                       |
+| Task                            | Status      | Notes                                                                                                                                                       |
+| ------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Event log retention/cleanup     | Complete    | Logic, tests, and integration done                                                                                                                          |
+| Event log edge case docs        | Complete    | Documented in code and event_retention.rs                                                                                                                   |
+| Brute-force stats impl          | Complete    | O(N), not scalable, see maintenance.rs                                                                                                                      |
+| Scalable stats/indexing         | Partial     | O(1) event and per-type stats done; per-watch, per-path, and advanced indexing still TODO                                                                   |
+| Cross-platform path handling    | Complete    | Windows/Unix normalization, edge cases                                                                                                                      |
+| Multi-watch test infra          | Complete    | Scaffolded and passing basic checks                                                                                                                         |
+| Stress tests                    | Complete    | Scaffolded and passing basic checks                                                                                                                         |
+| Multi-watch core                | In progress | Persistent transaction coordination, watch creation, permissions, and tree scan implemented                                                                 |
+| Multi-watch concurrency tests   | Complete    | Integration test for concurrent registration/removal passes (June 2025)                                                                                     |
+| Shared cache optimization       | Partial     | Overlap detection, shared node merge, and cleanup implemented. Not fully production-grade: atomicity, error handling, and background scheduling still TODO. |
+| Redundant/orphaned node cleanup | Complete    | Robust removal of redundant watch-specific and orphaned shared nodes; integration test passes (June 2025)                                                   |
 
 ---
 
@@ -95,10 +95,11 @@
 - [x] Implement watch isolation and permission management
 
 ### 2.3 Overlap Detection and Optimization
-- [ ] Create `WatchOverlap` detection algorithms
-- [ ] Implement automatic shared cache optimization
-- [ ] Add overlap statistics and reporting
-- [ ] Create background optimization scheduler
+- [x] Create `WatchOverlap` detection algorithms  # Implemented in multi_watch.rs (see detect_overlap, WatchOverlap)
+- [x] Implement automatic shared cache optimization  # Implemented: optimize_shared_cache, merge_nodes_to_shared, cleanup_redundant_and_orphaned_nodes
+- [x] Add overlap statistics and reporting  # Implemented: compute_overlap_statistics, logs in optimize_shared_cache
+- [ ] Improve robustness, error handling, and atomicity of merge/split logic  # Still TODO for production
+- [ ] Production-grade background optimization scheduler  # Stub exists, not implemented
 
 ## Phase 3: Filesystem Cache API
 

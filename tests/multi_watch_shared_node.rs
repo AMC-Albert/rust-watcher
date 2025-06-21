@@ -1,7 +1,7 @@
 //! Tests for shared node management in MultiWatchDatabase
 
 use chrono::Utc;
-use rust_watcher::database::storage::multi_watch::MultiWatchDatabase;
+use rust_watcher::database::storage::multi_watch::implementation::MultiWatchDatabase;
 use rust_watcher::database::types::{
 	CacheInfo, ComputedProperties, FilesystemNode, NodeMetadata, NodeType, SharedNodeInfo,
 };

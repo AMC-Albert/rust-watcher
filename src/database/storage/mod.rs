@@ -20,4 +20,6 @@ pub use filesystem_cache::FilesystemCacheStorage;
 pub use indexing::IndexingStorage;
 pub use maintenance::MaintenanceStorage;
 pub use metadata_storage::MetadataStorage;
-pub use multi_watch::MultiWatchStorage;
+pub use multi_watch::implementation::MultiWatchDatabase;
+pub use multi_watch::implementation::MultiWatchStorage;
+pub use multi_watch::types::WatchOverlap;

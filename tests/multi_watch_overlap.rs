@@ -1,7 +1,8 @@
 //! Tests for watch overlap detection and statistics in MultiWatchDatabase
 
 use chrono::Utc;
-use rust_watcher::database::storage::multi_watch::{MultiWatchDatabase, WatchOverlap};
+use rust_watcher::database::storage::multi_watch::implementation::MultiWatchDatabase;
+use rust_watcher::database::storage::multi_watch::types::WatchOverlap;
 use rust_watcher::database::types::{WatchMetadata, WatchPermissions};
 use std::path::PathBuf;
 use std::sync::Arc;
