@@ -31,11 +31,14 @@ impl<T: FilesystemCacheStorage> FilesystemCacheSynchronizer
 		// This is a pragmatic, non-transactional implementation.
 		// TODO: Add error handling/reporting, and consider transactional semantics.
 		let mut cache = self.cache.lock().await;
+		let event_type_str = format!("{:?}", event.event_type);
 		match event.event_type {
-			EventType::Create | EventType::Write => {
+			EventType::Create | EventType::Write | EventType::Chmod | EventType::Other(_) => {
 				// Attempt to store or update the node in the cache.
 				if let Some(ref node) = event_to_node(event) {
-					if let Err(e) = cache.store_filesystem_node(watch_id, node).await {
+					if let Err(e) =
+						cache.store_filesystem_node(watch_id, node, &event_type_str).await
+					{
 						// Log error, but do not panic. In production, consider error metrics.
 						tracing::warn!("Cache update failed: {}", e);
 					}
@@ -47,16 +50,19 @@ impl<T: FilesystemCacheStorage> FilesystemCacheSynchronizer
 			EventType::Remove => {
 				// Remove the node from the cache if possible.
 				let path = &event.path;
-				if let Err(e) = cache.remove_filesystem_node(watch_id, path).await {
+				if let Err(e) = cache.remove_filesystem_node(watch_id, path, &event_type_str).await
+				{
 					tracing::warn!("Cache node removal failed: {}", e);
 				}
 			}
-			EventType::Rename => {
+			EventType::Rename | EventType::Move | EventType::RenameFrom | EventType::RenameTo => {
 				// Rename (move) the node in the cache if possible.
 				if let Some(ref move_data) = event.move_data {
 					let old_path = &move_data.source_path;
 					let new_path = &move_data.destination_path;
-					if let Err(e) = cache.rename_filesystem_node(watch_id, old_path, new_path).await
+					if let Err(e) = cache
+						.rename_filesystem_node(watch_id, old_path, new_path, &event_type_str)
+						.await
 					{
 						tracing::warn!("Cache node rename failed: {}", e);
 					}
@@ -66,13 +72,6 @@ impl<T: FilesystemCacheStorage> FilesystemCacheSynchronizer
 						event
 					);
 				}
-			}
-			_ => {
-				// Ignore other event types for now.
-				tracing::debug!(
-					"Unhandled event type for cache sync: {:?}",
-					event.event_type
-				);
 			}
 		}
 	}

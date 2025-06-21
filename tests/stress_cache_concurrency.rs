@@ -54,7 +54,12 @@ async fn stress_concurrent_cache_reads() {
 	));
 	let watch_id = Uuid::new_v4();
 	let node = make_test_node("/read/file.txt");
-	storage.lock().await.store_filesystem_node(&watch_id, &node).await.unwrap();
+	storage
+		.lock()
+		.await
+		.store_filesystem_node(&watch_id, &node, "test")
+		.await
+		.unwrap();
 
 	let mut handles = vec![];
 	for _ in 0..16 {
@@ -89,7 +94,12 @@ async fn stress_concurrent_cache_writes() {
 		handles.push(tokio::spawn(async move {
 			for j in 0..100 {
 				let node = make_test_node(&format!("/write/file_{i}_{j}.txt"));
-				storage.lock().await.store_filesystem_node(&watch_id, &node).await.unwrap();
+				storage
+					.lock()
+					.await
+					.store_filesystem_node(&watch_id, &node, "test")
+					.await
+					.unwrap();
 			}
 		}));
 	}
@@ -111,7 +121,12 @@ async fn stress_concurrent_cache_read_write_mix() {
 	));
 	let watch_id = Uuid::new_v4();
 	let node = make_test_node("/mix/file.txt");
-	storage.lock().await.store_filesystem_node(&watch_id, &node).await.unwrap();
+	storage
+		.lock()
+		.await
+		.store_filesystem_node(&watch_id, &node, "test")
+		.await
+		.unwrap();
 
 	let mut handles = vec![];
 	// Readers
@@ -130,7 +145,12 @@ async fn stress_concurrent_cache_read_write_mix() {
 		handles.push(tokio::spawn(async move {
 			for j in 0..100 {
 				let node = make_test_node(&format!("/mix/file_{i}_{j}.txt"));
-				storage.lock().await.store_filesystem_node(&watch_id, &node).await.unwrap();
+				storage
+					.lock()
+					.await
+					.store_filesystem_node(&watch_id, &node, "test")
+					.await
+					.unwrap();
 			}
 		}));
 	}

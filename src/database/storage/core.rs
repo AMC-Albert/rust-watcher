@@ -62,6 +62,7 @@ pub trait DatabaseStorage: Send + Sync {
 	/// --- Filesystem cache methods ---
 	async fn store_filesystem_node(
 		&mut self, watch_id: &uuid::Uuid, node: &crate::database::types::FilesystemNode,
+		event_type: &str,
 	) -> crate::database::error::DatabaseResult<()>;
 
 	async fn get_filesystem_node(
@@ -74,6 +75,7 @@ pub trait DatabaseStorage: Send + Sync {
 
 	async fn batch_store_filesystem_nodes(
 		&mut self, watch_id: &uuid::Uuid, nodes: &[crate::database::types::FilesystemNode],
+		event_type: &str,
 	) -> crate::database::error::DatabaseResult<()>;
 
 	async fn store_watch_metadata(
@@ -200,9 +202,10 @@ impl DatabaseStorage for RedbStorage {
 
 	async fn store_filesystem_node(
 		&mut self, watch_id: &uuid::Uuid, node: &crate::database::types::FilesystemNode,
+		event_type: &str,
 	) -> crate::database::error::DatabaseResult<()> {
 		let mut cache = self.cache();
-		cache.store_filesystem_node(watch_id, node).await
+		cache.store_filesystem_node(watch_id, node, event_type).await
 	}
 
 	async fn get_filesystem_node(
@@ -221,9 +224,10 @@ impl DatabaseStorage for RedbStorage {
 
 	async fn batch_store_filesystem_nodes(
 		&mut self, watch_id: &uuid::Uuid, nodes: &[crate::database::types::FilesystemNode],
+		event_type: &str,
 	) -> crate::database::error::DatabaseResult<()> {
 		let mut cache = self.cache();
-		cache.batch_store_filesystem_nodes(watch_id, nodes).await
+		cache.batch_store_filesystem_nodes(watch_id, nodes, event_type).await
 	}
 
 	async fn store_watch_metadata(

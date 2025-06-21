@@ -9,7 +9,7 @@ use uuid::Uuid;
 pub trait FilesystemCacheStorage: Send + Sync {
 	/// Store a filesystem node for a specific watch
 	async fn store_filesystem_node(
-		&mut self, watch_id: &Uuid, node: &FilesystemNode,
+		&mut self, watch_id: &Uuid, node: &FilesystemNode, event_type: &str,
 	) -> DatabaseResult<()>;
 
 	/// Retrieve a filesystem node for a specific watch
@@ -41,7 +41,7 @@ pub trait FilesystemCacheStorage: Send + Sync {
 
 	/// Batch store multiple filesystem nodes
 	async fn batch_store_filesystem_nodes(
-		&mut self, watch_id: &Uuid, nodes: &[FilesystemNode],
+		&mut self, watch_id: &Uuid, nodes: &[FilesystemNode], event_type: &str,
 	) -> DatabaseResult<()>;
 
 	/// Find nodes by path prefix (for efficient subtree operations)
@@ -128,11 +128,13 @@ pub trait FilesystemCacheStorage: Send + Sync {
 	}
 
 	/// Remove a single filesystem node for a specific watch
-	async fn remove_filesystem_node(&mut self, watch_id: &Uuid, path: &Path) -> DatabaseResult<()>;
+	async fn remove_filesystem_node(
+		&mut self, watch_id: &Uuid, path: &Path, event_type: &str,
+	) -> DatabaseResult<()>;
 
 	/// Rename (move) a filesystem node for a specific watch
 	async fn rename_filesystem_node(
-		&mut self, watch_id: &Uuid, old_path: &Path, new_path: &Path,
+		&mut self, watch_id: &Uuid, old_path: &Path, new_path: &Path, event_type: &str,
 	) -> DatabaseResult<()>;
 }
 

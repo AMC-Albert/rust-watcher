@@ -258,6 +258,7 @@ impl DatabaseStorage for NoOpStorage {
 
 	async fn store_filesystem_node(
 		&mut self, _watch_id: &uuid::Uuid, _node: &crate::database::types::FilesystemNode,
+		_event_type: &str,
 	) -> crate::database::error::DatabaseResult<()> {
 		Ok(())
 	}
@@ -282,6 +283,7 @@ impl DatabaseStorage for NoOpStorage {
 
 	async fn batch_store_filesystem_nodes(
 		&mut self, _watch_id: &uuid::Uuid, _nodes: &[crate::database::types::FilesystemNode],
+		_event_type: &str,
 	) -> crate::database::error::DatabaseResult<()> {
 		Ok(())
 	}

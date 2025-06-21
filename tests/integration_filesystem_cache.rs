@@ -26,7 +26,7 @@ async fn test_filesystem_node_insert_and_retrieve() {
 	let node = FilesystemNode::new(node_path.clone(), &metadata);
 
 	// Store and retrieve
-	storage.store_filesystem_node(&watch_id, &node).await.expect("store");
+	storage.store_filesystem_node(&watch_id, &node, "test").await.expect("store");
 	let retrieved = storage.get_filesystem_node(&watch_id, &node_path).await.expect("get");
 	assert!(retrieved.is_some());
 	let retrieved = retrieved.unwrap();
@@ -56,11 +56,11 @@ async fn test_filesystem_hierarchy_and_list_directory() {
 
 	// Store both
 	storage
-		.store_filesystem_node(&watch_id, &parent_node)
+		.store_filesystem_node(&watch_id, &parent_node, "test")
 		.await
 		.expect("store parent");
 	storage
-		.store_filesystem_node(&watch_id, &child_node)
+		.store_filesystem_node(&watch_id, &child_node, "test")
 		.await
 		.expect("store child");
 
@@ -83,7 +83,7 @@ async fn test_get_node_api() {
 	std::fs::write(&node_path, b"test").unwrap();
 	let metadata = std::fs::metadata(&node_path).unwrap();
 	let node = FilesystemNode::new(node_path.clone(), &metadata);
-	storage.store_filesystem_node(&watch_id, &node).await.expect("store");
+	storage.store_filesystem_node(&watch_id, &node, "test").await.expect("store");
 
 	// get_node should return the same as get_filesystem_node
 	let retrieved = storage.get_node(&watch_id, &node_path).await.expect("get_node");
@@ -117,7 +117,7 @@ async fn test_search_nodes_glob_patterns() {
 		std::fs::write(file, b"test").unwrap();
 		let metadata = std::fs::metadata(file).unwrap();
 		let node = FilesystemNode::new(file.clone(), &metadata);
-		storage.store_filesystem_node(&watch_id, &node).await.expect("store");
+		storage.store_filesystem_node(&watch_id, &node, "test").await.expect("store");
 	}
 
 	// Simple glob: *.txt

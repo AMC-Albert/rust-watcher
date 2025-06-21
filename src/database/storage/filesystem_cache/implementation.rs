@@ -77,7 +77,7 @@ impl RedbFilesystemCache {
 #[async_trait::async_trait]
 impl FilesystemCacheStorage for RedbFilesystemCache {
 	async fn store_filesystem_node(
-		&mut self, watch_id: &Uuid, node: &FilesystemNode,
+		&mut self, watch_id: &Uuid, node: &FilesystemNode, event_type: &str,
 	) -> DatabaseResult<()> {
 		// Canonicalize the path for the key only; do not mutate the node's path
 		let canonical = match node.path.canonicalize() {
@@ -89,7 +89,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		let key_bytes = serialize(&scoped_key)?;
 		let node_bytes = serialize(node)?;
 
-		let write_txn = self.database.begin_write()?;
+		let mut write_txn = self.database.begin_write()?;
 		{
 			// Store the node
 			{
@@ -113,7 +113,15 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			} // <-- All table borrows dropped here
 
 			// --- Incremental stats update: per-watch and per-path ---
-			let _write_txn = self.database.begin_write()?;
+			let all_watches = WatchMappingHelpers::get_watches_for_path(&self.database, path_hash)?;
+			for wid in all_watches.iter() {
+				crate::database::storage::filesystem_cache::stats::increment_stats(
+					&mut write_txn,
+					wid,
+					path_hash,
+					event_type,
+				)?;
+			}
 		}
 		write_txn.commit()?;
 		if cfg!(debug_assertions) {
@@ -234,7 +242,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	}
 
 	async fn batch_store_filesystem_nodes(
-		&mut self, watch_id: &Uuid, nodes: &[FilesystemNode],
+		&mut self, watch_id: &Uuid, nodes: &[FilesystemNode], _event_type: &str,
 	) -> DatabaseResult<()> {
 		let write_txn = self.database.begin_write()?;
 		{
@@ -245,8 +253,9 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 				let key_bytes = serialize(&scoped_key)?;
 				fs_cache_table.insert(key_bytes.as_slice(), serialize(node)?.as_slice())?;
 				Self::index_path_prefixes(&write_txn, node, watch_id)?;
+				// Optionally update stats here if needed, using _event_type
 			}
-		}
+		} // fs_cache_table dropped here
 		write_txn.commit()?;
 		Ok(())
 	}
@@ -435,7 +444,9 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		Ok(node)
 	}
 
-	async fn remove_filesystem_node(&mut self, watch_id: &Uuid, path: &Path) -> DatabaseResult<()> {
+	async fn remove_filesystem_node(
+		&mut self, watch_id: &Uuid, path: &Path, event_type: &str,
+	) -> DatabaseResult<()> {
 		// Remove the node from the cache and update hierarchy/path indices.
 		let canonical = match path.canonicalize() {
 			Ok(p) => p,
@@ -444,7 +455,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		let path_hash = calculate_path_hash(&canonical);
 		let scoped_key = Self::create_scoped_key(watch_id, path_hash);
 		let key_bytes = serialize(&scoped_key)?;
-		let write_txn = self.database.begin_write()?;
+		let mut write_txn = self.database.begin_write()?;
 		{
 			let mut fs_cache_table = write_txn.open_table(MULTI_WATCH_FS_CACHE)?;
 			fs_cache_table.remove(key_bytes.as_slice())?;
@@ -471,16 +482,23 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			let prefix_str = canonical.to_string_lossy();
 			prefix_table.remove(prefix_str.as_bytes(), key_bytes.as_slice())?;
 			// All table borrows dropped here
-
-			// --- Incremental stats update: per-watch and per-path (removal) ---
-			let _write_txn = self.database.begin_write()?;
+		}
+		// --- Incremental stats update: per-watch and per-path (removal) ---
+		let all_watches = WatchMappingHelpers::get_watches_for_path(&self.database, path_hash)?;
+		for wid in all_watches.iter() {
+			crate::database::storage::filesystem_cache::stats::decrement_stats(
+				&mut write_txn,
+				wid,
+				path_hash,
+				event_type,
+			)?;
 		}
 		write_txn.commit()?;
 		Ok(())
 	}
 
 	async fn rename_filesystem_node(
-		&mut self, watch_id: &Uuid, old_path: &Path, new_path: &Path,
+		&mut self, watch_id: &Uuid, old_path: &Path, new_path: &Path, event_type: &str,
 	) -> DatabaseResult<()> {
 		// Move the node, update indices, handle parent/child relationships.
 		let old_canonical = match old_path.canonicalize() {
@@ -493,11 +511,11 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		};
 		let old_hash = calculate_path_hash(&old_canonical);
 		let new_hash = calculate_path_hash(&new_canonical);
-		let old_key = Self::create_scoped_key(watch_id, old_hash);
-		let new_key = Self::create_scoped_key(watch_id, new_hash);
-		let old_key_bytes = serialize(&old_key)?;
-		let new_key_bytes = serialize(&new_key)?;
-		let write_txn = self.database.begin_write()?;
+		let old_scoped_key = Self::create_scoped_key(watch_id, old_hash);
+		let new_scoped_key = Self::create_scoped_key(watch_id, new_hash);
+		let old_key_bytes = serialize(&old_scoped_key)?;
+		let new_key_bytes = serialize(&new_scoped_key)?;
+		let mut write_txn = self.database.begin_write()?;
 		{
 			let mut fs_cache_table = write_txn.open_table(MULTI_WATCH_FS_CACHE)?;
 			// Scope the immutable borrow to avoid borrow checker issues
@@ -537,6 +555,25 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 				prefix_table.remove(old_prefix_str.as_bytes(), old_key_bytes.as_slice())?;
 				prefix_table.insert(new_prefix_str.as_bytes(), new_key_bytes.as_slice())?;
 			}
+		}
+		// --- Incremental stats update: per-watch and per-path (move/rename) ---
+		let old_all_watches = WatchMappingHelpers::get_watches_for_path(&self.database, old_hash)?;
+		for wid in old_all_watches.iter() {
+			crate::database::storage::filesystem_cache::stats::decrement_stats(
+				&mut write_txn,
+				wid,
+				old_hash,
+				event_type,
+			)?;
+		}
+		let new_all_watches = WatchMappingHelpers::get_watches_for_path(&self.database, new_hash)?;
+		for wid in new_all_watches.iter() {
+			crate::database::storage::filesystem_cache::stats::increment_stats(
+				&mut write_txn,
+				wid,
+				new_hash,
+				event_type,
+			)?;
 		}
 		write_txn.commit()?;
 		Ok(())

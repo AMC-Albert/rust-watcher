@@ -7,6 +7,7 @@
 // - TODO: Replace with indexed or batched queries for production use.
 
 use crate::database::error::DatabaseResult;
+use redb::Database;
 use redb::WriteTransaction;
 use uuid::Uuid;
 
@@ -23,6 +24,26 @@ impl WatchMappingHelpers {
 			write_txn.open_multimap_table(crate::database::storage::tables::PATH_TO_WATCHES)?;
 		path_watches_table.insert(path_key.as_slice(), watch_bytes)?;
 		Ok(())
+	}
+
+	/// Enumerate all watches for a given path hash (read-only)
+	pub fn get_watches_for_path(db: &Database, path_hash: u64) -> DatabaseResult<Vec<Uuid>> {
+		let read_txn = db.begin_read()?;
+		let path_watches_table =
+			read_txn.open_multimap_table(crate::database::storage::tables::PATH_TO_WATCHES)?;
+		let path_key = path_hash.to_le_bytes();
+		let mut watches = Vec::new();
+		if let Ok(iter) = path_watches_table.get(path_key.as_slice()) {
+			for entry in iter {
+				let entry = entry?;
+				if entry.value().len() == 16 {
+					if let Ok(uuid) = Uuid::from_slice(entry.value()) {
+						watches.push(uuid);
+					}
+				}
+			}
+		}
+		Ok(watches)
 	}
 	// TODO: Add more helpers as needed (removal, lookup, etc.)
 }

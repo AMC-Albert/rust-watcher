@@ -457,7 +457,7 @@ mod tests {
 		#[async_trait::async_trait]
 		impl FilesystemCacheStorage for DummyCache {
 			async fn store_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode,
+				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
@@ -503,7 +503,7 @@ mod tests {
 				Ok(None)
 			}
 			async fn batch_store_filesystem_nodes(
-				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode],
+				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode], _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
@@ -555,12 +555,12 @@ mod tests {
 				Ok(vec![])
 			}
 			async fn remove_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn rename_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
@@ -582,7 +582,7 @@ mod tests {
 		#[async_trait::async_trait]
 		impl FilesystemCacheStorage for DummyCache {
 			async fn store_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode,
+				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
@@ -628,7 +628,7 @@ mod tests {
 				Ok(None)
 			}
 			async fn batch_store_filesystem_nodes(
-				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode],
+				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode], _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
@@ -680,12 +680,12 @@ mod tests {
 				Ok(vec![])
 			}
 			async fn remove_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn rename_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
@@ -703,7 +703,7 @@ mod tests {
 		#[async_trait::async_trait]
 		impl FilesystemCacheStorage for DummyCache {
 			async fn store_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode,
+				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
@@ -749,7 +749,7 @@ mod tests {
 				Ok(None)
 			}
 			async fn batch_store_filesystem_nodes(
-				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode],
+				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode], _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
@@ -801,12 +801,12 @@ mod tests {
 				Ok(vec![])
 			}
 			async fn remove_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn rename_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
@@ -834,7 +834,7 @@ mod tests {
 		#[async_trait::async_trait]
 		impl FilesystemCacheStorage for DummyCache {
 			async fn store_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode,
+				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
@@ -880,7 +880,7 @@ mod tests {
 				Ok(None)
 			}
 			async fn batch_store_filesystem_nodes(
-				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode],
+				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode], _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
@@ -932,12 +932,12 @@ mod tests {
 				Ok(vec![])
 			}
 			async fn remove_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn rename_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
@@ -958,7 +958,7 @@ mod tests {
 		#[async_trait::async_trait]
 		impl FilesystemCacheStorage for DummyCache {
 			async fn store_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode,
+				&mut self, _: &uuid::Uuid, _: &crate::database::types::FilesystemNode, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
@@ -1004,7 +1004,7 @@ mod tests {
 				Ok(None)
 			}
 			async fn batch_store_filesystem_nodes(
-				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode],
+				&mut self, _: &uuid::Uuid, _: &[crate::database::types::FilesystemNode], _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
@@ -1056,12 +1056,12 @@ mod tests {
 				Ok(vec![])
 			}
 			async fn remove_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}
 			async fn rename_filesystem_node(
-				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path,
+				&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path, _: &str,
 			) -> crate::database::error::DatabaseResult<()> {
 				Ok(())
 			}

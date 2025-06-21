@@ -64,7 +64,7 @@ fn main() {
 	let node_count = nodes.len();
 
 	let insert_start = Instant::now();
-	pollster::block_on(cache.batch_store_filesystem_nodes(&watch_id, &nodes))
+	pollster::block_on(cache.batch_store_filesystem_nodes(&watch_id, &nodes, "bench"))
 		.expect("Batch cache insert failed");
 	let insert_elapsed = insert_start.elapsed();
 

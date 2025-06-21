@@ -14,7 +14,7 @@ struct DummyCache;
 #[async_trait::async_trait]
 impl FilesystemCacheStorage for DummyCache {
 	async fn store_filesystem_node(
-		&mut self, _: &uuid::Uuid, _: &rust_watcher::database::types::FilesystemNode,
+		&mut self, _: &uuid::Uuid, _: &rust_watcher::database::types::FilesystemNode, _: &str,
 	) -> rust_watcher::database::error::DatabaseResult<()> {
 		Ok(())
 	}
@@ -62,7 +62,7 @@ impl FilesystemCacheStorage for DummyCache {
 		Ok(None)
 	}
 	async fn batch_store_filesystem_nodes(
-		&mut self, _: &uuid::Uuid, _: &[rust_watcher::database::types::FilesystemNode],
+		&mut self, _: &uuid::Uuid, _: &[rust_watcher::database::types::FilesystemNode], _: &str,
 	) -> rust_watcher::database::error::DatabaseResult<()> {
 		Ok(())
 	}
@@ -119,12 +119,12 @@ impl FilesystemCacheStorage for DummyCache {
 		Ok(vec![])
 	}
 	async fn remove_filesystem_node(
-		&mut self, _: &uuid::Uuid, _: &std::path::Path,
+		&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &str,
 	) -> rust_watcher::database::error::DatabaseResult<()> {
 		Ok(())
 	}
 	async fn rename_filesystem_node(
-		&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path,
+		&mut self, _: &uuid::Uuid, _: &std::path::Path, _: &std::path::Path, _: &str,
 	) -> rust_watcher::database::error::DatabaseResult<()> {
 		Ok(())
 	}
