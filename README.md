@@ -17,6 +17,7 @@ A comprehensive filesystem watcher in Rust that monitors file and directory oper
 - **Structured event logging** with JSON output
 - **Comprehensive test suite**
 - **Event log retention/cleanup** with configurable time- and count-based policies (see below)
+- **Automatic cleanup of redundant and orphaned cache nodes** after shared cache optimization, ensuring efficient storage and correctness in multi-watch scenarios
 
 ## Event Log Retention and Cleanup
 

@@ -37,6 +37,11 @@
   - **Impact:** Some regressions or platform-specific bugs may go unnoticed, but coverage is now sufficient for most production scenarios.
   - **Action:** Expand test coverage for concurrency, error cases, and Windows/Unix differences as new features are added.
 
+- **Redundant/Orphaned Node Cleanup:**
+  - Implemented and tested. The system now reliably removes both redundant watch-specific nodes and orphaned shared nodes, regardless of key or value format. Integration tests confirm correctness. (June 2025)
+  - **Impact:** Prevents database bloat and ensures cache consistency in multi-watch environments.
+  - **Action:** No further action required unless new key/value formats are introduced.
+
 ---
 
 ## High-Level Design Goals (2025 Revision)

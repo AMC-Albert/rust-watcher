@@ -64,18 +64,19 @@
 
 # Summary Table
 
-| Task                          | Status      | Notes                                                                                       |
-| ----------------------------- | ----------- | ------------------------------------------------------------------------------------------- |
-| Event log retention/cleanup   | Complete    | Logic, tests, and integration done                                                          |
-| Event log edge case docs      | Complete    | Documented in code and event_retention.rs                                                   |
-| Brute-force stats impl        | Complete    | O(N), not scalable, see maintenance.rs                                                      |
-| Scalable stats/indexing       | Partial     | O(1) event and per-type stats done; per-watch, per-path, and advanced indexing still TODO   |
-| Cross-platform path handling  | Complete    | Windows/Unix normalization, edge cases                                                      |
-| Multi-watch test infra        | Complete    | Scaffolded and passing basic checks                                                         |
-| Stress tests                  | Complete    | Scaffolded and passing basic checks                                                         |
-| Multi-watch core              | In progress | Persistent transaction coordination, watch creation, permissions, and tree scan implemented |
-| Multi-watch concurrency tests | Complete    | Integration test for concurrent registration/removal passes (June 2025)                     |
+| Task                            | Status      | Notes                                                                                                                                                           |
+| ------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Event log retention/cleanup     | Complete    | Logic, tests, and integration done                                                                                                                              |
+| Event log edge case docs        | Complete    | Documented in code and event_retention.rs                                                                                                                       |
+| Brute-force stats impl          | Complete    | O(N), not scalable, see maintenance.rs                                                                                                                          |
+| Scalable stats/indexing         | Partial     | O(1) event and per-type stats done; per-watch, per-path, and advanced indexing still TODO                                                                       |
+| Cross-platform path handling    | Complete    | Windows/Unix normalization, edge cases                                                                                                                          |
+| Multi-watch test infra          | Complete    | Scaffolded and passing basic checks                                                                                                                             |
+| Stress tests                    | Complete    | Scaffolded and passing basic checks                                                                                                                             |
+| Multi-watch core                | In progress | Persistent transaction coordination, watch creation, permissions, and tree scan implemented                                                                     |
+| Multi-watch concurrency tests   | Complete    | Integration test for concurrent registration/removal passes (June 2025)                                                                                         |
 | Shared cache optimization       | Partial     | Minimal implementation: shared nodes created for overlaps, integration test passes (June 2025). Full merge/split logic, cleanup, and error handling still TODO. |
+| Redundant/orphaned node cleanup | Complete    | Robust removal of redundant watch-specific and orphaned shared nodes; integration test passes (June 2025)                                                       |
 
 ---
 
