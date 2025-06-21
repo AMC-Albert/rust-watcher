@@ -62,13 +62,11 @@ pub trait FilesystemCacheStorage: Send + Sync {
 	/// List directory contents across all watches (unified view).
 	///
 	/// Returns all nodes that are direct children of the given path, regardless of watch.
-	/// TODO: Implement efficient cross-watch lookup and deduplication.
+	/// See RedbFilesystemCache for the actual implementation. This default is a stub.
 	async fn list_directory_unified(
 		&mut self, _parent_path: &std::path::Path,
 	) -> DatabaseResult<Vec<FilesystemNode>> {
-		// Not yet implemented. This will require cross-watch index scans and deduplication logic.
-		// Edge cases: overlapping watches, shared nodes, permission filtering.
-		unimplemented!("list_directory_unified not yet implemented");
+		unimplemented!("list_directory_unified not yet implemented; see RedbFilesystemCache for implementation");
 	}
 
 	/// Get a unified node view for a given path (across all watches).

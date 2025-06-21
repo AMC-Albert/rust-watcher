@@ -597,20 +597,50 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		use globset::Glob;
 		use std::ffi::OsStr;
 		let read_txn = self.database.begin_read()?;
-		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
 		let glob = Glob::new(pattern)
 			.map_err(|e| crate::database::error::DatabaseError::Other(e.to_string()))?;
 		let matcher = glob.compile_matcher();
+
+		// If the pattern is a simple prefix (e.g., "foo*"), use PATH_PREFIX_TABLE for efficiency.
+		// Otherwise, fall back to O(N) scan. This is a pragmatic compromise until a secondary index is implemented.
+		let is_prefix = !pattern.contains('?')
+			&& !pattern.contains('[')
+			&& !pattern.contains(']')
+			&& !pattern.contains('{')
+			&& !pattern.contains('}')
+			&& pattern.ends_with('*')
+			&& !pattern[..pattern.len() - 1].contains('*');
 		let mut results = Vec::new();
-		for entry in fs_cache_table.iter()? {
-			let (_key, value) = entry?;
-			let node: FilesystemNode = utils::deserialize(value.value())?;
-			if let Some(fname) = node.path.file_name().and_then(OsStr::to_str) {
-				if matcher.is_match(fname) {
-					results.push(node);
+		if is_prefix {
+			// Remove trailing '*' for prefix
+			let prefix = &pattern[..pattern.len() - 1];
+			let path_prefix_table = read_txn.open_multimap_table(PATH_PREFIX_TABLE)?;
+			for entry in path_prefix_table.get(prefix.as_bytes())? {
+				let entry = entry?;
+				let value = entry.value();
+				let node: FilesystemNode = utils::deserialize(value)?;
+				// Defensive: still check the pattern in case of false positives
+				if let Some(fname) = node.path.file_name().and_then(OsStr::to_str) {
+					if matcher.is_match(fname) {
+						results.push(node);
+					}
+				}
+			}
+		} else {
+			// Fallback: O(N) scan over all nodes
+			let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
+			for entry in fs_cache_table.iter()? {
+				let (_key, value) = entry?;
+				let node: FilesystemNode = utils::deserialize(value.value())?;
+				if let Some(fname) = node.path.file_name().and_then(OsStr::to_str) {
+					if matcher.is_match(fname) {
+						results.push(node);
+					}
 				}
 			}
 		}
+		// NOTE: This does not support efficient suffix/infix search. For large datasets, a secondary index on canonical_name or extension is required.
+		// TODO: Implement a file name or extension index if suffix/infix search is a production requirement.
 		Ok(results)
 	}
 }

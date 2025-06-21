@@ -10,6 +10,7 @@
 - All build, test, and clippy checks are clean as of latest commit.
 - See commit history for details of modularization, bugfixes, and groundwork for advanced features (June 2025).
 - **UPDATE (June 2025):** Event type is now stored with every node. All mutation and repair logic is event-type aware. Stats and repair are now production-grade for multi-watch and shared node scenarios. Per-type stats repair is now accurate. No further manual intervention required for this migration.
+- **Pattern-based search/filtering:** Now uses prefix index for efficient prefix queries (e.g., `foo*`). Suffix/infix patterns (e.g., `*.txt`, `*a.*`) still require O(N) scan. This is a hard schema limitation; further optimization would require a new index on file name or extension. All code and tests are up to date as of June 2025.
 
 ---
 
@@ -30,7 +31,7 @@
 | Redundant/orphaned node cleanup    | Complete     | Robust removal of redundant watch-specific and orphaned shared nodes; integration test passes (June 2025)                                                                                                                         |
 | Unified/cross-watch queries        | Complete     | `list_directory_unified` and `get_unified_node` implemented and tested                                                                                                                                                            |
 | Hierarchical operations            | Complete     | `list_ancestors` and `list_descendants` implemented and tested                                                                                                                                                                    |
-| Pattern-based search/filtering     | Complete     | File name glob patterns supported, robust and tested (June 2025)                                                                                                                                                                  |
+| Pattern-based search/filtering     | Complete     | Prefix patterns are efficient (indexed); suffix/infix patterns remain O(N) by design. Further optimization requires a new index. All tests pass.                                                                                  |
 | **Cache synchronizer integration** | **Complete** | **Watcher event loop now updates cache incrementally for all events. Synchronizer unit test covers create/remove/rename/move.**                                                                                                   |
 
 ---
