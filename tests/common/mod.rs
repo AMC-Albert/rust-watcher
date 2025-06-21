@@ -154,3 +154,6 @@ pub mod database {
 		Ok((result, duration))
 	}
 }
+
+pub mod cleanup;
+pub use cleanup::cleanup_test_artifacts;
