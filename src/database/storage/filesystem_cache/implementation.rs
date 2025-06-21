@@ -88,7 +88,11 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		let path_hash = calculate_path_hash(&canonical);
 		let scoped_key = Self::create_scoped_key(watch_id, path_hash);
 		let key_bytes = serialize(&scoped_key)?;
-		let node_bytes = serialize(node)?;
+
+		// Always update last_event_type before storing
+		let mut node = node.clone();
+		node.last_event_type = Some(event_type.to_string());
+		let node_bytes = serialize(&node)?;
 
 		let mut write_txn = self.database.begin_write()?;
 		{
@@ -110,7 +114,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 				WatchMappingHelpers::insert_watch_mapping(&write_txn, path_hash, watch_id)?;
 
 				// Update path prefix index
-				Self::index_path_prefixes(&write_txn, node, watch_id)?;
+				Self::index_path_prefixes(&write_txn, &node, watch_id)?;
 			} // <-- All table borrows dropped here
 
 			// --- Incremental stats update: per-watch and per-path ---
@@ -630,7 +634,7 @@ impl RedbFilesystemCache {
 	pub async fn repair_stats_counters(
 		&mut self, watch_id: Option<&Uuid>, path: Option<&Path>,
 	) -> DatabaseResult<usize> {
-		use crate::database::types::{PathStats, WatchStats};
+		use crate::database::storage::filesystem_cache::stats::{PathStats, WatchStats};
 		use std::collections::HashMap;
 		let write_txn = self.database.begin_write()?;
 		let mut total = 0;
@@ -654,8 +658,8 @@ impl RedbFilesystemCache {
 						continue;
 					}
 				}
-				// Event type is not stored on node; assume "create" for all nodes (limitation)
-				let event_type = "create";
+				// Use the event type stored on the node if available, else fallback to "create" for legacy nodes
+				let event_type = node.last_event_type.as_deref().unwrap_or("create");
 				// Update per-watch
 				let ws = watch_stats.entry(scoped_key.watch_id).or_default();
 				ws.event_count += 1;

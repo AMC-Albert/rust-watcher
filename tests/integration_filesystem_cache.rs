@@ -23,7 +23,8 @@ async fn test_filesystem_node_insert_and_retrieve() {
 	let node_path = temp_dir.path().join("foo.txt");
 	std::fs::write(&node_path, b"test").unwrap();
 	let metadata = std::fs::metadata(&node_path).unwrap();
-	let node = FilesystemNode::new(node_path.clone(), &metadata);
+	let node =
+		FilesystemNode::new_with_event_type(node_path.clone(), &metadata, Some("test".to_string()));
 
 	// Store and retrieve
 	storage.store_filesystem_node(&watch_id, &node, "test").await.expect("store");
@@ -51,8 +52,16 @@ async fn test_filesystem_hierarchy_and_list_directory() {
 	std::fs::write(&child_path, b"child").unwrap();
 	let parent_meta = std::fs::metadata(&parent_path).unwrap();
 	let child_meta = std::fs::metadata(&child_path).unwrap();
-	let parent_node = FilesystemNode::new(parent_path.clone(), &parent_meta);
-	let child_node = FilesystemNode::new(child_path.clone(), &child_meta);
+	let parent_node = FilesystemNode::new_with_event_type(
+		parent_path.clone(),
+		&parent_meta,
+		Some("test".to_string()),
+	);
+	let child_node = FilesystemNode::new_with_event_type(
+		child_path.clone(),
+		&child_meta,
+		Some("test".to_string()),
+	);
 
 	// Store both
 	storage
@@ -82,7 +91,8 @@ async fn test_get_node_api() {
 	let node_path = temp_dir.path().join("bar.txt");
 	std::fs::write(&node_path, b"test").unwrap();
 	let metadata = std::fs::metadata(&node_path).unwrap();
-	let node = FilesystemNode::new(node_path.clone(), &metadata);
+	let node =
+		FilesystemNode::new_with_event_type(node_path.clone(), &metadata, Some("test".to_string()));
 	storage.store_filesystem_node(&watch_id, &node, "test").await.expect("store");
 
 	// get_node should return the same as get_filesystem_node
@@ -116,7 +126,8 @@ async fn test_search_nodes_glob_patterns() {
 	for file in &files {
 		std::fs::write(file, b"test").unwrap();
 		let metadata = std::fs::metadata(file).unwrap();
-		let node = FilesystemNode::new(file.clone(), &metadata);
+		let node =
+			FilesystemNode::new_with_event_type(file.clone(), &metadata, Some("test".to_string()));
 		storage.store_filesystem_node(&watch_id, &node, "test").await.expect("store");
 	}
 
@@ -164,7 +175,11 @@ async fn test_stats_and_metadata_event_types() {
 	let node_path = temp_dir.path().join("meta.txt");
 	std::fs::write(&node_path, b"test").unwrap();
 	let metadata = std::fs::metadata(&node_path).unwrap();
-	let node = FilesystemNode::new(node_path.clone(), &metadata);
+	let node = FilesystemNode::new_with_event_type(
+		node_path.clone(),
+		&metadata,
+		Some("metadata".to_string()),
+	);
 	storage
 		.store_filesystem_node(&watch_id, &node, "metadata")
 		.await

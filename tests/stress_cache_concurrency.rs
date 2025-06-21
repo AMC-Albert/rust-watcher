@@ -38,6 +38,7 @@ fn make_test_node(path: &str) -> FilesystemNode {
 			parent_hash: None,
 			canonical_name: "test".to_string(),
 		},
+		last_event_type: None, // Added for compatibility with new FilesystemNode
 	}
 }
 

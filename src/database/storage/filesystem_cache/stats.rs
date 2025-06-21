@@ -5,9 +5,22 @@
 use super::utils::{deserialize, serialize};
 use crate::database::error::DatabaseResult;
 use crate::database::storage::tables::{PATH_STATS, STATS_TABLE, WATCH_STATS};
-use crate::database::types::{PathStats, WatchStats};
 use redb::{ReadableTable, WriteTransaction};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use uuid::Uuid;
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PathStats {
+	pub event_count: u64,
+	pub per_type_counts: HashMap<String, u64>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct WatchStats {
+	pub event_count: u64,
+	pub per_type_counts: HashMap<String, u64>,
+}
 
 /// Increment event count for watch, path, and global stats (per-type)
 pub fn increment_stats(

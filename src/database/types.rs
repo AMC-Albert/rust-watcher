@@ -150,6 +150,9 @@ pub struct FilesystemNode {
 
 	/// Computed properties
 	pub computed: ComputedProperties,
+
+	/// Event type that created or last mutated this node (for repair/stats)
+	pub last_event_type: Option<String>, // None for legacy nodes, Some for new/updated nodes
 }
 
 /// Type of filesystem node
@@ -431,7 +434,9 @@ pub enum UnifiedNode {
 
 impl FilesystemNode {
 	/// Create a new filesystem node from standard metadata
-	pub fn new(path: PathBuf, metadata: &std::fs::Metadata) -> Self {
+	pub fn new_with_event_type(
+		path: PathBuf, metadata: &std::fs::Metadata, event_type: Option<String>,
+	) -> Self {
 		let now = Utc::now();
 		let path_hash = calculate_path_hash(&path);
 		let parent_hash = path.parent().map(calculate_path_hash);
@@ -471,7 +476,13 @@ impl FilesystemNode {
 				parent_hash,
 				canonical_name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
 			},
+			last_event_type: event_type,
 		}
+	}
+
+	/// Backward-compatible constructor for legacy code
+	pub fn new(path: PathBuf, metadata: &std::fs::Metadata) -> Self {
+		Self::new_with_event_type(path, metadata, None)
 	}
 
 	/// Check if the node needs to be refreshed based on timestamp
@@ -637,20 +648,4 @@ pub fn event_type_stat_key(event_type: &str) -> Vec<u8> {
 	let mut key = b"event_type:".to_vec();
 	key.extend_from_slice(event_type.as_bytes());
 	key
-}
-
-/// Per-watch statistics for scalable O(1) queries
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct WatchStats {
-	pub event_count: u64,
-	pub metadata_count: u64,
-	pub per_type_counts: std::collections::HashMap<String, u64>,
-}
-
-/// Per-path statistics for scalable O(1) queries
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct PathStats {
-	pub event_count: u64,
-	pub metadata_count: u64,
-	pub per_type_counts: std::collections::HashMap<String, u64>,
 }

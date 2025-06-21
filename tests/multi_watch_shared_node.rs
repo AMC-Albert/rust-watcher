@@ -44,6 +44,7 @@ async fn test_store_and_get_shared_node() {
 			parent_hash: None,
 			canonical_name: "shared_file.txt".to_string(),
 		},
+		last_event_type: Some("test".to_string()),
 	};
 	let shared_info = SharedNodeInfo {
 		node: node.clone(),
@@ -94,6 +95,7 @@ async fn test_remove_watch_cleans_up_shared_node() {
 			parent_hash: None,
 			canonical_name: "shared_file.txt".to_string(),
 		},
+		last_event_type: Some("test".to_string()),
 	};
 	let mut shared_info = SharedNodeInfo {
 		node: node.clone(),

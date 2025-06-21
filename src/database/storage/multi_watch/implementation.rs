@@ -184,6 +184,7 @@ impl MultiWatchDatabase {
 				parent_hash: None,
 				canonical_name: path.to_string_lossy().to_string(),
 			},
+			last_event_type: None, // Added for compatibility with new FilesystemNode
 		};
 		let shared_info = SharedNodeInfo {
 			node,

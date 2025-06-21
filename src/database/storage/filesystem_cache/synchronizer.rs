@@ -83,9 +83,14 @@ fn event_to_node(event: &FileSystemEvent) -> Option<crate::database::types::File
 	use std::fs;
 	let path = &event.path;
 	let metadata = fs::metadata(path).ok();
+	let event_type_str = format!("{:?}", event.event_type);
 	if let Some(ref meta) = metadata {
-		// Use FilesystemNode::new for best-effort construction
-		Some(FilesystemNode::new(path.clone(), meta))
+		// Use FilesystemNode::new_with_event_type for best-effort construction
+		Some(FilesystemNode::new_with_event_type(
+			path.clone(),
+			meta,
+			Some(event_type_str),
+		))
 	} else {
 		// Fallback: synthesize minimal node from event fields
 		let node_type = if event.is_directory {
@@ -99,6 +104,7 @@ fn event_to_node(event: &FileSystemEvent) -> Option<crate::database::types::File
 			metadata: Default::default(),
 			cache_info: Default::default(),
 			computed: Default::default(),
+			last_event_type: Some(event_type_str),
 		})
 	}
 }
