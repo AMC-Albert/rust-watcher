@@ -355,7 +355,7 @@ mod tests {
 
 	async fn create_test_storage(test_name: &str) -> DatabaseResult<RedbStorage> {
 		let temp_dir = tempdir().unwrap();
-		let db_path = temp_dir.path().join(format!("{test_name}.db"));
+		let db_path = temp_dir.path().join(format!("{test_name}.redb"));
 		let config =
 			DatabaseConfig { database_path: db_path, ..DatabaseConfig::for_small_directories() };
 		RedbStorage::new(config).await

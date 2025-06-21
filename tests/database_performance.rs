@@ -81,7 +81,7 @@ async fn test_performance_large_dataset() {
 async fn test_multimap_scalability() {
 	let temp_dir = TempDir::new().expect("Failed to create temp dir");
 	let config = DatabaseConfig {
-		database_path: temp_dir.path().join("multimap_test.db"),
+		database_path: temp_dir.path().join("multimap_test.redb"),
 		event_retention: Duration::from_secs(3600),
 		..Default::default()
 	};
@@ -135,7 +135,7 @@ async fn test_multimap_scalability() {
 async fn test_memory_usage_patterns() {
 	let temp_dir = TempDir::new().expect("Failed to create temp dir");
 	let config = DatabaseConfig {
-		database_path: temp_dir.path().join("memory_test.db"),
+		database_path: temp_dir.path().join("memory_test.redb"),
 		event_retention: Duration::from_secs(3600),
 		..Default::default()
 	};
@@ -190,7 +190,7 @@ async fn test_memory_usage_patterns() {
 async fn test_dataset_performance(name: &str, size: usize) -> PerformanceResult {
 	let temp_dir = TempDir::new().expect("Failed to create temp dir");
 	let config = DatabaseConfig {
-		database_path: temp_dir.path().join(format!("{name}_dataset.db")),
+		database_path: temp_dir.path().join(format!("{name}_dataset.redb")),
 		event_retention: Duration::from_secs(3600),
 		..Default::default()
 	};

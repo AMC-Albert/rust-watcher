@@ -15,7 +15,7 @@ use tokio::task::JoinSet;
 async fn test_concurrent_readers() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
 	let config = DatabaseConfig {
-		database_path: temp_dir.path().join("concurrent_readers.db"),
+		database_path: temp_dir.path().join("concurrent_readers.redb"),
 		event_retention: Duration::from_secs(3600),
 		..Default::default()
 	};
@@ -75,7 +75,7 @@ async fn test_concurrent_readers() {
 async fn test_reader_writer_concurrency() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
 	let config = DatabaseConfig {
-		database_path: temp_dir.path().join("reader_writer.db"),
+		database_path: temp_dir.path().join("reader_writer.redb"),
 		event_retention: Duration::from_secs(3600),
 		..Default::default()
 	};
@@ -147,7 +147,7 @@ async fn test_reader_writer_concurrency() {
 async fn test_concurrent_writers() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
 	let config = DatabaseConfig {
-		database_path: temp_dir.path().join("concurrent_writers.db"),
+		database_path: temp_dir.path().join("concurrent_writers.redb"),
 		event_retention: Duration::from_secs(3600),
 		..Default::default()
 	};
@@ -231,7 +231,7 @@ async fn test_concurrent_writers() {
 #[tokio::test]
 async fn test_database_recovery() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join("recovery_test.db");
+	let db_path = temp_dir.path().join("recovery_test.redb");
 
 	let config = DatabaseConfig {
 		database_path: db_path.clone(),

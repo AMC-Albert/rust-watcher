@@ -13,7 +13,7 @@ fn bench_simple_storage(c: &mut Criterion) {
 			rt.block_on(async {
 				let temp_dir = TempDir::new().unwrap();
 				let config = DatabaseConfig {
-					database_path: temp_dir.path().join("test.db"),
+					database_path: temp_dir.path().join("test.redb"),
 					event_retention: Duration::from_secs(3600),
 					..Default::default()
 				};

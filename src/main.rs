@@ -43,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
 		move_detector_config: Some(move_config),
 		error_recovery_config: None,
 		database_config: Some(rust_watcher::DatabaseConfig {
-			database_path: PathBuf::from("./watcher.db"),
+			database_path: PathBuf::from("./watcher.redb"),
 			..Default::default()
 		}),
 	};

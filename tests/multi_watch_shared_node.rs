@@ -14,7 +14,7 @@ use uuid::Uuid;
 #[tokio::test]
 async fn test_store_and_get_shared_node() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
-	let db_path = temp_dir.path().join("shared_node_test.db");
+	let db_path = temp_dir.path().join("shared_node_test.redb");
 	let db = redb::Database::create(&db_path).expect("Failed to create database");
 	let db = Arc::new(db);
 	let multi_watch = MultiWatchDatabase::new(db.clone());
@@ -63,7 +63,7 @@ async fn test_store_and_get_shared_node() {
 #[tokio::test]
 async fn test_remove_watch_cleans_up_shared_node() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
-	let db_path = temp_dir.path().join("remove_watch_test.db");
+	let db_path = temp_dir.path().join("remove_watch_test.redb");
 	let db = redb::Database::create(&db_path).expect("Failed to create database");
 	let db = Arc::new(db);
 	let multi_watch = MultiWatchDatabase::new(db.clone());

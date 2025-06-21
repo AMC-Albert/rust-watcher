@@ -34,9 +34,10 @@ fn make_watch(root: &str) -> WatchMetadata {
 #[tokio::test]
 async fn test_shared_cache_optimization_creates_shared_nodes() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
-	let db_path = temp_dir
-		.path()
-		.join(format!("shared_cache_opt_test-{}.db", uuid::Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!(
+		"shared_cache_opt_test-{}.redb",
+		uuid::Uuid::new_v4()
+	));
 	let db = redb::Database::create(&db_path).expect("Failed to create database");
 	let db = Arc::new(db);
 	let multi_watch = MultiWatchDatabase::new(db.clone());

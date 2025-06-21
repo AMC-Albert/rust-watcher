@@ -19,7 +19,7 @@ fn bench_event_storage(c: &mut Criterion) {
 			rt.block_on(async {
 				let temp_dir = TempDir::new().expect("Failed to create temp dir");
 				let config = DatabaseConfig {
-					database_path: temp_dir.path().join("bench.db"),
+					database_path: temp_dir.path().join("bench.redb"),
 					event_retention: Duration::from_secs(3600), // 1 hour
 					..Default::default()
 				};
@@ -54,7 +54,7 @@ fn bench_batch_event_storage(c: &mut Criterion) {
 					rt.block_on(async {
 						let temp_dir = TempDir::new().expect("Failed to create temp dir");
 						let config = DatabaseConfig {
-							database_path: temp_dir.path().join("batch_bench.db"),
+							database_path: temp_dir.path().join("batch_bench.redb"),
 							event_retention: Duration::from_secs(3600),
 							..Default::default()
 						};
@@ -88,7 +88,7 @@ fn bench_event_querying(c: &mut Criterion) {
 			rt.block_on(async {
 				let temp_dir = TempDir::new().expect("Failed to create temp dir");
 				let config = DatabaseConfig {
-					database_path: temp_dir.path().join("query_bench.db"),
+					database_path: temp_dir.path().join("query_bench.redb"),
 					event_retention: Duration::from_secs(3600),
 					..Default::default()
 				};
@@ -125,7 +125,7 @@ fn bench_cleanup_operations(c: &mut Criterion) {
 			rt.block_on(async {
 				let temp_dir = TempDir::new().expect("Failed to create temp dir");
 				let config = DatabaseConfig {
-					database_path: temp_dir.path().join("cleanup_bench.db"),
+					database_path: temp_dir.path().join("cleanup_bench.redb"),
 					event_retention: Duration::from_millis(100), // Very short for testing
 					..Default::default()
 				};
@@ -163,7 +163,7 @@ fn bench_stats_collection(c: &mut Criterion) {
 			rt.block_on(async {
 				let temp_dir = TempDir::new().expect("Failed to create temp dir");
 				let config = DatabaseConfig {
-					database_path: temp_dir.path().join("stats_bench.db"),
+					database_path: temp_dir.path().join("stats_bench.redb"),
 					event_retention: Duration::from_secs(3600),
 					..Default::default()
 				};

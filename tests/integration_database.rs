@@ -31,7 +31,7 @@ fn create_test_event(event_type: EventType, path: PathBuf, size: Option<u64>) ->
 #[test]
 async fn test_database_initialization() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join(format!("test-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("test-{}.redb", Uuid::new_v4()));
 
 	let config = DatabaseConfig { database_path: db_path.clone(), ..Default::default() };
 	assert!(config.validate().is_ok());
@@ -204,7 +204,7 @@ async fn test_database_statistics() {
 #[test]
 async fn test_massive_directory_simulation() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join(format!("massive_test-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("massive_test-{}.redb", Uuid::new_v4()));
 
 	// Use configuration optimized for massive directories
 	let mut config = DatabaseConfig::for_massive_directories();
@@ -263,12 +263,12 @@ async fn test_custom_database_paths() {
 
 	// Test with different custom paths
 	let custom_paths = vec![
-		temp_dir.path().join(format!("custom-{}.db", Uuid::new_v4())),
+		temp_dir.path().join(format!("custom-{}.redb", Uuid::new_v4())),
 		temp_dir
 			.path()
 			.join("subdirectory")
-			.join(format!("nested-{}.db", Uuid::new_v4())),
-		temp_dir.path().join(format!("watcher_large_scale-{}.db", Uuid::new_v4())),
+			.join(format!("nested-{}.redb", Uuid::new_v4())),
+		temp_dir.path().join(format!("watcher_large_scale-{}.redb", Uuid::new_v4())),
 	];
 	for path in custom_paths {
 		let config = DatabaseConfig { database_path: path.clone(), ..Default::default() };
@@ -293,7 +293,7 @@ async fn test_storage_transition_readiness() {
 	// for integration with the existing move detection system
 
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join(format!("transition_test-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("transition_test-{}.redb", Uuid::new_v4()));
 
 	// Test with moderate configuration (typical starting point)
 	let mut config = DatabaseConfig::for_moderate_directories();
@@ -358,7 +358,7 @@ async fn test_storage_transition_readiness() {
 #[test]
 async fn test_database_adapter_basic_operations() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join(format!("test_adapter-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("test_adapter-{}.redb", Uuid::new_v4()));
 
 	let config = DatabaseConfig { database_path: db_path.clone(), ..Default::default() };
 
@@ -384,7 +384,7 @@ async fn test_watcher_with_database_integration() {
 	let watch_dir = temp_dir.path().join("watch");
 	std::fs::create_dir_all(&watch_dir).expect("Failed to create watch directory");
 
-	let db_path = temp_dir.path().join(format!("watcher-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("watcher-{}.redb", Uuid::new_v4()));
 	let db_config = DatabaseConfig {
 		database_path: db_path.clone(),
 		memory_buffer_size: 1000,
@@ -428,7 +428,7 @@ async fn test_watcher_with_database_integration() {
 #[test]
 async fn test_database_persistence_and_retrieval() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join(format!("persistence_test-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("persistence_test-{}.redb", Uuid::new_v4()));
 	let test_file = temp_dir.path().join("test_file.txt");
 
 	let config = DatabaseConfig { database_path: db_path.clone(), ..Default::default() };
@@ -476,7 +476,7 @@ async fn test_database_persistence_and_retrieval() {
 /// This test will pass once event cleanup is implemented in the database backend.
 async fn test_database_cleanup_and_maintenance() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join(format!("cleanup_test-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("cleanup_test-{}.redb", Uuid::new_v4()));
 
 	let config = DatabaseConfig {
 		database_path: db_path.clone(),
@@ -512,7 +512,7 @@ async fn test_database_cleanup_and_maintenance() {
 #[test]
 async fn test_database_under_load() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join(format!("load_test-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("load_test-{}.redb", Uuid::new_v4()));
 
 	let config = DatabaseConfig {
 		database_path: db_path.clone(),
@@ -551,7 +551,7 @@ async fn test_database_error_handling() {
 
 	// Test with invalid database path
 	let invalid_config = DatabaseConfig {
-		database_path: PathBuf::from("/invalid/path/that/should/not/exist/test.db"),
+		database_path: PathBuf::from("/invalid/path/that/should/not/exist/test.redb"),
 		..Default::default()
 	};
 
@@ -590,7 +590,7 @@ async fn test_database_error_handling() {
 #[test]
 async fn test_multi_event_append_only_log() {
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join(format!("multi_event_test-{}.db", Uuid::new_v4()));
+	let db_path = temp_dir.path().join(format!("multi_event_test-{}.redb", Uuid::new_v4()));
 	let test_file = temp_dir.path().join("test_file.txt");
 
 	let config = DatabaseConfig { database_path: db_path.clone(), ..Default::default() };
@@ -653,7 +653,7 @@ async fn test_persistent_per_event_type_stats() {
 	use tempfile::TempDir;
 
 	let temp_dir = TempDir::new().expect("Failed to create temp directory");
-	let db_path = temp_dir.path().join("stats_test.db");
+	let db_path = temp_dir.path().join("stats_test.redb");
 	let mut storage = RedbStorage::new(rust_watcher::database::DatabaseConfig {
 		database_path: db_path,
 		..Default::default()

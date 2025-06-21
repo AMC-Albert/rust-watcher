@@ -80,7 +80,7 @@ pub mod database {
 	pub async fn create_test_database() -> Result<(TempDir, RedbStorage), Box<dyn std::error::Error>>
 	{
 		let temp_dir = TempDir::new()?;
-		let db_path = temp_dir.path().join("test.db");
+		let db_path = temp_dir.path().join("test.redb");
 
 		let config = DatabaseConfig::with_path(db_path);
 		let storage = RedbStorage::new(config).await?;

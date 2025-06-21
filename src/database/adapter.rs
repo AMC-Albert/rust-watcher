@@ -392,7 +392,7 @@ mod tests {
 	#[tokio::test]
 	async fn test_adapter_creation_and_config() {
 		let temp_dir = TempDir::new().unwrap();
-		let db_path = temp_dir.path().join("test_adapter_creation_and_config.db");
+		let db_path = temp_dir.path().join("test_adapter_creation_and_config.redb");
 
 		let config = DatabaseConfig { database_path: db_path.clone(), ..Default::default() };
 
@@ -407,7 +407,7 @@ mod tests {
 	#[tokio::test]
 	async fn test_event_storage_and_retrieval() {
 		let temp_dir = TempDir::new().unwrap();
-		let db_path = temp_dir.path().join("test_event_storage_and_retrieval.db");
+		let db_path = temp_dir.path().join("test_event_storage_and_retrieval.redb");
 
 		let config = DatabaseConfig { database_path: db_path, ..Default::default() };
 
@@ -446,7 +446,7 @@ mod tests {
 	#[tokio::test]
 	async fn test_metadata_storage_and_retrieval() {
 		let temp_dir = TempDir::new().unwrap();
-		let db_path = temp_dir.path().join("test_metadata_storage_and_retrieval.db");
+		let db_path = temp_dir.path().join("test_metadata_storage_and_retrieval.redb");
 		let test_file = temp_dir.path().join("test.txt");
 		std::fs::write(&test_file, "test").unwrap();
 		// Sleep to avoid race conditions on some filesystems
@@ -471,7 +471,7 @@ mod tests {
 	#[tokio::test]
 	async fn test_query_operations() {
 		let temp_dir = TempDir::new().unwrap();
-		let db_path = temp_dir.path().join("test_query_operations.db");
+		let db_path = temp_dir.path().join("test_query_operations.redb");
 
 		let config = DatabaseConfig { database_path: db_path, ..Default::default() };
 
@@ -540,7 +540,7 @@ mod tests {
 	#[tokio::test]
 	async fn test_health_check_and_maintenance() {
 		let temp_dir = TempDir::new().unwrap();
-		let db_path = temp_dir.path().join("health.db");
+		let db_path = temp_dir.path().join("health.redb");
 
 		let config = DatabaseConfig { database_path: db_path, ..Default::default() };
 

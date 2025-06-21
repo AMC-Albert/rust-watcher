@@ -512,11 +512,11 @@ const GLOBAL_WATCH_REGISTRY: TableDefinition<&[u8], &[u8]> = TableDefinition::ne
 **ReDB Feature**: Separate database instances with concurrent access
 ```rust
 // Per-watch database files
-let watch_1_db = Database::create("/path/to/watch_1.db")?;
-let watch_2_db = Database::create("/path/to/watch_2.db")?;
+let watch_1_db = Database::create("/path/to/watch_1.redb")?;
+let watch_2_db = Database::create("/path/to/watch_2.redb")?;
 
 // Shared coordination database
-let coordination_db = Database::create("/path/to/coordination.db")?;
+let coordination_db = Database::create("/path/to/coordination.redb")?;
 ```
 
 **Advantages**:

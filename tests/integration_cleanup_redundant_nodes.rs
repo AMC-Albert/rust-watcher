@@ -33,7 +33,7 @@ fn make_watch(root: &str) -> WatchMetadata {
 #[tokio::test]
 async fn test_cleanup_redundant_and_orphaned_nodes() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
-	let db_path = temp_dir.path().join("cleanup_test.db");
+	let db_path = temp_dir.path().join("cleanup_test.redb");
 	let db = redb::Database::create(&db_path).expect("Failed to create database");
 	let db = Arc::new(db);
 	let multi_watch = MultiWatchDatabase::new(db.clone());

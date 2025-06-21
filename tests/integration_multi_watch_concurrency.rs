@@ -35,7 +35,7 @@ fn make_watch(root: &str) -> WatchMetadata {
 async fn test_concurrent_watch_registration_and_removal() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
 	let db_path = temp_dir.path().join(format!(
-		"multi_watch_concurrency_test-{}.db",
+		"multi_watch_concurrency_test-{}.redb",
 		uuid::Uuid::new_v4()
 	));
 	let db = redb::Database::create(&db_path).expect("Failed to create database");

@@ -44,7 +44,7 @@ fn make_test_node(path: &str) -> FilesystemNode {
 #[tokio::test]
 async fn stress_concurrent_cache_reads() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
-	let db_path = temp_dir.path().join("stress_reads.db");
+	let db_path = temp_dir.path().join("stress_reads.redb");
 	let config = rust_watcher::database::config::DatabaseConfig {
 		database_path: db_path,
 		..Default::default()
@@ -74,7 +74,7 @@ async fn stress_concurrent_cache_reads() {
 #[tokio::test]
 async fn stress_concurrent_cache_writes() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
-	let db_path = temp_dir.path().join("stress_writes.db");
+	let db_path = temp_dir.path().join("stress_writes.redb");
 	let config = rust_watcher::database::config::DatabaseConfig {
 		database_path: db_path,
 		..Default::default()
@@ -101,7 +101,7 @@ async fn stress_concurrent_cache_writes() {
 #[tokio::test]
 async fn stress_concurrent_cache_read_write_mix() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
-	let db_path = temp_dir.path().join("stress_mix.db");
+	let db_path = temp_dir.path().join("stress_mix.redb");
 	let config = rust_watcher::database::config::DatabaseConfig {
 		database_path: db_path,
 		..Default::default()

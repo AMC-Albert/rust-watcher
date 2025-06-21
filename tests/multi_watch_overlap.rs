@@ -30,7 +30,7 @@ fn make_watch(root: &str) -> WatchMetadata {
 #[tokio::test]
 async fn test_detect_overlap_cases() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
-	let db_path = temp_dir.path().join("overlap_test.db");
+	let db_path = temp_dir.path().join("overlap_test.redb");
 	let db = redb::Database::create(&db_path).expect("Failed to create database");
 	let db = Arc::new(db);
 	let multi_watch = MultiWatchDatabase::new(db.clone());
@@ -74,7 +74,7 @@ async fn test_detect_overlap_cases() {
 #[tokio::test]
 async fn test_compute_overlap_statistics() {
 	let temp_dir = tempdir().expect("Failed to create temp dir");
-	let db_path = temp_dir.path().join("overlap_stats_test.db");
+	let db_path = temp_dir.path().join("overlap_stats_test.redb");
 	let db = redb::Database::create(&db_path).expect("Failed to create database");
 	let db = Arc::new(db);
 	let multi_watch = MultiWatchDatabase::new(db.clone());
