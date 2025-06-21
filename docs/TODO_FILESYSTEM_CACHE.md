@@ -9,6 +9,7 @@
 - **Unit test for synchronizer covers create/remove/rename/move event handling.**
 - All build, test, and clippy checks are clean as of latest commit.
 - See commit history for details of modularization, bugfixes, and groundwork for advanced features (June 2025).
+- **NOTE:** The repair tool for stats counters is implemented and robust, but it assumes all nodes are of event type `"create"` (event type is not stored on the node). This means per-type stats will be inaccurate if your system uses other event types. This limitation is documented in the code and design doc.
 
 ---
 
