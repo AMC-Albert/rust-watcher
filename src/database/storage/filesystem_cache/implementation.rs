@@ -578,6 +578,27 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		write_txn.commit()?;
 		Ok(())
 	}
+
+	async fn search_nodes(&mut self, pattern: &str) -> DatabaseResult<Vec<FilesystemNode>> {
+		use globset::Glob;
+		use std::ffi::OsStr;
+		let read_txn = self.database.begin_read()?;
+		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
+		let glob = Glob::new(pattern)
+			.map_err(|e| crate::database::error::DatabaseError::Other(e.to_string()))?;
+		let matcher = glob.compile_matcher();
+		let mut results = Vec::new();
+		for entry in fs_cache_table.iter()? {
+			let (_key, value) = entry?;
+			let node: FilesystemNode = utils::deserialize(value.value())?;
+			if let Some(fname) = node.path.file_name().and_then(OsStr::to_str) {
+				if matcher.is_match(fname) {
+					results.push(node);
+				}
+			}
+		}
+		Ok(results)
+	}
 }
 
 // End of FilesystemCacheStorage trait impl
