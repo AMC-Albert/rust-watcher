@@ -11,24 +11,24 @@
 
 use super::utils::{deserialize, key_to_bytes, serialize};
 use crate::database::error::DatabaseResult;
+use crate::database::storage::filesystem_cache::utils;
 use crate::database::storage::tables::{
-	MULTI_WATCH_FS_CACHE, MULTI_WATCH_HIERARCHY, PATH_PREFIX_TABLE, PATH_TO_WATCHES, SHARED_NODES,
-	WATCH_REGISTRY,
+	MULTI_WATCH_FS_CACHE, MULTI_WATCH_HIERARCHY, PATH_PREFIX_TABLE, SHARED_NODES, WATCH_REGISTRY,
 };
 use crate::database::types::{
 	calculate_path_hash, FilesystemNode, SharedNodeInfo, WatchMetadata, WatchScopedKey,
 };
-use globset::Glob;
 use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
 
 use super::trait_def::{CacheStats, FilesystemCacheStorage};
+use crate::database::storage::filesystem_cache::watch_mapping::WatchMappingHelpers;
 use redb::{ReadableMultimapTable, ReadableTable};
 use tracing::{debug, info};
 
 pub struct RedbFilesystemCache {
-	database: Arc<redb::Database>,
+	pub(crate) database: Arc<redb::Database>,
 }
 
 impl RedbFilesystemCache {
@@ -44,7 +44,7 @@ impl RedbFilesystemCache {
 	}
 
 	/// Create a scoped key for a watch-specific node
-	fn create_scoped_key(watch_id: &Uuid, path_hash: u64) -> WatchScopedKey {
+	pub fn create_scoped_key(watch_id: &Uuid, path_hash: u64) -> WatchScopedKey {
 		WatchScopedKey { watch_id: *watch_id, path_hash }
 	}
 
@@ -106,10 +106,7 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 				}
 
 				// Update path-to-watches mapping
-				let path_key = path_hash.to_le_bytes();
-				let watch_bytes = &watch_id.as_bytes()[..];
-				let mut path_watches_table = write_txn.open_multimap_table(PATH_TO_WATCHES)?;
-				path_watches_table.insert(path_key.as_slice(), watch_bytes)?;
+				WatchMappingHelpers::insert_watch_mapping(&write_txn, path_hash, watch_id)?;
 
 				// Update path prefix index
 				Self::index_path_prefixes(&write_txn, node, watch_id)?;
@@ -410,99 +407,12 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
 		for entry in fs_cache_table.iter()? {
 			let (_key, value) = entry?;
-			let node: FilesystemNode = deserialize(value.value())?;
+			let node: FilesystemNode = utils::deserialize(value.value())?;
 			if node.path == path {
 				return Ok(Some(node));
 			}
 		}
 		Ok(None)
-	}
-
-	// List all ancestor nodes for a given path (up to root).
-	async fn list_ancestors(&mut self, path: &Path) -> DatabaseResult<Vec<FilesystemNode>> {
-		let mut ancestors = Vec::new();
-		let mut current_path = path.to_path_buf();
-		let mut seen_hashes = std::collections::HashSet::new();
-		while let Some(node) = self.get_unified_node(&current_path).await? {
-			let parent_hash = node.computed.parent_hash;
-			if let Some(hash) = parent_hash {
-				if !seen_hashes.insert(hash) {
-					// Defensive: cycle detected
-					break;
-				}
-				// Find parent node by hash (scan all nodes, not efficient, but safe for now)
-				let parent_node = {
-					let read_txn = self.database.begin_read()?;
-					let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
-					let mut found = None;
-					for entry in fs_cache_table.iter()? {
-						let (_key, value) = entry?;
-						let candidate: FilesystemNode = deserialize(value.value())?;
-						if candidate.computed.path_hash == hash {
-							found = Some(candidate);
-							break;
-						}
-					}
-					found
-				};
-				if let Some(parent) = parent_node {
-					ancestors.push(parent.clone());
-					current_path = parent.path.clone();
-				} else {
-					break;
-				}
-			} else {
-				break;
-			}
-		}
-		Ok(ancestors)
-	}
-
-	// List all descendant nodes for a given path (subtree query).
-	async fn list_descendants(&mut self, path: &Path) -> DatabaseResult<Vec<FilesystemNode>> {
-		let mut descendants = Vec::new();
-		let mut stack = vec![path.to_path_buf()];
-		let mut seen = std::collections::HashSet::new();
-		while let Some(current) = stack.pop() {
-			let children = self.list_directory_unified(&current).await?;
-			for child in children {
-				if seen.insert(child.computed.path_hash) {
-					descendants.push(child.clone());
-					if matches!(
-						child.node_type,
-						crate::database::types::NodeType::Directory { .. }
-					) {
-						stack.push(child.path.clone());
-					}
-				}
-			}
-		}
-		Ok(descendants)
-	}
-
-	/// Pattern-based search for nodes (e.g., glob, regex).
-	///
-	/// Returns all nodes matching the given pattern.
-	/// This implementation is naive and scans all nodes. Performance will degrade with large caches.
-	/// TODO: Replace with indexed or batched search for production use.
-	async fn search_nodes(&mut self, pattern: &str) -> DatabaseResult<Vec<FilesystemNode>> {
-		// WARNING: This implementation is a naive full scan. Performance will degrade with large caches.
-		// TODO: Replace with indexed or batched search for production use.
-		let glob = Glob::new(pattern)
-			.map_err(|e| crate::database::error::DatabaseError::Other(e.to_string()))?;
-		let matcher = glob.compile_matcher();
-		let read_txn = self.database.begin_read()?;
-		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
-		let mut results = Vec::new();
-		for entry in fs_cache_table.iter()? {
-			let (_key, value) = entry?;
-			let node: FilesystemNode = deserialize(value.value())?;
-			let file_name = node.path.file_name().unwrap_or_default().to_string_lossy();
-			if matcher.is_match(file_name.as_ref()) {
-				results.push(node);
-			}
-		}
-		Ok(results)
 	}
 
 	async fn get_node(
@@ -630,5 +540,26 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		}
 		write_txn.commit()?;
 		Ok(())
+	}
+}
+
+// End of FilesystemCacheStorage trait impl
+
+// Inherent methods for RedbFilesystemCache
+impl RedbFilesystemCache {
+	/// Fallback: scan all watches for a node by path (O(N)). Used by shared node helpers.
+	pub async fn scan_all_watches_for_node(
+		&self, path: &std::path::Path,
+	) -> DatabaseResult<Option<FilesystemNode>> {
+		let read_txn = self.database.begin_read()?;
+		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
+		for entry in fs_cache_table.iter()? {
+			let (_key, value) = entry?;
+			let node: FilesystemNode = utils::deserialize(value.value())?;
+			if node.path == path {
+				return Ok(Some(node));
+			}
+		}
+		Ok(None)
 	}
 }
