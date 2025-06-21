@@ -109,12 +109,22 @@ pub trait FilesystemCacheStorage: Send + Sync {
 
 	/// Pattern-based search for nodes (e.g., glob, regex).
 	///
-	/// Returns all nodes matching the given pattern.
-	/// TODO: Implement pattern matching and efficient filtering.
+	/// Returns all nodes matching the given pattern. WARNING: Current implementation is a naive full scan and will not scale for large caches. Use only for testing or small datasets.
+	/// TODO: Implement efficient indexed search for production use. Edge cases: escaping, cross-platform path semantics, and performance bottlenecks.
 	async fn search_nodes(&mut self, _pattern: &str) -> DatabaseResult<Vec<FilesystemNode>> {
 		// Not yet implemented. This will require pattern parsing and index scans.
 		// Edge cases: performance, escaping, cross-platform path semantics.
 		unimplemented!("search_nodes not yet implemented");
+	}
+
+	/// Retrieve a single filesystem node for a specific watch (single-node query).
+	///
+	/// Returns the node if present, or None if not found. This is a fundamental API for cache lookups.
+	/// TODO: Implement in all backends. Edge cases: path normalization, cross-platform semantics, and stale cache entries.
+	async fn get_node(
+		&mut self, _watch_id: &Uuid, _path: &Path,
+	) -> DatabaseResult<Option<FilesystemNode>> {
+		unimplemented!("get_node not yet implemented");
 	}
 }
 

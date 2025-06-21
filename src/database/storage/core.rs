@@ -94,6 +94,13 @@ pub trait DatabaseStorage: Send + Sync {
 
 	/// Delete the N oldest events from the log
 	async fn delete_oldest_events(&mut self, n: usize) -> DatabaseResult<usize>;
+
+	/// Retrieve a single filesystem node for a specific watch (single-node query).
+	/// Returns the node if present, or None if not found. This is a fundamental API for cache lookups.
+	/// TODO: Edge cases: path normalization, cross-platform semantics, and stale cache entries.
+	async fn get_node(
+		&mut self, watch_id: &uuid::Uuid, path: &std::path::Path,
+	) -> crate::database::error::DatabaseResult<Option<crate::database::types::FilesystemNode>>;
 }
 
 /// Primary ReDB implementation that coordinates all storage modules
@@ -341,6 +348,13 @@ impl DatabaseStorage for RedbStorage {
 		drop(events_log); // Ensure table is dropped before committing
 		write_txn.commit()?;
 		Ok(removed)
+	}
+
+	async fn get_node(
+		&mut self, watch_id: &uuid::Uuid, path: &std::path::Path,
+	) -> crate::database::error::DatabaseResult<Option<crate::database::types::FilesystemNode>> {
+		let mut cache = self.cache();
+		cache.get_node(watch_id, path).await
 	}
 }
 

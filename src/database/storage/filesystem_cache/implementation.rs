@@ -478,6 +478,9 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	/// This implementation is naive and scans all nodes. Performance will degrade with large caches.
 	/// TODO: Replace with indexed or batched search for production use.
 	async fn search_nodes(&mut self, pattern: &str) -> DatabaseResult<Vec<FilesystemNode>> {
+		// WARNING: This implementation is a naive full scan. Performance will degrade with large caches.
+		// TODO: Replace with indexed or batched search for production use.
+		// Edge cases: pattern escaping, cross-platform path semantics, and memory pressure are not handled.
 		let glob = Glob::new(pattern)
 			.map_err(|e| crate::database::error::DatabaseError::Other(e.to_string()))?;
 		let matcher = glob.compile_matcher();
@@ -492,5 +495,13 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			}
 		}
 		Ok(results)
+	}
+
+	async fn get_node(
+		&mut self, watch_id: &Uuid, path: &Path,
+	) -> DatabaseResult<Option<FilesystemNode>> {
+		// This is a thin wrapper around get_filesystem_node. In the future, may add cache validation or normalization.
+		// Edge cases: path normalization, case sensitivity, and stale cache entries are not handled here.
+		self.get_filesystem_node(watch_id, path).await
 	}
 }

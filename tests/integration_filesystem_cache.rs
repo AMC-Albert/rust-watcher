@@ -70,4 +70,32 @@ async fn test_filesystem_hierarchy_and_list_directory() {
 	assert_eq!(children[0].path, child_path);
 }
 
+#[tokio::test]
+async fn test_get_node_api() {
+	let temp_dir = TempDir::new().expect("Failed to create temp directory");
+	let db_path = temp_dir.path().join(format!("fs_cache_get_node-{}.redb", uuid::Uuid::new_v4()));
+	let config = DatabaseConfig { database_path: db_path, ..Default::default() };
+	let mut storage = RedbStorage::new(config).await.expect("Failed to create storage");
+	let watch_id = Uuid::new_v4();
+
+	// Create and store a node
+	let node_path = temp_dir.path().join("bar.txt");
+	std::fs::write(&node_path, b"test").unwrap();
+	let metadata = std::fs::metadata(&node_path).unwrap();
+	let node = FilesystemNode::new(node_path.clone(), &metadata);
+	storage.store_filesystem_node(&watch_id, &node).await.expect("store");
+
+	// get_node should return the same as get_filesystem_node
+	let retrieved = storage.get_node(&watch_id, &node_path).await.expect("get_node");
+	assert!(retrieved.is_some());
+	let retrieved = retrieved.unwrap();
+	assert_eq!(retrieved.path, node.path);
+	assert_eq!(retrieved.node_type, node.node_type);
+
+	// get_node for a missing node should return None
+	let missing_path = temp_dir.path().join("does_not_exist.txt");
+	let missing = storage.get_node(&watch_id, &missing_path).await.expect("get_node missing");
+	assert!(missing.is_none());
+}
+
 // Additional tests for batch insert, prefix queries, and edge cases can be added here.

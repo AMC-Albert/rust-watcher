@@ -267,6 +267,12 @@ impl DatabaseStorage for NoOpStorage {
 		Ok(None)
 	}
 
+	async fn get_node(
+		&mut self, _watch_id: &uuid::Uuid, _path: &std::path::Path,
+	) -> crate::database::error::DatabaseResult<Option<crate::database::types::FilesystemNode>> {
+		Ok(None)
+	}
+
 	async fn list_directory_for_watch(
 		&mut self, _watch_id: &uuid::Uuid, _parent_path: &std::path::Path,
 	) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>> {
