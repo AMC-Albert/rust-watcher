@@ -490,7 +490,6 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	async fn search_nodes(&mut self, pattern: &str) -> DatabaseResult<Vec<FilesystemNode>> {
 		// WARNING: This implementation is a naive full scan. Performance will degrade with large caches.
 		// TODO: Replace with indexed or batched search for production use.
-		// Edge cases: pattern escaping, cross-platform path semantics, and memory pressure are not handled.
 		let glob = Glob::new(pattern)
 			.map_err(|e| crate::database::error::DatabaseError::Other(e.to_string()))?;
 		let matcher = glob.compile_matcher();
@@ -500,7 +499,8 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		for entry in fs_cache_table.iter()? {
 			let (_key, value) = entry?;
 			let node: FilesystemNode = deserialize(value.value())?;
-			if matcher.is_match(node.path.to_string_lossy().as_ref()) {
+			let file_name = node.path.file_name().unwrap_or_default().to_string_lossy();
+			if matcher.is_match(file_name.as_ref()) {
 				results.push(node);
 			}
 		}

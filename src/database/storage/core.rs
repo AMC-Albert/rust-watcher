@@ -101,6 +101,11 @@ pub trait DatabaseStorage: Send + Sync {
 	async fn get_node(
 		&mut self, watch_id: &uuid::Uuid, path: &std::path::Path,
 	) -> crate::database::error::DatabaseResult<Option<crate::database::types::FilesystemNode>>;
+
+	/// Pattern-based search for nodes (e.g., glob, regex).
+	async fn search_nodes(
+		&mut self, pattern: &str,
+	) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>>;
 }
 
 /// Primary ReDB implementation that coordinates all storage modules
@@ -355,6 +360,12 @@ impl DatabaseStorage for RedbStorage {
 	) -> crate::database::error::DatabaseResult<Option<crate::database::types::FilesystemNode>> {
 		let mut cache = self.cache();
 		cache.get_node(watch_id, path).await
+	}
+
+	async fn search_nodes(
+		&mut self, pattern: &str,
+	) -> crate::database::error::DatabaseResult<Vec<crate::database::types::FilesystemNode>> {
+		self.cache().search_nodes(pattern).await
 	}
 }
 

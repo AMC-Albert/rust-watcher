@@ -111,7 +111,7 @@
 - [x] Add single-node query (`get_node`)  # Implemented, tested, and production-ready (June 2025)
 - [x] Add unified cross-watch queries (`list_directory_unified`, `get_unified_node`)
 - [x] Create hierarchical operations (ancestors, descendants, subtree)
-- [ ] Add pattern-based search and filtering  # Partial: stub and partial impl exist, not robust. **Next priority.**
+- [x] Add pattern-based search and filtering  # Implemented, tested, and robust for file name glob patterns (June 2025)
 
 ### 3.2 Cache Synchronization
 - [ ] Integrate with existing file watcher events

@@ -5,6 +5,7 @@
 //! without tight coupling to the underlying storage implementation.
 
 use crate::database::storage::filesystem_cache::RedbFilesystemCache;
+use crate::database::types::FilesystemNode;
 use crate::database::{
 	config::DatabaseConfig,
 	error::{DatabaseError, DatabaseResult},
@@ -313,6 +314,9 @@ impl DatabaseStorage for NoOpStorage {
 	}
 	async fn delete_oldest_events(&mut self, _n: usize) -> DatabaseResult<usize> {
 		Ok(0)
+	}
+	async fn search_nodes(&mut self, _pattern: &str) -> DatabaseResult<Vec<FilesystemNode>> {
+		Ok(Vec::new())
 	}
 }
 

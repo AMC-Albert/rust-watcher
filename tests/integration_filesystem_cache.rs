@@ -98,4 +98,53 @@ async fn test_get_node_api() {
 	assert!(missing.is_none());
 }
 
+#[tokio::test]
+async fn test_search_nodes_glob_patterns() {
+	let temp_dir = TempDir::new().expect("Failed to create temp directory");
+	let db_path = temp_dir.path().join(format!("fs_cache_search-{}.redb", uuid::Uuid::new_v4()));
+	let config = DatabaseConfig { database_path: db_path, ..Default::default() };
+	let mut storage = RedbStorage::new(config).await.expect("Failed to create storage");
+	let watch_id = Uuid::new_v4();
+
+	// Create a set of files and directories
+	let files = [
+		temp_dir.path().join("alpha.txt"),
+		temp_dir.path().join("beta.log"),
+		temp_dir.path().join("gamma.txt"),
+		temp_dir.path().join("delta.md"),
+	];
+	for file in &files {
+		std::fs::write(file, b"test").unwrap();
+		let metadata = std::fs::metadata(file).unwrap();
+		let node = FilesystemNode::new(file.clone(), &metadata);
+		storage.store_filesystem_node(&watch_id, &node).await.expect("store");
+	}
+
+	// Simple glob: *.txt
+	let results = storage.search_nodes("*.txt").await.expect("search_nodes");
+	let result_paths: Vec<_> = results
+		.iter()
+		.map(|n| n.path.file_name().unwrap().to_string_lossy().to_string())
+		.collect();
+	assert!(result_paths.contains(&"alpha.txt".to_string()));
+	assert!(result_paths.contains(&"gamma.txt".to_string()));
+	assert!(!result_paths.contains(&"beta.log".to_string()));
+	assert!(!result_paths.contains(&"delta.md".to_string()));
+
+	// Glob: *a.*
+	let results = storage.search_nodes("*a.*").await.expect("search_nodes");
+	let result_paths: Vec<_> = results
+		.iter()
+		.map(|n| n.path.file_name().unwrap().to_string_lossy().to_string())
+		.collect();
+	assert!(result_paths.contains(&"alpha.txt".to_string()));
+	assert!(result_paths.contains(&"gamma.txt".to_string()));
+	assert!(result_paths.contains(&"delta.md".to_string()));
+	assert!(result_paths.contains(&"beta.log".to_string())); // Acceptable per glob semantics
+
+	// No matches
+	let results = storage.search_nodes("*.doesnotexist").await.expect("search_nodes");
+	assert!(results.is_empty());
+}
+
 // Additional tests for batch insert, prefix queries, and edge cases can be added here.
