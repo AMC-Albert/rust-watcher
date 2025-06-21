@@ -373,6 +373,24 @@ impl DatabaseStorage for RedbStorage {
 	}
 }
 
+impl RedbStorage {
+	/// Remove a filesystem node for a specific watch (test passthrough)
+	pub async fn remove_filesystem_node(
+		&mut self, watch_id: &uuid::Uuid, path: &std::path::Path, event_type: &str,
+	) -> crate::database::error::DatabaseResult<()> {
+		let mut cache = self.cache();
+		cache.remove_filesystem_node(watch_id, path, event_type).await
+	}
+
+	/// Repair stats counters (test passthrough)
+	pub async fn repair_stats_counters(
+		&mut self, watch_id: Option<&uuid::Uuid>, path: Option<&std::path::Path>,
+	) -> crate::database::error::DatabaseResult<usize> {
+		let mut cache = self.cache();
+		cache.repair_stats_counters(watch_id, path).await
+	}
+}
+
 /// Dummy struct for module visibility diagnostics
 pub struct CoreTest;
 

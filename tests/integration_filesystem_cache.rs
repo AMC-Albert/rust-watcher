@@ -147,4 +147,56 @@ async fn test_search_nodes_glob_patterns() {
 	assert!(results.is_empty());
 }
 
+#[tokio::test]
+async fn test_stats_and_metadata_event_types() {
+	use rust_watcher::database::types::FilesystemNode;
+	use rust_watcher::database::{DatabaseConfig, DatabaseStorage, RedbStorage};
+	use tempfile::TempDir;
+	use uuid::Uuid;
+
+	let temp_dir = TempDir::new().expect("Failed to create temp directory");
+	let db_path = temp_dir.path().join(format!("fs_cache_stats-{}.redb", uuid::Uuid::new_v4()));
+	let config = DatabaseConfig { database_path: db_path, ..Default::default() };
+	let mut storage = RedbStorage::new(config).await.expect("Failed to create storage");
+	let watch_id = Uuid::new_v4();
+
+	// Create and store a node with a metadata event type
+	let node_path = temp_dir.path().join("meta.txt");
+	std::fs::write(&node_path, b"test").unwrap();
+	let metadata = std::fs::metadata(&node_path).unwrap();
+	let node = FilesystemNode::new(node_path.clone(), &metadata);
+	storage
+		.store_filesystem_node(&watch_id, &node, "metadata")
+		.await
+		.expect("store");
+
+	// Check that the node is present
+	let retrieved = storage.get_filesystem_node(&watch_id, &node_path).await.expect("get");
+	assert!(retrieved.is_some());
+
+	// Remove the node with a metadata event type
+	storage
+		.remove_filesystem_node(&watch_id, &node_path, "metadata")
+		.await
+		.expect("remove");
+	let missing = storage
+		.get_filesystem_node(&watch_id, &node_path)
+		.await
+		.expect("get after remove");
+	assert!(missing.is_none());
+}
+
+#[tokio::test]
+async fn test_repair_stats_counters_stub() {
+	use rust_watcher::database::{DatabaseConfig, RedbStorage};
+	use tempfile::TempDir;
+	let temp_dir = TempDir::new().expect("Failed to create temp directory");
+	let db_path = temp_dir.path().join(format!("fs_cache_repair-{}.redb", uuid::Uuid::new_v4()));
+	let config = DatabaseConfig { database_path: db_path, ..Default::default() };
+	let mut storage = RedbStorage::new(config).await.expect("Failed to create storage");
+	// This should not panic or error, but will always return 0 for now
+	let repaired = storage.repair_stats_counters(None, None).await.expect("repair_stats_counters");
+	assert_eq!(repaired, 0);
+}
+
 // Additional tests for batch insert, prefix queries, and edge cases can be added here.

@@ -599,4 +599,17 @@ impl RedbFilesystemCache {
 		}
 		Ok(None)
 	}
+
+	/// Repairs or recomputes all stats counters for a given watch or path.
+	///
+	/// This is a stub: it currently does nothing and always returns Ok(0).
+	/// In a real implementation, this would rescan the relevant subset of the DB and recompute counters.
+	/// Failure modes: If the DB is very large, this may be slow or OOM. Use with caution.
+	/// TODO: Implement actual rescan and repair logic.
+	pub async fn repair_stats_counters(
+		&mut self, _watch_id: Option<&Uuid>, _path: Option<&Path>,
+	) -> DatabaseResult<usize> {
+		// Plan: enumerate all nodes for the given watch/path, recompute stats, and update tables atomically.
+		Ok(0)
+	}
 }
