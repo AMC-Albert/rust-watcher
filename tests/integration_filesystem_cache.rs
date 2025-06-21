@@ -239,6 +239,12 @@ async fn test_hierarchy_ancestor_descendant_traversal() {
 	fs::create_dir(&level2).unwrap();
 	fs::write(&leaf, b"leaf").unwrap();
 
+	// Canonicalize all paths before node creation
+	let root = fs::canonicalize(&root).unwrap();
+	let level1 = fs::canonicalize(&level1).unwrap();
+	let level2 = fs::canonicalize(&level2).unwrap();
+	let leaf = fs::canonicalize(&leaf).unwrap();
+
 	let root_meta = fs::metadata(&root).unwrap();
 	let level1_meta = fs::metadata(&level1).unwrap();
 	let level2_meta = fs::metadata(&level2).unwrap();
@@ -252,6 +258,24 @@ async fn test_hierarchy_ancestor_descendant_traversal() {
 		FilesystemNode::new_with_event_type(level2.clone(), &level2_meta, Some("test".to_string()));
 	let leaf_node =
 		FilesystemNode::new_with_event_type(leaf.clone(), &leaf_meta, Some("test".to_string()));
+
+	// Print hashes and parent hashes immediately after node creation
+	eprintln!(
+		"root path: {:?}, hash: {:?}, parent_hash: {:?}",
+		root, root_node.computed.path_hash, root_node.computed.parent_hash
+	);
+	eprintln!(
+		"level1 path: {:?}, hash: {:?}, parent_hash: {:?}",
+		level1, level1_node.computed.path_hash, level1_node.computed.parent_hash
+	);
+	eprintln!(
+		"level2 path: {:?}, hash: {:?}, parent_hash: {:?}",
+		level2, level2_node.computed.path_hash, level2_node.computed.parent_hash
+	);
+	eprintln!(
+		"leaf path: {:?}, hash: {:?}, parent_hash: {:?}",
+		leaf, leaf_node.computed.path_hash, leaf_node.computed.parent_hash
+	);
 
 	storage
 		.store_filesystem_node(&watch_id, &root_node, "test")
@@ -273,6 +297,11 @@ async fn test_hierarchy_ancestor_descendant_traversal() {
 	// Test ancestor traversal from leaf
 	let ancestors = storage.list_ancestors_modular(&leaf).await.expect("list_ancestors_modular");
 	let ancestor_paths: Vec<_> = ancestors.iter().map(|n| n.path.clone()).collect();
+	println!("Ancestor paths found: {:?}", ancestor_paths);
+	println!(
+		"Expected: level2={:?}, level1={:?}, root={:?}",
+		level2, level1, root
+	);
 	assert!(ancestor_paths.contains(&level2));
 	assert!(ancestor_paths.contains(&level1));
 	assert!(ancestor_paths.contains(&root));
@@ -287,5 +316,3 @@ async fn test_hierarchy_ancestor_descendant_traversal() {
 	// Should not include root itself
 	assert!(!descendant_paths.contains(&root));
 }
-
-// Additional tests for batch insert, prefix queries, and edge cases can be added here.

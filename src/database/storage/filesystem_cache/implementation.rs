@@ -115,6 +115,17 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 
 				// Update path prefix index
 				Self::index_path_prefixes(&write_txn, &node, watch_id)?;
+
+				// Update unified node index for O(1) cross-watch lookup
+				{
+					let mut unified_index = write_txn
+						.open_table(crate::database::storage::tables::UNIFIED_NODE_INDEX)?;
+					let path_hash = node.computed.path_hash;
+					let node_bytes =
+						crate::database::storage::filesystem_cache::utils::serialize(&node)?;
+					unified_index
+						.insert(path_hash.to_le_bytes().as_slice(), node_bytes.as_slice())?;
+				}
 			} // <-- All table borrows dropped here
 
 			// --- Incremental stats update: per-watch and per-path ---
@@ -411,20 +422,18 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 	}
 
 	async fn get_unified_node(&mut self, path: &Path) -> DatabaseResult<Option<FilesystemNode>> {
-		// Prefer shared node if present, else any watch-specific node
+		// Prefer shared node if present, else use unified node index for O(1) lookup
 		let path_hash = calculate_path_hash(path);
 		if let Some(shared) = self.get_shared_node(path_hash).await? {
 			return Ok(Some(shared.node));
 		}
-		// Fallback: scan all watches for a node
+		// Use unified node index for O(1) lookup
 		let read_txn = self.database.begin_read()?;
-		let fs_cache_table = read_txn.open_table(MULTI_WATCH_FS_CACHE)?;
-		for entry in fs_cache_table.iter()? {
-			let (_key, value) = entry?;
-			let node: FilesystemNode = utils::deserialize(value.value())?;
-			if node.path == path {
-				return Ok(Some(node));
-			}
+		let unified_index =
+			read_txn.open_table(crate::database::storage::tables::UNIFIED_NODE_INDEX)?;
+		if let Some(node_bytes) = unified_index.get(path_hash.to_le_bytes().as_slice())? {
+			let node: FilesystemNode = utils::deserialize(node_bytes.value())?;
+			return Ok(Some(node));
 		}
 		Ok(None)
 	}

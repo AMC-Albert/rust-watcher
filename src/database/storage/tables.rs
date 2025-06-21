@@ -88,6 +88,10 @@ pub const WATCH_STATS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("wat
 /// Per-path stats table (path_hash -> serialized PathStats struct)
 pub const PATH_STATS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("path_stats");
 
+/// Unified node index for O(1) cross-watch node lookup (path_hash -> FilesystemNode)
+pub const UNIFIED_NODE_INDEX: TableDefinition<&[u8], &[u8]> =
+	TableDefinition::new("unified_node_index");
+
 /// Table groups for easier management
 pub const BASIC_TABLES: &[&str] = &["events", "metadata", "indexes"];
 pub const FILESYSTEM_CACHE_TABLES: &[&str] =
@@ -170,6 +174,7 @@ pub async fn initialize_tables(database: &Arc<Database>) -> DatabaseResult<()> {
 		let _maintenance_log_table = write_txn.open_table(MAINTENANCE_LOG)?;
 		let _watch_stats_table = write_txn.open_table(WATCH_STATS)?;
 		let _path_stats_table = write_txn.open_table(PATH_STATS)?;
+		let _unified_node_index_table = write_txn.open_table(UNIFIED_NODE_INDEX)?;
 	}
 	write_txn.commit()?;
 	Ok(())

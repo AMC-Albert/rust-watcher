@@ -57,14 +57,28 @@ impl crate::database::storage::filesystem_cache::RedbFilesystemCache {
 					ancestors.push(parent.clone());
 					current_path = parent.path.clone();
 				} else {
+					// Use unified node index for O(1) parent lookup
+					let read_txn = self.database.begin_read()?;
+					let unified_index = read_txn
+						.open_table(crate::database::storage::tables::UNIFIED_NODE_INDEX)?;
+					if let Some(node_bytes) = unified_index.get(hash.to_le_bytes().as_slice())? {
+						let parent: FilesystemNode =
+							crate::database::storage::filesystem_cache::utils::deserialize(
+								node_bytes.value(),
+							)?;
+						ancestors.push(parent.clone());
+						current_path = parent.path.clone();
+						continue;
+					}
 					// Fallback: scan all nodes (legacy/corrupt index)
 					let parent_node = self.find_node_by_hash_fallback(hash).await?;
 					if let Some(parent) = parent_node {
 						ancestors.push(parent.clone());
 						current_path = parent.path.clone();
-					} else {
-						break;
+						continue;
 					}
+					// If not found anywhere, break
+					break;
 				}
 			} else {
 				break;
