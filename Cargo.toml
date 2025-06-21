@@ -31,6 +31,7 @@ bincode = "1.3" # Binary serialization for database records
 walkdir = "2.0" # For filesystem tree traversal during cache initialization
 globset = "0.4.16"
 tempfile = "3.0"
+pollster = "0.3"
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.28" # For inode information on Unix-like systems
@@ -56,6 +57,10 @@ opt-level = 1
 [[bin]]
 name = "watcher"
 path = "src/main.rs"
+
+[[bin]]
+name = "fs_cache_bench"
+path = "bin/fs_cache_bench.rs"
 
 # [[example]]
 # name = "advanced_monitor"
