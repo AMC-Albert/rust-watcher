@@ -5,6 +5,8 @@
 - Filesystem cache is modular, robust, and warning-free. All integration and stress tests pass except for explicitly unimplemented multi-watch scenarios (not a regression).
 - Documentation and comments are up to date for all implemented features. Pending features are only in this TODO and design docs.
 - Unified/cross-watch queries, hierarchical operations, and pattern-based search are implemented and tested.
+- **Cache synchronizer integrated with watcher event loop. Incremental cache updates on all events. Borrow checker and trait bound issues resolved.**
+- **Unit test for synchronizer covers create/remove event handling.**
 - All build, test, and clippy checks are clean as of latest commit.
 - See commit history for details of modularization, bugfixes, and groundwork for advanced features (June 2025).
 
@@ -28,6 +30,7 @@
 | Unified/cross-watch queries     | Complete | `list_directory_unified` and `get_unified_node` implemented and tested                                                                        |
 | Hierarchical operations         | Complete | `list_ancestors` and `list_descendants` implemented and tested                                                                                |
 | Pattern-based search/filtering  | Complete | File name glob patterns supported, robust and tested (June 2025)                                                                              |
+| **Cache synchronizer integration** | **Complete** | **Watcher event loop now updates cache incrementally for all events. Synchronizer unit test covers create/remove.** |
 
 ---
 
@@ -35,8 +38,8 @@
 
 ### Phase 3: Filesystem Cache API (incomplete)
 - [ ] Scalable stats/indexing: per-watch, per-path, and advanced indexing
-- [ ] Cache synchronization: integrate with file watcher events, incremental updates, invalidation, and consistency verification
+- [ ] **Cache synchronization: implement removal and rename logic in synchronizer; add more tests for invalidation and consistency.**
 - [ ] Performance operations: bulk cache warming, background maintenance, statistics/monitoring, memory optimization
 - [ ] Integration with existing systems: watcher integration, cache-aware monitoring, database adapter enhancements
 - [ ] Advanced features: transaction coordination, memory management, performance monitoring
-- [ ] Testing and validation: more unit/integration tests for new features, especially cache synchronization and multi-watch scenarios
+- [ ] **Testing and validation: expand unit/integration tests for cache synchronization, especially for removal/rename and multi-watch scenarios.**
