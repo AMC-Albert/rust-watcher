@@ -5,7 +5,8 @@ use chrono::Utc;
 use rust_watcher::{EventType, FileSystemEvent, MoveDetector, MoveDetectorConfig};
 use uuid::Uuid;
 
-use rust_watcher::database::storage::filesystem_cache::FilesystemCacheStorage;
+use rust_watcher::database::storage::filesystem_cache::trait_def::CacheStats;
+use rust_watcher::database::storage::filesystem_cache::trait_def::FilesystemCacheStorage;
 
 mod common;
 
@@ -90,9 +91,7 @@ impl FilesystemCacheStorage for DummyCache {
 	async fn get_cache_stats(
 		&mut self,
 		_: &uuid::Uuid,
-	) -> rust_watcher::database::error::DatabaseResult<
-		rust_watcher::database::storage::filesystem_cache::CacheStats,
-	> {
+	) -> rust_watcher::database::error::DatabaseResult<CacheStats> {
 		Ok(Default::default())
 	}
 	async fn cleanup_stale_cache(

@@ -3,7 +3,8 @@
 //! This module defines the main storage traits and provides the primary
 //! RedbStorage implementation that coordinates all storage operations.
 
-use super::filesystem_cache::{FilesystemCacheStorage, RedbFilesystemCache};
+use super::filesystem_cache::trait_def::FilesystemCacheStorage;
+use super::filesystem_cache::RedbFilesystemCache;
 use crate::database::{
 	config::DatabaseConfig,
 	error::DatabaseResult,

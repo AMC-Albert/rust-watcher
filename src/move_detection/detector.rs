@@ -1,4 +1,4 @@
-use crate::database::storage::filesystem_cache::FilesystemCacheStorage;
+use crate::database::storage::filesystem_cache::trait_def::FilesystemCacheStorage;
 use crate::events::{EventType, FileSystemEvent, MoveEvent};
 use crate::move_detection::config::MoveDetectorConfig;
 use crate::move_detection::events::{PendingEvent, PendingEventsStorage};
@@ -455,6 +455,7 @@ impl<'a> MoveDetector<'a> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::database::storage::filesystem_cache::trait_def::CacheStats;
 	use std::path::PathBuf;
 	use std::time::Duration;
 
@@ -539,9 +540,7 @@ mod tests {
 			async fn get_cache_stats(
 				&mut self,
 				_: &uuid::Uuid,
-			) -> crate::database::error::DatabaseResult<
-				crate::database::storage::filesystem_cache::CacheStats,
-			> {
+			) -> crate::database::error::DatabaseResult<CacheStats> {
 				Ok(Default::default())
 			}
 			async fn cleanup_stale_cache(
@@ -679,9 +678,7 @@ mod tests {
 			async fn get_cache_stats(
 				&mut self,
 				_: &uuid::Uuid,
-			) -> crate::database::error::DatabaseResult<
-				crate::database::storage::filesystem_cache::CacheStats,
-			> {
+			) -> crate::database::error::DatabaseResult<CacheStats> {
 				Ok(Default::default())
 			}
 			async fn cleanup_stale_cache(
@@ -815,9 +812,7 @@ mod tests {
 			async fn get_cache_stats(
 				&mut self,
 				_: &uuid::Uuid,
-			) -> crate::database::error::DatabaseResult<
-				crate::database::storage::filesystem_cache::CacheStats,
-			> {
+			) -> crate::database::error::DatabaseResult<CacheStats> {
 				Ok(Default::default())
 			}
 			async fn cleanup_stale_cache(
@@ -961,9 +956,7 @@ mod tests {
 			async fn get_cache_stats(
 				&mut self,
 				_: &uuid::Uuid,
-			) -> crate::database::error::DatabaseResult<
-				crate::database::storage::filesystem_cache::CacheStats,
-			> {
+			) -> crate::database::error::DatabaseResult<CacheStats> {
 				Ok(Default::default())
 			}
 			async fn cleanup_stale_cache(
@@ -1100,9 +1093,7 @@ mod tests {
 			async fn get_cache_stats(
 				&mut self,
 				_: &uuid::Uuid,
-			) -> crate::database::error::DatabaseResult<
-				crate::database::storage::filesystem_cache::CacheStats,
-			> {
+			) -> crate::database::error::DatabaseResult<CacheStats> {
 				Ok(Default::default())
 			}
 			async fn cleanup_stale_cache(
