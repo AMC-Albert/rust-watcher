@@ -23,7 +23,19 @@ pub async fn setup_test_storage(test_name: &str) -> (TempDir, PathBuf, RedbStora
 pub async fn create_and_store_node(
 	storage: &mut RedbStorage, watch_id: &Uuid, path: &std::path::Path, event_type: &str,
 ) -> FilesystemNode {
-	std::fs::write(path, b"test").unwrap();
+	if let Some(parent) = path.parent() {
+		std::fs::create_dir_all(parent).unwrap();
+	}
+	// If the path exists and is a directory, do not try to write a file
+	let write_file = match std::fs::metadata(path) {
+		Ok(meta) => !meta.is_dir(),
+		Err(_) => true, // If it doesn't exist, assume it's a file
+	};
+	if write_file {
+		std::fs::write(path, b"test").unwrap();
+	} else {
+		// Directory already exists, nothing to do
+	}
 	let metadata = std::fs::metadata(path).unwrap();
 	let node = FilesystemNode::new_with_event_type(
 		path.to_path_buf(),
