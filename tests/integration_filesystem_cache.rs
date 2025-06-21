@@ -214,4 +214,78 @@ async fn test_repair_stats_counters_stub() {
 	assert_eq!(repaired, 0);
 }
 
+#[tokio::test]
+async fn test_hierarchy_ancestor_descendant_traversal() {
+	use std::fs;
+	use tempfile::TempDir;
+	use uuid::Uuid;
+
+	let temp_dir = TempDir::new().expect("Failed to create temp directory");
+	let db_path = temp_dir.path().join(format!(
+		"fs_cache_hierarchy_traversal-{}.redb",
+		uuid::Uuid::new_v4()
+	));
+	let config = DatabaseConfig { database_path: db_path, ..Default::default() };
+	let mut storage = RedbStorage::new(config).await.expect("Failed to create storage");
+	let watch_id = Uuid::new_v4();
+
+	// Create a deep directory tree: root/level1/level2/leaf.txt
+	let root = temp_dir.path().join("root");
+	let level1 = root.join("level1");
+	let level2 = level1.join("level2");
+	let leaf = level2.join("leaf.txt");
+	fs::create_dir(&root).unwrap();
+	fs::create_dir(&level1).unwrap();
+	fs::create_dir(&level2).unwrap();
+	fs::write(&leaf, b"leaf").unwrap();
+
+	let root_meta = fs::metadata(&root).unwrap();
+	let level1_meta = fs::metadata(&level1).unwrap();
+	let level2_meta = fs::metadata(&level2).unwrap();
+	let leaf_meta = fs::metadata(&leaf).unwrap();
+
+	let root_node =
+		FilesystemNode::new_with_event_type(root.clone(), &root_meta, Some("test".to_string()));
+	let level1_node =
+		FilesystemNode::new_with_event_type(level1.clone(), &level1_meta, Some("test".to_string()));
+	let level2_node =
+		FilesystemNode::new_with_event_type(level2.clone(), &level2_meta, Some("test".to_string()));
+	let leaf_node =
+		FilesystemNode::new_with_event_type(leaf.clone(), &leaf_meta, Some("test".to_string()));
+
+	storage
+		.store_filesystem_node(&watch_id, &root_node, "test")
+		.await
+		.expect("store root");
+	storage
+		.store_filesystem_node(&watch_id, &level1_node, "test")
+		.await
+		.expect("store l1");
+	storage
+		.store_filesystem_node(&watch_id, &level2_node, "test")
+		.await
+		.expect("store l2");
+	storage
+		.store_filesystem_node(&watch_id, &leaf_node, "test")
+		.await
+		.expect("store leaf");
+
+	// Test ancestor traversal from leaf
+	let ancestors = storage.list_ancestors_modular(&leaf).await.expect("list_ancestors_modular");
+	let ancestor_paths: Vec<_> = ancestors.iter().map(|n| n.path.clone()).collect();
+	assert!(ancestor_paths.contains(&level2));
+	assert!(ancestor_paths.contains(&level1));
+	assert!(ancestor_paths.contains(&root));
+
+	// Test descendant traversal from root
+	let descendants =
+		storage.list_descendants_modular(&root).await.expect("list_descendants_modular");
+	let descendant_paths: Vec<_> = descendants.iter().map(|n| n.path.clone()).collect();
+	assert!(descendant_paths.contains(&level1));
+	assert!(descendant_paths.contains(&level2));
+	assert!(descendant_paths.contains(&leaf));
+	// Should not include root itself
+	assert!(!descendant_paths.contains(&root));
+}
+
 // Additional tests for batch insert, prefix queries, and edge cases can be added here.

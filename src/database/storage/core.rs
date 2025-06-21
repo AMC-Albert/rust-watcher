@@ -5,6 +5,7 @@
 
 use super::filesystem_cache::trait_def::FilesystemCacheStorage;
 use super::filesystem_cache::RedbFilesystemCache;
+use crate::database::types::FilesystemNode;
 use crate::database::{
 	config::DatabaseConfig,
 	error::DatabaseResult,
@@ -388,6 +389,20 @@ impl RedbStorage {
 	) -> crate::database::error::DatabaseResult<usize> {
 		let mut cache = self.cache();
 		cache.repair_stats_counters(watch_id, path).await
+	}
+
+	/// List all ancestor nodes for a given path (delegates to RedbFilesystemCache)
+	pub async fn list_ancestors_modular(&self, path: &Path) -> DatabaseResult<Vec<FilesystemNode>> {
+		let mut cache = RedbFilesystemCache::new(self.database.clone());
+		cache.list_ancestors_modular(path).await
+	}
+
+	/// List all descendant nodes for a given path (delegates to RedbFilesystemCache)
+	pub async fn list_descendants_modular(
+		&self, path: &Path,
+	) -> DatabaseResult<Vec<FilesystemNode>> {
+		let mut cache = RedbFilesystemCache::new(self.database.clone());
+		cache.list_descendants_modular(path).await
 	}
 }
 
