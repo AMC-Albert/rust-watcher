@@ -6,7 +6,7 @@
 
 use chrono::Utc;
 use rust_watcher::database::storage::multi_watch::MultiWatchDatabase;
-use rust_watcher::database::types::WatchMetadata;
+use rust_watcher::database::types::{SharedNodeInfo, WatchMetadata};
 use tempfile::tempdir;
 use uuid::Uuid;
 
@@ -65,15 +65,188 @@ async fn test_register_and_list_watches() {
 
 #[tokio::test]
 async fn test_remove_watch() {
-	// TODO: Implement test for removing a watch and cleaning up resources
-	// This is a placeholder for Phase 2 implementation
-	// Use todo!() to make the stub explicit and clippy-clean
-	todo!("test_remove_watch not yet implemented");
+	let temp_dir = tempdir().expect("Failed to create temp dir");
+	let db_path = temp_dir.path().join("multi_watch_test_remove.db");
+	let db = redb::Database::create(&db_path).expect("Failed to create database");
+	let db = std::sync::Arc::new(db);
+	let multi_watch = MultiWatchDatabase::new(db.clone());
+
+	// Register a watch
+	let watch = WatchMetadata {
+		watch_id: Uuid::new_v4(),
+		root_path: temp_dir.path().join("watch"),
+		created_at: Utc::now(),
+		last_scan: None,
+		node_count: 0,
+		is_active: true,
+		config_hash: 789,
+		permissions: None,
+	};
+	multi_watch
+		.register_watch(&watch)
+		.await
+		.expect("register_watch");
+
+	// Add a shared node referencing this watch
+	let shared_info = SharedNodeInfo {
+		node: rust_watcher::database::types::FilesystemNode {
+			path: watch.root_path.clone(),
+			node_type: rust_watcher::database::types::NodeType::Directory {
+				child_count: 0,
+				total_size: 0,
+				max_depth: 0,
+			},
+			metadata: rust_watcher::database::types::NodeMetadata {
+				modified_time: std::time::SystemTime::now(),
+				created_time: None,
+				accessed_time: None,
+				permissions: 0,
+				inode: None,
+				windows_id: None,
+			},
+			cache_info: rust_watcher::database::types::CacheInfo {
+				cached_at: Utc::now(),
+				last_verified: Utc::now(),
+				cache_version: 1,
+				needs_refresh: false,
+			},
+			computed: rust_watcher::database::types::ComputedProperties {
+				depth_from_root: 0,
+				path_hash: rust_watcher::database::types::calculate_path_hash(&watch.root_path),
+				parent_hash: None,
+				canonical_name: "watch".to_string(),
+			},
+		},
+		watching_scopes: vec![watch.watch_id],
+		reference_count: 1,
+		last_shared_update: Utc::now(),
+	};
+	multi_watch
+		.store_shared_node(&shared_info)
+		.await
+		.expect("store_shared_node");
+
+	// Remove the watch
+	multi_watch
+		.remove_watch(&watch.watch_id)
+		.await
+		.expect("remove_watch");
+
+	// Assert the watch is gone
+	let watches = multi_watch.list_watches().await.expect("list_watches");
+	assert!(!watches.iter().any(|w| w.watch_id == watch.watch_id));
+
+	// Assert the shared node is removed (reference_count == 0)
+	let path_hash = rust_watcher::database::types::calculate_path_hash(&watch.root_path);
+	let shared = multi_watch
+		.get_shared_node(path_hash)
+		.await
+		.expect("get_shared_node");
+	assert!(shared.is_none() || shared.as_ref().unwrap().reference_count == 0);
 }
 
 #[tokio::test]
 async fn test_shared_node_management() {
-	// TODO: Implement test for storing and retrieving shared node information
-	// This is a placeholder for Phase 2 implementation
-	todo!("test_shared_node_management not yet implemented");
+	let temp_dir = tempdir().expect("Failed to create temp dir");
+	let db_path = temp_dir.path().join("multi_watch_test_shared.db");
+	let db = redb::Database::create(&db_path).expect("Failed to create database");
+	let db = std::sync::Arc::new(db);
+	let multi_watch = MultiWatchDatabase::new(db.clone());
+
+	// Register two watches
+	let watch1 = WatchMetadata {
+		watch_id: Uuid::new_v4(),
+		root_path: temp_dir.path().join("watch1"),
+		created_at: Utc::now(),
+		last_scan: None,
+		node_count: 0,
+		is_active: true,
+		config_hash: 111,
+		permissions: None,
+	};
+	let watch2 = WatchMetadata {
+		watch_id: Uuid::new_v4(),
+		root_path: temp_dir.path().join("watch2"),
+		created_at: Utc::now(),
+		last_scan: None,
+		node_count: 0,
+		is_active: true,
+		config_hash: 222,
+		permissions: None,
+	};
+	multi_watch
+		.register_watch(&watch1)
+		.await
+		.expect("register_watch1");
+	multi_watch
+		.register_watch(&watch2)
+		.await
+		.expect("register_watch2");
+
+	// Add a shared node referencing both watches
+	let shared_info = SharedNodeInfo {
+		node: rust_watcher::database::types::FilesystemNode {
+			path: temp_dir.path().join("shared"),
+			node_type: rust_watcher::database::types::NodeType::Directory {
+				child_count: 0,
+				total_size: 0,
+				max_depth: 0,
+			},
+			metadata: rust_watcher::database::types::NodeMetadata {
+				modified_time: std::time::SystemTime::now(),
+				created_time: None,
+				accessed_time: None,
+				permissions: 0,
+				inode: None,
+				windows_id: None,
+			},
+			cache_info: rust_watcher::database::types::CacheInfo {
+				cached_at: Utc::now(),
+				last_verified: Utc::now(),
+				cache_version: 1,
+				needs_refresh: false,
+			},
+			computed: rust_watcher::database::types::ComputedProperties {
+				depth_from_root: 0,
+				path_hash: rust_watcher::database::types::calculate_path_hash(
+					&temp_dir.path().join("shared"),
+				),
+				parent_hash: None,
+				canonical_name: "shared".to_string(),
+			},
+		},
+		watching_scopes: vec![watch1.watch_id, watch2.watch_id],
+		reference_count: 2,
+		last_shared_update: Utc::now(),
+	};
+	multi_watch
+		.store_shared_node(&shared_info)
+		.await
+		.expect("store_shared_node");
+
+	// Remove one watch
+	multi_watch
+		.remove_watch(&watch1.watch_id)
+		.await
+		.expect("remove_watch1");
+	let path_hash = rust_watcher::database::types::calculate_path_hash(&shared_info.node.path);
+	let shared = multi_watch
+		.get_shared_node(path_hash)
+		.await
+		.expect("get_shared_node");
+	assert!(shared.is_some());
+	let shared = shared.unwrap();
+	assert_eq!(shared.reference_count, 1);
+	assert_eq!(shared.watching_scopes, vec![watch2.watch_id]);
+
+	// Remove the second watch
+	multi_watch
+		.remove_watch(&watch2.watch_id)
+		.await
+		.expect("remove_watch2");
+	let shared = multi_watch
+		.get_shared_node(path_hash)
+		.await
+		.expect("get_shared_node");
+	assert!(shared.is_none() || shared.as_ref().unwrap().reference_count == 0);
 }

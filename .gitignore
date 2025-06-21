@@ -17,6 +17,13 @@ Thumbs.db
 /tmp
 /temp
 *.tmp
+# Ignore all test data directories under test_playground, but keep all scripts
+/test_playground/*/
+!/test_playground/*.ps1
+!/test_playground/*.sh
+!/test_playground/*.py
+# If you add new script types, add another !/test_playground/*.ext line above
+# This ensures test data is not tracked, but setup/utility scripts are
 
 # Log files
 *.log

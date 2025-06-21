@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 use super::trait_def::{CacheStats, FilesystemCacheStorage};
 use redb::ReadableTable;
+use tracing::{debug, info};
 
 pub struct RedbFilesystemCache {
 	database: Arc<redb::Database>,
@@ -128,6 +129,17 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 			Self::index_path_prefixes(&write_txn, node, watch_id)?;
 		}
 		write_txn.commit()?;
+		if cfg!(debug_assertions) {
+			let stats = self.get_cache_stats(watch_id).await.unwrap_or_default();
+			info!(
+				"[DEBUG] After insert: nodes={}, dirs={}, files={}, symlinks={}, size={} bytes",
+				stats.total_nodes,
+				stats.directories,
+				stats.files,
+				stats.symlinks,
+				stats.cache_size_bytes
+			);
+		}
 		Ok(())
 	}
 
@@ -280,8 +292,11 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		let mut directories = 0;
 		let mut files = 0;
 		let mut symlinks = 0;
+		let mut total_bytes = 0u64;
+		let start = std::time::Instant::now();
 		for entry in fs_cache_table.iter()? {
-			let (_key, value) = entry?;
+			let (key, value) = entry?;
+			total_bytes += key.value().len() as u64 + value.value().len() as u64;
 			let node: FilesystemNode = Self::deserialize(value.value())?;
 			total_nodes += 1;
 			match node.node_type {
@@ -294,7 +309,11 @@ impl FilesystemCacheStorage for RedbFilesystemCache {
 		stats.directories = directories;
 		stats.files = files;
 		stats.symlinks = symlinks;
+		stats.cache_size_bytes = total_bytes;
 		stats.last_updated = chrono::Utc::now();
+		let elapsed = start.elapsed();
+		debug!("Cache stats collected: nodes={}, dirs={}, files={}, symlinks={}, size={} bytes, elapsed={:?}",
+			total_nodes, directories, files, symlinks, total_bytes, elapsed);
 		Ok(stats)
 	}
 
