@@ -19,6 +19,11 @@ pub struct TaskMetrics {
 	pub last_duration: Option<Duration>,
 	pub success_count: u64,
 	pub failure_count: u64,
+	pub last_success: Option<Instant>,
+	pub last_failure: Option<Instant>,
+	pub last_result: Option<String>, // e.g., health status, stats summary
+	pub avg_duration_ms: Option<f64>,
+	pub consecutive_failures: u32,
 }
 
 pub trait BackgroundTask: Send + Sync {
@@ -65,14 +70,25 @@ impl BackgroundTaskManager {
 				let entry = metrics_guard.entry(name.clone()).or_default();
 				entry.last_run = Some(Instant::now());
 				entry.last_duration = Some(start.elapsed());
+				// Update average duration (simple moving average)
+				let dur_ms = start.elapsed().as_millis() as f64;
+				entry.avg_duration_ms = Some(match entry.avg_duration_ms {
+					Some(avg) => (avg * 0.8) + (dur_ms * 0.2),
+					None => dur_ms,
+				});
 				match &result {
-					Ok(_) => {
+					Ok(val) => {
 						entry.success_count += 1;
+						entry.last_success = Some(Instant::now());
+						entry.last_result = Some(format!("{:?}", val));
+						entry.consecutive_failures = 0;
 						backoff = 0;
 					}
 					Err(e) => {
 						entry.failure_count += 1;
+						entry.last_failure = Some(Instant::now());
 						entry.last_error = Some(format!("{e:?}"));
+						entry.consecutive_failures += 1;
 						backoff = (backoff + 1).min(6); // Exponential backoff, capped
 					}
 				}

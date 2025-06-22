@@ -334,3 +334,10 @@ pub async fn repair_time_index(database: &Arc<Database>) -> DatabaseResult<()> {
 	write_txn.commit()?;
 	Ok(())
 }
+
+/// Perform health check using the provided database
+pub async fn health_check(database: &Arc<Database>) -> DatabaseResult<bool> {
+	use crate::database::config::DatabaseConfig;
+	let impl_ = MaintenanceImpl::new(database.clone(), DatabaseConfig::default());
+	impl_.health_check().await
+}
