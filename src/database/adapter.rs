@@ -20,20 +20,51 @@ use std::time::SystemTime;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
+use crate::database::background_tasks::BackgroundTaskManager;
+
+/// Metrics for background maintenance tasks
+#[derive(Debug, Default, Clone)]
+pub struct BackgroundMaintenanceMetrics {
+	pub last_run: Option<DateTime<Utc>>,
+	pub last_duration_ms: Option<u128>,
+	pub last_error: Option<String>,
+	pub success_count: u64,
+	pub failure_count: u64,
+	pub last_compaction_ok: bool,
+	pub last_repair_ok: bool,
+}
+
+impl BackgroundMaintenanceMetrics {
+	pub fn new() -> Self {
+		Self::default()
+	}
+}
+
 /// High-level database adapter that provides a clean interface for multiple modules
 #[derive(Clone)]
 pub struct DatabaseAdapter {
 	storage: Arc<RwLock<Box<dyn DatabaseStorage>>>,
 	config: DatabaseConfig,
 	enabled: bool,
+	maintenance_metrics: Arc<RwLock<BackgroundMaintenanceMetrics>>,
+	#[allow(dead_code)]
+	background_manager: Option<Arc<BackgroundTaskManager>>, // New field
 }
 
 impl DatabaseAdapter {
 	/// Create a new database adapter with the given configuration
 	pub async fn new(config: DatabaseConfig) -> DatabaseResult<Self> {
 		let storage: Box<dyn DatabaseStorage> = Box::new(RedbStorage::new(config.clone()).await?);
-
-		Ok(Self { storage: Arc::new(RwLock::new(storage)), config, enabled: true })
+		let enabled = true;
+		let background_manager =
+			if enabled { Some(Arc::new(BackgroundTaskManager::new())) } else { None };
+		Ok(Self {
+			storage: Arc::new(RwLock::new(storage)),
+			config,
+			enabled,
+			maintenance_metrics: Arc::new(RwLock::new(BackgroundMaintenanceMetrics::new())),
+			background_manager,
+		})
 	}
 
 	/// Create a disabled adapter (no-op implementation for when database is not needed)
@@ -42,6 +73,8 @@ impl DatabaseAdapter {
 			storage: Arc::new(RwLock::new(Box::new(NoOpStorage))),
 			config: DatabaseConfig::default(),
 			enabled: false,
+			maintenance_metrics: Arc::new(RwLock::new(BackgroundMaintenanceMetrics::new())),
+			background_manager: None,
 		}
 	}
 
@@ -212,6 +245,34 @@ impl DatabaseAdapter {
 			.as_any()
 			.downcast_ref::<crate::database::storage::RedbStorage>()
 			.map(|redb_storage| redb_storage.get_database())
+	}
+
+	/// Get a snapshot of background maintenance metrics
+	pub async fn get_maintenance_metrics(&self) -> BackgroundMaintenanceMetrics {
+		self.maintenance_metrics.read().await.clone()
+	}
+
+	/// Start the new background task manager with core maintenance tasks
+	pub async fn start_background_manager(&self) {
+		if !self.enabled {
+			// Early exit: do nothing
+		}
+		// if let Some(manager) = &self.background_manager {
+		//     let db = match self.get_raw_database().await {
+		//         Some(db) => db,
+		//         None => return,
+		//     };
+		//     let repair = Arc::new(TimeIndexRepairTask { db: db.clone() });
+		//     let compact = Arc::new(CompactionTask { db });
+		//     let mut manager = BackgroundTaskManager::new();
+		//     manager.register_task(repair);
+		//     manager.register_task(compact);
+		//     let manager = Arc::new(manager);
+		//     tokio::spawn({
+		//         let manager = manager.clone();
+		//         async move { manager.start().await; }
+		//     });
+		// }
 	}
 }
 

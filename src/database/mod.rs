@@ -5,6 +5,7 @@
 //! with hundreds of thousands or millions of files without memory exhaustion.
 
 pub mod adapter;
+pub mod background_tasks;
 pub mod config;
 pub mod error;
 pub mod path_utils;
