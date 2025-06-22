@@ -20,8 +20,9 @@ use std::time::SystemTime;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-use crate::database::background_tasks::BackgroundTaskManager;
-
+use crate::database::background_tasks::{
+	BackgroundTaskManager, CompactionTask, HealthCheckTask, StatsRefreshTask, TimeIndexRepairTask,
+};
 /// Metrics for background maintenance tasks
 #[derive(Debug, Default, Clone)]
 pub struct BackgroundMaintenanceMetrics {
@@ -56,8 +57,28 @@ impl DatabaseAdapter {
 	pub async fn new(config: DatabaseConfig) -> DatabaseResult<Self> {
 		let storage: Box<dyn DatabaseStorage> = Box::new(RedbStorage::new(config.clone()).await?);
 		let enabled = true;
-		let background_manager =
-			if enabled { Some(Arc::new(BackgroundTaskManager::new())) } else { None };
+		let background_manager = if enabled {
+			let mut manager = BackgroundTaskManager::new();
+			// Register all tasks here
+			if let Some(db) = storage
+				.as_any()
+				.downcast_ref::<RedbStorage>()
+				.map(|redb_storage| redb_storage.get_database())
+			{
+				let db = db.clone();
+				let repair = Arc::new(TimeIndexRepairTask { db: db.clone() });
+				let compact = Arc::new(CompactionTask { db: db.clone() });
+				let health = Arc::new(HealthCheckTask { db: db.clone() });
+				let stats = Arc::new(StatsRefreshTask { db });
+				manager.register_task(repair);
+				manager.register_task(compact);
+				manager.register_task(health);
+				manager.register_task(stats);
+			}
+			Some(Arc::new(manager))
+		} else {
+			None
+		};
 		Ok(Self {
 			storage: Arc::new(RwLock::new(storage)),
 			config,
@@ -256,23 +277,15 @@ impl DatabaseAdapter {
 	pub async fn start_background_manager(&self) {
 		if !self.enabled {
 			// Early exit: do nothing
+			return;
 		}
-		// if let Some(manager) = &self.background_manager {
-		//     let db = match self.get_raw_database().await {
-		//         Some(db) => db,
-		//         None => return,
-		//     };
-		//     let repair = Arc::new(TimeIndexRepairTask { db: db.clone() });
-		//     let compact = Arc::new(CompactionTask { db });
-		//     let mut manager = BackgroundTaskManager::new();
-		//     manager.register_task(repair);
-		//     manager.register_task(compact);
-		//     let manager = Arc::new(manager);
-		//     tokio::spawn({
-		//         let manager = manager.clone();
-		//         async move { manager.start().await; }
-		//     });
-		// }
+		if let Some(manager) = &self.background_manager {
+			// Only start the manager, do not register tasks here
+			let manager = manager.clone();
+			tokio::spawn(async move {
+				manager.start().await;
+			});
+		}
 	}
 }
 
