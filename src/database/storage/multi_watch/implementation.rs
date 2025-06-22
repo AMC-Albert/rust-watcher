@@ -77,6 +77,12 @@ impl MultiWatchDatabase {
 	}
 
 	pub async fn store_shared_node(&self, shared_info: &SharedNodeInfo) -> DatabaseResult<()> {
+		// Defensive: reference_count must match watching_scopes.len()
+		assert_eq!(
+			shared_info.reference_count as usize,
+			shared_info.watching_scopes.len(),
+			"reference_count must match watching_scopes.len()"
+		);
 		let write_txn = self.database.begin_write()?;
 		{
 			let mut table = write_txn.open_table(crate::database::storage::tables::SHARED_NODES)?;
@@ -119,7 +125,7 @@ impl MultiWatchDatabase {
 					if let Some(pos) = info.watching_scopes.iter().position(|id| id == watch_id) {
 						info.watching_scopes.remove(pos);
 						if info.reference_count > 0 {
-							info.reference_count -= 1;
+							info.reference_count = info.watching_scopes.len() as u32;
 						}
 						if info.reference_count == 0 {
 							to_remove.push(key.value().to_vec());
