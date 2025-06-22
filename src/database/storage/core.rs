@@ -138,6 +138,11 @@ impl RedbStorage {
 		&self.config
 	}
 
+	/// Get a clone of the underlying Arc<Database> (for test/maintenance only)
+	pub fn get_database(&self) -> Arc<Database> {
+		self.database.clone()
+	}
+
 	fn cache(&self) -> RedbFilesystemCache {
 		RedbFilesystemCache::new(self.database.clone())
 	}

@@ -9,8 +9,10 @@
 - **Unit test for synchronizer covers create/remove/rename/move event handling.**
 - All build, test, and clippy checks are clean as of latest commit.
 - See commit history for details of modularization, bugfixes, and groundwork for advanced features (June 2025).
-- **UPDATE (June 2025):** Event type is now stored with every node. All mutation and repair logic is event-type aware. Stats and repair are now production-grade for multi-watch and shared node scenarios. Per-type stats repair is now accurate. No further manual intervention required for this migration.
-- **Pattern-based search/filtering:** Now uses prefix index for efficient prefix queries (e.g., `foo*`) and extension index for efficient suffix queries (e.g., `*.txt`). Only true infix/substring patterns (e.g., `*foo*`) require O(N) scan. All code and tests are up to date as of June 2025.
+- **UPDATE (June 2025):**
+  - **Time index for event log implemented:** O(1) cleanup and efficient expired event removal. Manual and test-driven index repair logic in place.
+  - **Integration test coverage:** Index repair, cleanup, and event expiration are now robustly tested. All code and tests are clippy-clean and warning-free.
+  - **Limitations:** No background compaction or automated repair yet; error handling for index drift is basic. Advanced analytics and per-watch/per-path stats are future work.
 
 ---
 
@@ -33,13 +35,12 @@
 | Hierarchical operations            | Complete     | `list_ancestors` and `list_descendants` implemented and tested                                                                                                                                                                    |
 | Pattern-based search/filtering     | Complete     | Prefix and suffix patterns are efficient (indexed); only infix/substring patterns remain O(N). All tests pass.                                                                                                                    |
 | **Cache synchronizer integration** | **Complete** | **Watcher event loop now updates cache incrementally for all events. Synchronizer unit test covers create/remove/rename/move.**                                                                                                   |
+| Time index, repair, and cleanup    | Complete     | Persistent time index, repair logic, and integration test coverage for event expiration and cleanup.                                                                                                                              |
 
 ---
 
 ## Remaining Work
 
-### Phase 3: Filesystem Cache API (incomplete)
-- [ ] **PRIORITY: Scalable stats/indexing: per-watch, per-path, and advanced indexing**
 - [ ] **PRIORITY: Multi-watch correctness: expand integration and stress tests, improve invalidation and consistency for overlapping/shared nodes**
 - [ ] Performance operations: bulk cache warming, background maintenance, statistics/monitoring, memory optimization
 - [ ] Integration with existing systems: watcher integration, cache-aware monitoring, database adapter enhancements

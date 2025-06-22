@@ -1,11 +1,25 @@
 # Filesystem Structure Caching Design
 
+## Progress Update (June 2025)
+
+- **Time Index for Event Log:**
+  - Persistent time index for O(1) time-based event cleanup and efficient expired event removal is implemented and robustly tested. Manual and test-driven index repair logic is in place.
+  - Integration tests now cover index repair, cleanup, and edge cases for event expiration. All code and tests are clippy-clean and warning-free.
+  - Remaining: No background compaction or automated repair yet; error handling for index drift is basic. Advanced analytics and per-watch/per-path stats are future work.
+
+- **Multi-Watch, Redundant Node Cleanup, and Event Retention:**
+  - Multi-watch database, shared node management, robust watch removal, and redundant/orphaned node cleanup are all implemented and covered by integration tests. Event retention and cleanup are fully automated and tested. (June 2025)
+
+- **Next Steps:**
+  - Automate index repair and compaction as background tasks.
+  - Expand test coverage for concurrent repair/cleanup and platform-specific edge cases.
+  - Harden error handling and add recovery paths for all index and event log operations.
+
+---
+
 ## Technical Debt and Limitations (2025 Review)
 
 ### Outstanding Issues
-
-- **Event Retention and Cleanup:**
-  - Implemented. Expired events are now deleted; database growth is bounded. All related tests pass. (June 2025)
 
 - **Scalable Statistics/Indexing:**
   - Persistent O(1) event and per-type stats implemented and tested. Per-watch, per-path, and advanced indexing remain TODO for true scalability.
@@ -36,11 +50,6 @@
   - Core logic for event storage, stats, path normalization, multi-watch shared node management, transaction coordination, and watch creation is now covered by integration and unit tests. Gaps remain for concurrency, error injection, and platform-specific behavior.
   - **Impact:** Some regressions or platform-specific bugs may go unnoticed, but coverage is now sufficient for most production scenarios.
   - **Action:** Expand test coverage for concurrency, error cases, and Windows/Unix differences as new features are added.
-
-- **Redundant/Orphaned Node Cleanup:**
-  - Implemented and tested. The system now reliably removes both redundant watch-specific nodes and orphaned shared nodes, regardless of key or value format. Integration tests confirm correctness. (June 2025)
-  - **Impact:** Prevents database bloat and ensures cache consistency in multi-watch environments.
-  - **Action:** No further action required unless new key/value formats are introduced.
 
 ---
 

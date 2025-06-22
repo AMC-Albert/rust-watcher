@@ -293,3 +293,44 @@ pub async fn compact_database(_database: &Arc<Database>) -> DatabaseResult<()> {
 	// For now, return success - this would be implemented properly in Phase 1.2
 	Ok(())
 }
+
+/// Repair the time index by scanning the event log and rebuilding all time buckets
+pub async fn repair_time_index(database: &Arc<Database>) -> DatabaseResult<()> {
+	use crate::database::types::EventRecord;
+	let write_txn = database.begin_write()?;
+	{
+		let mut time_index =
+			write_txn.open_multimap_table(crate::database::storage::tables::TIME_INDEX_TABLE)?;
+		// Remove all entries from the time index manually
+		let mut to_remove = Vec::new();
+		for entry in time_index.iter()? {
+			let (bucket_guard, multimap_value) = entry?;
+			let bucket_key = bucket_guard.value().to_vec();
+			for value_guard in multimap_value.flatten() {
+				let value = value_guard.value().to_vec();
+				to_remove.push((bucket_key.clone(), value));
+			}
+		}
+		for (bucket_key, value) in to_remove {
+			time_index.remove(bucket_key.as_slice(), value.as_slice())?;
+		}
+		let events_log =
+			write_txn.open_multimap_table(crate::database::storage::tables::EVENTS_LOG_TABLE)?;
+		let bucket_size_seconds = 3600;
+		for entry in events_log.iter()? {
+			let (_key_guard, multimap_value) = entry?;
+			for value_guard in multimap_value.flatten() {
+				let value = value_guard.value();
+				if let Ok(event) = bincode::deserialize::<EventRecord>(value) {
+					let time_bucket = crate::database::types::StorageKey::time_bucket(
+						event.timestamp,
+						bucket_size_seconds,
+					);
+					time_index.insert(time_bucket.to_bytes().as_slice(), value)?;
+				}
+			}
+		}
+	}
+	write_txn.commit()?;
+	Ok(())
+}

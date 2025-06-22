@@ -204,6 +204,15 @@ impl DatabaseAdapter {
 			.downcast_ref::<crate::database::storage::core::RedbStorage>()
 			.map(|redb_storage| RedbFilesystemCache::new(redb_storage.database().clone()))
 	}
+
+	/// Expose the underlying Arc<Database> for advanced operations (test/maintenance only)
+	pub async fn get_raw_database(&self) -> Option<Arc<redb::Database>> {
+		let storage = self.storage.read().await;
+		storage
+			.as_any()
+			.downcast_ref::<crate::database::storage::RedbStorage>()
+			.map(|redb_storage| redb_storage.get_database())
+	}
 }
 
 /// No-op storage implementation for when database is disabled
