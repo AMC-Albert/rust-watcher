@@ -27,6 +27,10 @@ pub const EVENTS_LOG_TABLE: MultimapTableDefinition<&[u8], &[u8]> =
 pub const EXTENSION_INDEX: redb::MultimapTableDefinition<&[u8], &[u8]> =
 	redb::MultimapTableDefinition::new("extension_index");
 
+/// Time index for efficient time-based event queries (timestamp bucket -> event key)
+pub const TIME_INDEX_TABLE: MultimapTableDefinition<&[u8], &[u8]> =
+	MultimapTableDefinition::new("time_index");
+
 // ===== Filesystem Cache Tables =====
 
 /// Primary filesystem cache table (path_hash -> FilesystemNode)

@@ -16,6 +16,7 @@ pub async fn store_event(database: &Arc<Database>, record: &EventRecord) -> Data
 	{
 		let mut events_log = write_txn.open_multimap_table(super::tables::EVENTS_LOG_TABLE)?;
 		let mut stats_table = write_txn.open_table(super::tables::STATS_TABLE)?;
+		let mut time_index = write_txn.open_multimap_table(super::tables::TIME_INDEX_TABLE)?;
 		let key = StorageKey::path_hash(&record.path);
 		let key_bytes = key.to_bytes();
 
@@ -54,6 +55,13 @@ pub async fn store_event(database: &Arc<Database>, record: &EventRecord) -> Data
 			.unwrap_or(0);
 		type_count = type_count.saturating_add(1);
 		stats_table.insert(type_key.as_slice(), &type_count.to_le_bytes()[..])?;
+
+		// Use hourly buckets for time index (customize as needed)
+		let bucket_size_seconds = 3600;
+		let time_bucket =
+			crate::database::types::StorageKey::time_bucket(record.timestamp, bucket_size_seconds);
+		let time_bucket_bytes = time_bucket.to_bytes();
+		time_index.insert(time_bucket_bytes.as_slice(), record_bytes.as_slice())?;
 	}
 	write_txn.commit()?;
 	Ok(())
