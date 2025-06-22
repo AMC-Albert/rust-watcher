@@ -3,7 +3,7 @@
 This module provides a scalable, extensible framework for running background maintenance and health tasks in the database layer.
 
 - `manager.rs`: Core task manager and trait definitions
-- `impls.rs`: Concrete maintenance task implementations (e.g., compaction, index repair)
+- `implementation.rs`: Concrete maintenance task implementations (e.g., compaction, index repair)
 - `mod.rs`: Module interface
 
 ## Usage
