@@ -32,6 +32,7 @@ walkdir = "2.0" # For filesystem tree traversal during cache initialization
 globset = "0.4.16"
 tempfile = "3.0"
 pollster = "0.3"
+rand = "0.9.1"
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.28" # For inode information on Unix-like systems
